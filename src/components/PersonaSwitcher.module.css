@@ -1,0 +1,99 @@
+/* 右下角浮动切换器。CSS Modules：这些类名只在本组件生效，不会污染全局。 */
+
+.panel {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: 240px;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+  padding: 12px;
+  z-index: 1000;
+  font-size: 13px;
+}
+
+.title {
+  font-weight: 600;
+  margin: 0 0 2px;
+  font-size: 13px;
+}
+
+.hint {
+  color: #9ca3af;
+  font-size: 11px;
+  margin: 0 0 8px;
+}
+
+.groupLabel {
+  color: #6b7280;
+  font-size: 11px;
+  margin: 10px 0 4px;
+  letter-spacing: 0.03em;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.row:hover:not(.active) {
+  background: #f3f4f6;
+}
+
+.active {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #f3f4f6;
+}
+
+.name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.badgeAdmin { background: #fee2e2; color: #b91c1c; }
+.badgeOwner { background: #dbeafe; color: #1d4ed8; }
+.badgeSub   { background: #f3f4f6; color: #6b7280; }
+
+.resetBtn {
+  margin-top: 12px;
+  width: 100%;
+  padding: 6px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fafafa;
+  cursor: pointer;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.resetBtn:hover { background: #f3f4f6; }

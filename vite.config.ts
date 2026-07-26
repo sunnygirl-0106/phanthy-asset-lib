@@ -9,6 +9,9 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
+  // 部署到 GitHub Pages 项目页时，静态资源位于 /asset-lib-demo/ 子路径下。
+  // 本地 dev / preview 用根路径 '/'，CI 构建时通过环境变量切到子路径。
+  base: process.env.GITHUB_PAGES === 'true' ? '/asset-lib-demo/' : '/',
   plugins: [react()],
   test: {
     globals: true,

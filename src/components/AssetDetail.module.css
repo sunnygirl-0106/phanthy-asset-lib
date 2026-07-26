@@ -1,0 +1,144 @@
+.body { padding: 24px; }
+
+.top {
+  display: flex;
+  gap: 20px;
+}
+
+.cover {
+  width: 220px;
+  flex-shrink: 0;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 12px;
+  background: #f3f4f6;
+}
+
+.info { flex: 1; min-width: 0; }
+
+.name {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.sub {
+  font-size: 13px;
+  color: #6b7280;
+  margin: 0 0 12px;
+}
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+
+.chip {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.chipFollow { background: #dbeafe; color: #1d4ed8; }
+.chipCopy { background: #fef3c7; color: #b45309; }
+
+.section {
+  margin-top: 22px;
+  border-top: 1px solid #f0f1f3;
+  padding-top: 16px;
+}
+
+.sectionTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  margin: 0 0 12px;
+}
+
+/* 造型变体子网格 */
+.looks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+}
+
+.lookItem { text-align: center; }
+
+.lookImg {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #f3f4f6;
+}
+
+.lookName {
+  font-size: 11px;
+  color: #6b7280;
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 动作按钮 */
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.btn {
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1px solid #111827;
+  background: #111827;
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.btn:hover { opacity: 0.9; }
+
+.btnGhost {
+  background: #fff;
+  color: #374151;
+  border-color: #e5e7eb;
+}
+
+.picker {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f9fafb;
+  border-radius: 10px;
+}
+
+.pickerTitle { font-size: 12px; color: #6b7280; margin: 0 0 8px; }
+
+.pickerChips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.followRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #4b5563;
+  margin-bottom: 10px;
+}
+
+.result {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.resultOk { background: #ecfdf5; color: #065f46; }
+.resultErr { background: #fef2f2; color: #991b1b; }
+
+.renameRow { display: flex; gap: 8px; margin-top: 8px; }
+
+.input {
+  flex: 1;
+  padding: 7px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.note { font-size: 12px; color: #9ca3af; }
