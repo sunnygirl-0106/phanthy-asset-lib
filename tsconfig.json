@@ -1,0 +1,32 @@
+{
+  // ───────────────────────────────────────────────────────────────
+  // TypeScript 编译配置。对新手来说，这里最该关心的是 "strict": true——
+  // 它让类型检查更严格，很多低级错误会在你写代码的当场就被红线标出来，
+  // 而不是等到运行时才炸。这正是我们选 TS 的核心理由（类型即活文档 + 当场报错）。
+  // ───────────────────────────────────────────────────────────────
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+
+    // 打包器模式：交给 Vite 处理模块解析
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    // 严格模式：新手最好的老师
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+
+    // 让 vitest 的全局 API（describe/it/expect）有类型
+    "types": ["vitest/globals"]
+  },
+  "include": ["src"]
+}

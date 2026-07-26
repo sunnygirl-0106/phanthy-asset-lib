@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/main.tsx","./src/data/seed.ts","./src/data/types.ts","./src/services/assetService.ts","./src/services/permission.ts","./src/tests/logic-core.test.ts"],"version":"5.9.3"}

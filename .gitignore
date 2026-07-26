@@ -1,0 +1,8 @@
+# 依赖与构建产物：不进仓库，本地 npm install 会重新生成
+node_modules/
+dist/
+
+# 编辑器 / 系统杂项
+.DS_Store
+*.log
+.vscode/
