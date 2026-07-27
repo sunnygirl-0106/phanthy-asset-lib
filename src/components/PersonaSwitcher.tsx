@@ -11,6 +11,7 @@
  * 点击时调用 setCurrentUser。世界怎么变，是别的组件用 canSee() 算出来的。
  * ─────────────────────────────────────────────────────────────────────── */
 
+import { useState } from 'react'
 import { useStore } from '../store/useStore'
 import type { User, World } from '../data/types'
 import styles from './PersonaSwitcher.module.css'
@@ -48,11 +49,28 @@ export function PersonaSwitcher() {
   const setCurrentUser = useStore((s) => s.setCurrentUser)
   const resetDemo = useStore((s) => s.resetDemo)
 
+  // 常驻但可折叠：默认展开（这是演示主控件），收起后只留一个悬浮小按钮，
+  // 免得在画布等页面挡住右下角内容。
+  const [open, setOpen] = useState(true)
+
   const groups = buildGroups(world)
+  const current = world.users.find((u) => u.id === currentUserId)
+
+  if (!open) {
+    return (
+      <button className={styles.fab} onClick={() => setOpen(true)}>
+        {current && <img className={styles.fabAvatar} src={current.avatar} alt={current.name} />}
+        切换身份
+      </button>
+    )
+  }
 
   return (
     <div className={styles.panel}>
-      <p className={styles.title}>切换身份</p>
+      <div className={styles.headRow}>
+        <p className={styles.title}>切换身份</p>
+        <button className={styles.collapse} onClick={() => setOpen(false)} aria-label="收起">收起</button>
+      </div>
       <p className={styles.hint}>点不同账号，看到的资产会跟着变</p>
 
       {groups.map((group) => (

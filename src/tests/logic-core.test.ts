@@ -6,6 +6,11 @@
  * 跑 `npm test`：全绿代表逻辑内核站得住。
  * 每个 it("……") 里的中文，就是它验证的那条产品规则。
  * 以后每改一条规则，先来这里改/加一条断言，再改实现——测试就是你的安全网。
+ *
+ * 【v4 改动】跟随/断链、门 B 已从产品逻辑里砍掉，本文件对应的用例也删了：
+ *   - 原「八、跟随·断链规则」「九、母版消失·降级」整段删除；
+ *   - 原「门 B 一键放开」用例删除；
+ *   - 收藏/复用/直接复用/沉淀不再断言 following。
  * ─────────────────────────────────────────────────────────────────────── */
 
 import { describe, it, expect, beforeEach } from 'vitest'
@@ -29,8 +34,6 @@ import {
   favorite,
   reuse,
   deposit,
-  applyEdit,
-  onMasterRemoved,
   AssetRuleError,
 } from '../services/assetService'
 
@@ -47,11 +50,13 @@ describe('广场权限', () => {
     }
   })
 
-  it('只有 admin 能治理广场；主账号只能投稿；子账号不能投稿', () => {
+  it('只有 admin 能治理广场；主账号和子账号都能投稿；admin 不投稿', () => {
     expect(canManagePlaza(userById(world, IDS.admin))).toBe(true)
     expect(canManagePlaza(userById(world, IDS.sunny))).toBe(false)
+    // v4：广场投稿的把关人是 admin，所以主账号、子账号都能发起投稿；admin 只审不投
     expect(canContributeToPlaza(userById(world, IDS.sunny))).toBe(true)
-    expect(canContributeToPlaza(userById(world, IDS.lin))).toBe(false)
+    expect(canContributeToPlaza(userById(world, IDS.lin))).toBe(true)
+    expect(canContributeToPlaza(userById(world, IDS.admin))).toBe(false)
   })
 
   it('收藏（广场→团队库）只有主账号能做', () => {
@@ -81,8 +86,8 @@ describe('团队库门A（子账号默认可浏览，主账号可单独关）', 
   })
 })
 
-/* ═══════════════ 三、项目隔离 · 门 B ═══════════════ */
-describe('项目隔离与门B（别人项目默认不可见，主账号可一键放开）', () => {
+/* ═══════════════ 三、项目隔离（v4：门 B 已砍，子账号只看被分配项目）═══════════════ */
+describe('项目隔离（别人项目一律不可见，没有"看全部项目"的口子）', () => {
   it('主账号能看本团队所有项目资产，但看不到别团队的', () => {
     const sunny = userById(world, IDS.sunny)
     expect(canSee(world, sunny, assetById(world, 'a_ajie'))).toBe(true) // 霓虹东京·本团队
@@ -90,22 +95,13 @@ describe('项目隔离与门B（别人项目默认不可见，主账号可一键
     expect(canSee(world, sunny, assetById(world, 'a_captain'))).toBe(false) // 星际公约·团队B
   })
 
-  it('子账号默认只看到被分配的项目资产', () => {
+  it('子账号只看到被分配的项目资产，没分配的一律看不到', () => {
     const lin = userById(world, IDS.lin) // 分配到霓虹东京
     const may = userById(world, IDS.may) // 分配到都市迷案
     expect(canSee(world, lin, assetById(world, 'a_ajie'))).toBe(true) // 分配了 → 看得到
     expect(canSee(world, lin, assetById(world, 'a_linjingguan'))).toBe(false) // 没分配都市迷案 → 看不到
     expect(canSee(world, may, assetById(world, 'a_linjingguan'))).toBe(true) // 分配了都市迷案
     expect(canSee(world, may, assetById(world, 'a_ajie'))).toBe(false) // 没分配霓虹东京
-  })
-
-  it('主账号一键放开门B后，子账号能看本团队全部项目资产（但仍看不到别团队）', () => {
-    const teamA = getTeam(world, IDS.teamA)!
-    teamA.allowSubsSeeAllProjects = true
-    const may = userById(world, IDS.may)
-    expect(canSee(world, may, assetById(world, 'a_ajie'))).toBe(true)
-    expect(canSee(world, may, assetById(world, 'a_shangui'))).toBe(true)
-    expect(canSee(world, may, assetById(world, 'a_captain'))).toBe(false) // 门B 只放开本团队
   })
 
   it('admin 能看到所有项目的资产（治理视角）', () => {
@@ -116,15 +112,14 @@ describe('项目隔离与门B（别人项目默认不可见，主账号可一键
 })
 
 /* ═══════════════ 四、流转 · 直接复用 ═══════════════ */
-describe('直接复用（广场→项目·只快照·永不跟随）', () => {
-  it('产生独立副本：新 id、进目标项目、记录血缘、following=false', () => {
+describe('直接复用（广场→项目·产生独立副本）', () => {
+  it('产生独立副本：新 id、进目标项目、记录血缘', () => {
     const src = assetById(world, 'a_cyber_police')
     const copy = directReuse(src, IDS.projNeon)
     expect(copy.id).not.toBe(src.id)
     expect(copy.scope).toBe('project')
     expect(copy.scopeId).toBe(IDS.projNeon)
     expect(copy.masterId).toBe(src.id)
-    expect(copy.following).toBe(false)
   })
 
   it('改副本名字不影响母版（名字是本地的）', () => {
@@ -144,22 +139,23 @@ describe('直接复用（广场→项目·只快照·永不跟随）', () => {
   })
 })
 
-/* ═══════════════ 五、流转 · 收藏 / 复用（可选跟随）═══════════════ */
-describe('收藏与复用（拉取那一刻可选是否跟随，默认不跟随）', () => {
-  it('收藏默认不跟随，也可以选择跟随', () => {
+/* ═══════════════ 五、流转 · 收藏 / 复用（都产生独立副本）═══════════════ */
+describe('收藏与复用（拉一份就是独立副本，不再有跟随选项）', () => {
+  it('收藏（广场→团队库）产生独立副本：进团队库、记血缘', () => {
     const src = assetById(world, 'a_cyber_police')
-    expect(favorite(src, IDS.teamA).following).toBe(false)
-    expect(favorite(src, IDS.teamA, true).following).toBe(true)
+    const copy = favorite(src, IDS.teamA)
+    expect(copy.scope).toBe('team')
+    expect(copy.scopeId).toBe(IDS.teamA)
+    expect(copy.masterId).toBe(src.id)
   })
 
-  it('从团队库复用进项目，可选择跟随；造型随角色一起带过来', () => {
+  it('从团队库复用进项目：独立副本，造型随角色一起带过来', () => {
     const suwan = assetById(world, 'a_suwan')
-    const copy = reuse(suwan, IDS.projNeon, true)
+    const copy = reuse(suwan, IDS.projNeon)
     expect(copy.scope).toBe('project')
     expect(copy.scopeId).toBe(IDS.projNeon)
     expect(copy.masterId).toBe(suwan.id)
-    expect(copy.following).toBe(true)
-    expect(copy.looks?.length).toBe(3) // 苏晚有 3 个造型
+    expect(copy.looks?.length).toBe(4) // 苏晚有 4 个造型（定妆照 + 国风/便装/赛博）
   })
 
   it('权限：复用（团队库→项目）主账号本团队任意项目，子账号仅被分配项目', () => {
@@ -167,11 +163,34 @@ describe('收藏与复用（拉取那一刻可选是否跟随，默认不跟随�
     expect(canReuseFromTeam(userById(world, IDS.sunny), neon)).toBe(true)
     expect(canReuseFromTeam(userById(world, IDS.may), neon)).toBe(false) // 阿May 没分配霓虹东京
   })
+
+  it('复用角色可选带哪些造型：素模必带，造型按勾选（不传=整份、[]=只素模）', () => {
+    const suwan = assetById(world, 'a_suwan')
+    // 只带国风造型
+    const one = reuse(suwan, IDS.projNeon, ['a_suwan_guofeng'])
+    expect(one.baseModel).toBeTruthy() // 素模（本体）必带
+    expect(one.looks?.length).toBe(1)
+    expect(one.looks?.[0].id).toBe('a_suwan_guofeng')
+    // 一个造型都不勾 = 只带素模
+    const bare = reuse(suwan, IDS.projNeon, [])
+    expect(bare.baseModel).toBeTruthy()
+    expect(bare.looks ?? []).toHaveLength(0)
+    // 不传 = 整份带（向后兼容）
+    const all = reuse(suwan, IDS.projNeon)
+    expect(all.looks?.length).toBe(4)
+  })
+
+  it('直接复用同样支持选造型：只带素模时 looks 为空、素模仍在', () => {
+    const cyber = assetById(world, 'a_cyber_police')
+    const bare = directReuse(cyber, IDS.projNeon, [])
+    expect(bare.baseModel).toBeTruthy()
+    expect(bare.looks ?? []).toHaveLength(0)
+  })
 })
 
 /* ═══════════════ 六、流转 · 沉淀 ═══════════════ */
 describe('沉淀（项目→团队库）', () => {
-  it('主账号直接沉淀成团队母版（新母版：无 masterId、不跟随）', () => {
+  it('主账号直接沉淀成团队母版（新母版：无 masterId）', () => {
     const src = assetById(world, 'a_ajie')
     const res = deposit(src, IDS.teamA, userById(world, IDS.sunny))
     expect(res.kind).toBe('asset')
@@ -179,7 +198,6 @@ describe('沉淀（项目→团队库）', () => {
       expect(res.asset.scope).toBe('team')
       expect(res.asset.scopeId).toBe(IDS.teamA)
       expect(res.asset.masterId).toBeUndefined()
-      expect(res.asset.following).toBe(false)
     }
   })
 
@@ -224,44 +242,5 @@ describe('红线：非成品不能被复用/沉淀/贡献', () => {
 
   it('对"生成中"的资产做收藏也会抛错', () => {
     expect(() => favorite(makeGenerating(world), IDS.teamA)).toThrow(AssetRuleError)
-  })
-})
-
-/* ═══════════════ 八、跟随 · 断链规则 ═══════════════ */
-describe('跟随线：改名不断链，改核心内容才断链', () => {
-  it('跟随中的副本：改名 / 加tag / 加造型都不断链', () => {
-    const copy = reuse(assetById(world, 'a_suwan'), IDS.projNeon, true)
-    for (const edit of ['rename', 'addTag', 'addLook'] as const) {
-      const r = applyEdit(copy, edit)
-      expect(r.brokeFollow).toBe(false)
-      expect(r.asset.following).toBe(true)
-    }
-  })
-
-  it('跟随中的副本：重绘/改提示词/改音色 → 断链，降级为独立快照', () => {
-    const copy = reuse(assetById(world, 'a_suwan'), IDS.projNeon, true)
-    for (const edit of ['redrawCover', 'changePrompt', 'changeVoice'] as const) {
-      const r = applyEdit(copy, edit)
-      expect(r.brokeFollow).toBe(true)
-      expect(r.asset.following).toBe(false)
-    }
-  })
-
-  it('本来没跟随的副本（如直接复用的快照），改内容也无所谓断不断链', () => {
-    const snapshot = directReuse(assetById(world, 'a_cyber_police'), IDS.projNeon)
-    const r = applyEdit(snapshot, 'changePrompt')
-    expect(r.brokeFollow).toBe(false)
-    expect(r.asset.following).toBe(false)
-  })
-})
-
-/* ═══════════════ 九、母版消失 · 降级 ═══════════════ */
-describe('母版被删/下架', () => {
-  it('跟随中的副本停止跟随、内容保留（不消失）', () => {
-    const copy = reuse(assetById(world, 'a_suwan'), IDS.projNeon, true)
-    const after = onMasterRemoved(copy)
-    expect(after.following).toBe(false)
-    expect(after.name).toBe(copy.name)
-    expect(after.masterId).toBe(copy.masterId)
   })
 })

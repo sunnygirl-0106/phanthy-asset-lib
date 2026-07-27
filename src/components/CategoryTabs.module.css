@@ -7,19 +7,19 @@
 
 .tab {
   padding: 5px 14px;
-  border: 1px solid #e5e7eb;
-  border-radius: 999px;
-  background: #fff;
+  border: 1px solid var(--line-mid);
+  border-radius: var(--radius-pill);
+  background: var(--panel-3);
   cursor: pointer;
   font-size: 13px;
-  color: #4b5563;
+  color: var(--text-body);
 }
 
 /* :not(.active) 让 hover 不去覆盖"选中"样式，避免选中项被 hover 时文字变白看不见 */
-.tab:hover:not(.active) { background: #f9fafb; }
+.tab:hover:not(.active) { background: var(--panel); }
 
 .active {
-  background: #111827;
-  color: #fff;
-  border-color: #111827;
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
 }

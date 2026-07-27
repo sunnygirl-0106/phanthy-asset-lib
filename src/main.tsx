@@ -6,6 +6,9 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { App } from './App'
+// 深色外壳的两块地基：先 token 再全局基底，顺序不能反（global 里要用到 theme 的变量）。
+import './styles/theme.css'
+import './styles/global.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

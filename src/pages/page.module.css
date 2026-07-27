@@ -1,0 +1,31 @@
+/* 顶级页面的共用外壳：居中容器 + 标题区。四个板块页共用，保持留白/字号一致。 */
+
+.page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 28px 24px 120px; /* 底部留白，给右下角人物切换器让位 */
+  color: var(--text-main);
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding: 18px 14px 120px;
+  }
+}
+
+.header {
+  margin-bottom: 18px;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0 0 4px;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: var(--text-faint);
+  margin: 0;
+}

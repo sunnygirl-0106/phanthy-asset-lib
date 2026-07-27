@@ -1,0 +1,72 @@
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 20px;
+  background: var(--panel-float);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.brand {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: 0.02em;
+}
+
+.nav {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.tab:hover { background: var(--line-soft); color: var(--text-body); }
+
+.tabActive {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.tabActive:hover { background: var(--accent); color: var(--bg); }
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 窄屏：顶栏可换行、间距收紧，导航不再挤成一行溢出 */
+@media (max-width: 720px) {
+  .topbar {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px 14px;
+  }
+  .nav {
+    order: 3;
+    flex-basis: 100%;
+    overflow-x: auto;
+  }
+  .tab {
+    padding: 6px 10px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+}

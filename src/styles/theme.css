@@ -1,0 +1,43 @@
+/**
+ * theme.css —— 深色设计 token（单一来源）
+ *
+ * 直接抄自 phantymovie-canvas-demo/styles.css 第 1–25 行的 :root 那套变量，
+ * 让本 Demo 的外壳与 fancy demo 保持同一套深色语言。
+ * 换肤原则：各组件 *.module.css 只引用这里的 token，不再写死颜色值。
+ */
+:root {
+  color-scheme: dark;
+
+  /* 底与面板层次（越大越"浮"越亮） */
+  --bg: #050505;
+  --panel: #181a1c;
+  --panel-2: #141618;
+  --panel-3: #1c1e20;
+  --panel-soft: rgba(32, 36, 40, 0.4);
+  --panel-float: rgba(36, 38, 40, 0.95);
+  --field: rgba(0, 0, 0, 0.4);
+
+  /* 描边（由弱到强） */
+  --line-soft: rgba(255, 255, 255, 0.05);
+  --line-mid: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.2);
+
+  /* 文字（由主到弱） */
+  --text-main: rgba(255, 255, 255, 0.96);
+  --text-body: rgba(255, 255, 255, 0.9);
+  --text-faint: rgba(255, 255, 255, 0.6);
+  --text-muted: rgba(255, 255, 255, 0.4);
+
+  /* 强调色 / 行动色 / 危险色 */
+  --accent: #00d8dc;
+  --cta-top: #c2f2ff;
+  --cta-bottom: #cef4ff;
+  --danger: #ff8f8f;
+
+  /* 圆角 / 阴影 / 字体 */
+  --radius-card: 12px;
+  --radius-xl: 12px;
+  --radius-pill: 999px;
+  --shadow-float: 0 16px 64px rgba(0, 0, 0, 0.4);
+  --font-sans: "MiSans", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+}

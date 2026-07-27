@@ -1,0 +1,232 @@
+.wrap {
+  display: flex;
+  min-height: calc(100vh - 57px);
+}
+
+.missing {
+  padding: 80px 24px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+/* ── 左栏 ── */
+.sidebar {
+  flex-shrink: 0;
+  width: 220px;
+  padding: 20px 16px;
+  border-right: 1px solid var(--line-soft);
+  background: var(--panel-2);
+}
+
+.back {
+  font-size: 13px;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.back:hover { color: var(--text-body); }
+
+.projName {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 14px 0 16px;
+}
+
+.modePanel {
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: var(--panel-3);
+  margin-bottom: 16px;
+}
+
+.modeLabel {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.modeRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+}
+
+.modeRow strong {
+  font-size: 14px;
+  color: var(--accent);
+}
+
+.modeSwitch {
+  font-size: 12px;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.modeSwitch:hover { color: var(--text-body); }
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.navItem {
+  padding: 9px 12px;
+  border-radius: 8px;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.navItem:hover:not(:disabled) { background: var(--line-soft); color: var(--text-body); }
+
+.navItem:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.navActive {
+  background: rgba(0, 216, 220, 0.12);
+  color: var(--accent);
+}
+
+.navActive:hover { background: rgba(0, 216, 220, 0.12); color: var(--accent); }
+
+/* ── 主区 ── */
+.main {
+  flex: 1;
+  min-width: 0;
+  padding: 24px 28px 80px;
+}
+
+.head { margin-bottom: 20px; }
+
+.h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0;
+}
+
+.headSub {
+  font-size: 13px;
+  color: var(--text-faint);
+  margin: 4px 0 0;
+}
+
+.stepGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+  margin-bottom: 28px;
+}
+
+.stepCard {
+  padding: 16px;
+  border: 1px solid var(--line-mid);
+  border-radius: var(--radius-card);
+  background: var(--panel);
+}
+
+.stepIndex {
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.stepTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-main);
+  margin: 8px 0 6px;
+}
+
+.stepDesc {
+  font-size: 12px;
+  color: var(--text-faint);
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ── 5 类目项目资产陈列 ── */
+.shelf {
+  border-top: 1px solid var(--line-soft);
+  padding-top: 20px;
+}
+
+.shelfHead {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.shelfTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0;
+}
+
+.shelfNote {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.catBlock { margin-bottom: 20px; }
+
+.catHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.catName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-body);
+}
+
+.catCount {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--line-mid);
+  color: var(--text-faint);
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.catEmpty {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 8px 0;
+}
+
+.catGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px;
+}
+
+.statusBar {
+  margin-top: 24px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.statusBar strong {
+  color: var(--text-faint);
+  font-weight: 600;
+  margin-left: 4px;
+}

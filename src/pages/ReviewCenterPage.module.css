@@ -1,0 +1,115 @@
+.page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px 20px 80px;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0 0 4px;
+}
+
+.sub {
+  font-size: 13px;
+  color: var(--text-faint);
+  margin: 0 0 18px;
+}
+
+.groupTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-body);
+  margin: 22px 0 10px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-card);
+  background: var(--panel);
+}
+
+.cardDone { background: var(--panel-2); }
+
+.cardMain { min-width: 0; }
+
+.assetName {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.meta {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-top: 3px;
+}
+
+.cardActions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.btn {
+  padding: 7px 16px;
+  border-radius: 9px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.btn:hover { opacity: 0.9; }
+
+.btnGhost {
+  padding: 7px 16px;
+  border-radius: 9px;
+  border: 1px solid var(--line-mid);
+  background: var(--panel-3);
+  color: var(--text-body);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.btnGhost:hover { border-color: var(--line-strong); }
+
+.tag {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+}
+
+.tagOk { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; }
+.tagNo { background: rgba(255, 143, 143, 0.15); color: var(--danger); }
+
+.empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 14px 0;
+}
+
+.result {
+  margin: 4px 0 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.resultOk { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; }
+.resultErr { background: rgba(255, 143, 143, 0.15); color: var(--danger); }

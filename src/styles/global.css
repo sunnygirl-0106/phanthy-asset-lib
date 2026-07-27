@@ -1,0 +1,50 @@
+/**
+ * global.css —— 全局基底（深色）
+ *
+ * 参照 phantymovie-canvas-demo/styles.css 第 26–66 行的语义重写：
+ * 盒模型统一、深底、字体、以及 button/input 的 reset。
+ * 只放"跨组件的地基"，具体外观仍在各组件 module.css 里用 token 表达。
+ */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  font-family: var(--font-sans);
+}
+
+body {
+  color: var(--text-main);
+  /* 深底下让字体渲染更干净 */
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  background: none;
+  color: inherit;
+  padding: 0;
+  cursor: pointer;
+}
+
+input {
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  min-width: 0;
+}
+
+input::placeholder {
+  color: var(--text-muted);
+}

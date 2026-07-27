@@ -1,0 +1,63 @@
+.wrap {
+  position: relative;
+}
+
+.bell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-mid);
+  background: var(--panel-3);
+  color: var(--text-body);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.bell:hover { border-color: var(--line-strong); }
+
+.dot {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--radius-pill);
+  background: var(--danger);
+  color: var(--bg);
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.panel {
+  position: absolute;
+  right: 0;
+  top: 40px;
+  width: 280px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--panel-float);
+  border: 1px solid var(--line-mid);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-float);
+  padding: 6px;
+  z-index: 50;
+}
+
+.item {
+  font-size: 13px;
+  color: var(--text-body);
+  padding: 10px 10px;
+  border-radius: 8px;
+}
+
+.item:hover { background: var(--line-soft); }
+
+.empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 12px 10px;
+  margin: 0;
+}

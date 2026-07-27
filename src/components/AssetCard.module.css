@@ -1,20 +1,20 @@
 .card {
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
+  border: 1px solid var(--line-mid);
+  border-radius: var(--radius-card);
   overflow: hidden;
-  background: #fff;
+  background: var(--panel);
   transition: box-shadow 0.15s, transform 0.15s;
 }
 
 .card:hover {
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-float);
   transform: translateY(-2px);
 }
 
 .coverWrap {
   position: relative;
   aspect-ratio: 3 / 4;
-  background: #f3f4f6;
+  background: var(--panel-2);
 }
 
 .cover {
@@ -35,9 +35,9 @@
 .badge {
   font-size: 10px;
   padding: 2px 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: rgba(0, 0, 0, 0.55);
-  color: #fff;
+  color: var(--text-main);
   backdrop-filter: blur(2px);
 }
 
@@ -51,6 +51,7 @@
 .name {
   font-size: 13px;
   font-weight: 500;
+  color: var(--text-body);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -58,6 +59,6 @@
 
 .cat {
   font-size: 11px;
-  color: #9ca3af;
+  color: var(--text-muted);
   margin-top: 2px;
 }

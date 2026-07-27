@@ -1,23 +1,13 @@
 /**
- * App.tsx —— 应用外壳
+ * App.tsx —— 应用根组件
  *
- * 现在它把两块拼在一起：
- *   - LibraryPage：三层库浏览页（主体）
- *   - PersonaSwitcher：右下角人物切换器（悬浮在所有内容之上）
- *
- * 之所以这么薄，是因为真正的东西都在各自的文件里：
- * 数据在 data/，规则在 services/，全局状态在 store/，页面在 pages/，UI 块在 components/。
- * App 只负责"把它们摆在一起"。这就是分层带来的清爽。
+ * 阶段 2 起退化成一层薄壳：只挂 AppShell（深色外壳 + 四板块顶栏 + hash 路由）。
+ * 真正的东西都在各自文件里：路由在 hooks/useHashRoute，外壳在 layout/，
+ * 页面在 pages/，UI 块在 components/，数据/规则/状态在 data·services·store。
  */
 
-import { LibraryPage } from './pages/LibraryPage'
-import { PersonaSwitcher } from './components/PersonaSwitcher'
+import { AppShell } from './layout/AppShell'
 
 export function App() {
-  return (
-    <>
-      <LibraryPage />
-      <PersonaSwitcher />
-    </>
-  )
+  return <AppShell />
 }

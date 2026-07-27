@@ -19,17 +19,40 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { World, User, Asset } from '../data/types'
+import type { World, User, Asset, Notification } from '../data/types'
 import { createSeedWorld, IDS } from '../data/seed'
 import {
   directReuse,
   favorite,
   reuse,
   deposit,
+  materializeDeposit,
+  contributeToPlaza,
+  materializePlaza,
   AssetRuleError,
   type DepositApplication,
+  type PlazaSubmission,
 } from '../services/assetService'
-import { canDirectReuse, canFavorite, canReuseFromTeam, depositMode } from '../services/permission'
+import {
+  canDirectReuse,
+  canFavorite,
+  canReuseFromTeam,
+  canApproveDeposit,
+  canContributeToPlaza,
+  canReviewPlaza,
+  canRemovePlazaAsset,
+  canSeeProjectAssets,
+  getTeam,
+  isAdmin,
+  depositMode,
+} from '../services/permission'
+import {
+  saveCanvasNodeToProject,
+  teamHasSameName,
+  type CanvasNode,
+  type SaveSpec,
+  type SaveOutcome,
+} from '../services/canvasService'
 
 /** 流转动作的统一返回：ok + 一句给用户看的话。 */
 export interface ActionResult {
@@ -40,19 +63,62 @@ export interface ActionResult {
 interface StoreState {
   world: World
   currentUserId: string
-  /** 子账号提交的沉淀申请（本期只登记 + 提示，审批中心留待下一里程碑）。 */
+  /** 子账号提交的沉淀申请（pending → approved/rejected，由主账号在审批中心处理）。 */
   applications: DepositApplication[]
+  /** 广场投稿申请（主账号/子账号发起，pending → approved/rejected，由 admin 审核）。 */
+  plazaSubmissions: PlazaSubmission[]
+  /** 通知大表（本期占位）：审批结果等发到这里，按 toUserId 分给各账号看。 */
+  notifications: Notification[]
 
   setCurrentUser: (id: string) => void
   resetDemo: () => void
 
   // ── 流转动作（点按钮时调用）──
-  runDirectReuse: (sourceId: string, targetProjectId: string) => ActionResult
-  runFavorite: (sourceId: string, follow: boolean) => ActionResult
-  runReuse: (sourceId: string, targetProjectId: string, follow: boolean) => ActionResult
+  runDirectReuse: (sourceId: string, targetProjectId: string, includeLookIds?: string[]) => ActionResult
+  runFavorite: (sourceId: string) => ActionResult
+  runReuse: (sourceId: string, targetProjectId: string, includeLookIds?: string[]) => ActionResult
   runDeposit: (sourceId: string) => ActionResult
+
+  /**
+   * 【入口一 · 本期内核唯一实质扩展】把一个画布成品节点存进项目资产库（技术规划 §2.1）。
+   * 子账号在画布上传项目库免审、直接进——不生成任何审批申请（稳定性检查 ⑦）。
+   * 来源是团队库/广场时，产出的项目副本自带 masterId 血缘（在 canvasService 里算）。
+   */
+  runSaveToProject: (node: CanvasNode, projectId: string, spec: SaveSpec) => ActionResult
+
+  // ── 团队沉淀审批（仅主账号）──
+  /** 通过一条子账号沉淀申请：把资产写入团队库、申请标记 approved、给申请人发通知。 */
+  approveApplication: (applicationId: string) => ActionResult
+  /** 驳回一条子账号沉淀申请：申请标记 rejected、给申请人发通知。团队库不动。 */
+  rejectApplication: (applicationId: string) => ActionResult
+
+  // ── 广场投稿（发起：主账号/子账号；审核：admin）──
+  /**
+   * 发起广场投稿：把自己团队库/项目里的成品资产提交到 admin 审核队列。
+   * includeLookIds：贡献角色时想一起带上的造型 id（素模始终带上、不用选；空=只贡献素模）。
+   */
+  runContribute: (sourceId: string, includeLookIds?: string[]) => ActionResult
+  /** admin 通过广场投稿：把资产上架成广场官方母版、标记 approved、给投稿人发通知。 */
+  approvePlazaSubmission: (submissionId: string) => ActionResult
+  /** admin 驳回广场投稿：标记 rejected、给投稿人发通知。广场不动。 */
+  rejectPlazaSubmission: (submissionId: string) => ActionResult
+  /**
+   * 移除一份广场素材（v4：上架后不可编辑，只能删/下架）。
+   * admin=下架任何一份；投稿作者=删自己投的那份。已被复用出去的副本不受影响。
+   */
+  runRemovePlaza: (assetId: string) => ActionResult
+
+  /** 把某个账号的通知都标为已读（点开通知面板时调用）。 */
+  markNotificationsRead: (userId: string) => void
+
   /** 改名：名字是本地的，改了不影响母版、也不断链。 */
   renameAsset: (assetId: string, newName: string) => void
+  /**
+   * 设封面：把某个角色的封面换成它某个造型的图（用户自选封面）。
+   * v4 口径：素模是幕后锚点、不当封面；封面由用户从造型里挑一张（或上传，占位）。
+   * 只改这一份资产的 cover 字段，别的都不动。
+   */
+  setCover: (assetId: string, coverUrl: string) => void
 }
 
 export const useStore = create<StoreState>()(
@@ -61,15 +127,24 @@ export const useStore = create<StoreState>()(
       world: createSeedWorld(),
       currentUserId: IDS.sunny,
       applications: [],
+      plazaSubmissions: [],
+      notifications: [],
 
       setCurrentUser: (id) => set({ currentUserId: id }),
-      resetDemo: () => set({ world: createSeedWorld(), currentUserId: IDS.sunny, applications: [] }),
+      resetDemo: () =>
+        set({
+          world: createSeedWorld(),
+          currentUserId: IDS.sunny,
+          applications: [],
+          plazaSubmissions: [],
+          notifications: [],
+        }),
 
       /* ── 下面每个动作都是同一个套路：
        *    ① 找到人和资产 → ② 权限守卫 → ③ 调纯函数算结果（可能抛业务错）
        *    → ④ 不可变提交进 world → ⑤ 返回一句话给界面显示。 */
 
-      runDirectReuse: (sourceId, targetProjectId) => {
+      runDirectReuse: (sourceId, targetProjectId, includeLookIds) => {
         const { world, currentUserId } = get()
         const user = findUser(world, currentUserId)
         const source = findAsset(world, sourceId)
@@ -77,15 +152,15 @@ export const useStore = create<StoreState>()(
         if (!user || !source || !project) return fail('数据不存在')
         if (!canDirectReuse(user, project)) return fail('你没有权限在该项目里直接复用')
         try {
-          const copy = directReuse(source, targetProjectId)
+          const copy = directReuse(source, targetProjectId, includeLookIds)
           set((s) => ({ world: addAsset(s.world, copy) }))
-          return ok(`已把「${source.name}」直接复用进「${project.name}」（独立快照，不跟随）`)
+          return ok(`已把「${source.name}」直接复用进「${project.name}」${lookNote(source, includeLookIds)}`)
         } catch (e) {
           return fromError(e)
         }
       },
 
-      runFavorite: (sourceId, follow) => {
+      runFavorite: (sourceId) => {
         const { world, currentUserId } = get()
         const user = findUser(world, currentUserId)
         const source = findAsset(world, sourceId)
@@ -93,15 +168,15 @@ export const useStore = create<StoreState>()(
         if (!user.teamId) return fail('当前账号没有团队库')
         if (!canFavorite(user)) return fail('只有主账号能收藏进团队库（子账号请用"直接复用"）')
         try {
-          const copy = favorite(source, user.teamId, follow)
+          const copy = favorite(source, user.teamId)
           set((s) => ({ world: addAsset(s.world, copy) }))
-          return ok(`已收藏「${source.name}」进团队库${follow ? '（跟随官方母版）' : '（不跟随）'}`)
+          return ok(`已收藏「${source.name}」进团队库（独立副本）`)
         } catch (e) {
           return fromError(e)
         }
       },
 
-      runReuse: (sourceId, targetProjectId, follow) => {
+      runReuse: (sourceId, targetProjectId, includeLookIds) => {
         const { world, currentUserId } = get()
         const user = findUser(world, currentUserId)
         const source = findAsset(world, sourceId)
@@ -109,9 +184,9 @@ export const useStore = create<StoreState>()(
         if (!user || !source || !project) return fail('数据不存在')
         if (!canReuseFromTeam(user, project)) return fail('你没有权限把它复用进该项目')
         try {
-          const copy = reuse(source, targetProjectId, follow)
+          const copy = reuse(source, targetProjectId, includeLookIds)
           set((s) => ({ world: addAsset(s.world, copy) }))
-          return ok(`已把「${source.name}」复用进「${project.name}」${follow ? '（跟随中）' : '（不跟随）'}`)
+          return ok(`已把「${source.name}」复用进「${project.name}」${lookNote(source, includeLookIds)}`)
         } catch (e) {
           return fromError(e)
         }
@@ -124,6 +199,10 @@ export const useStore = create<StoreState>()(
         if (!user || !source) return fail('数据不存在')
         if (!user.teamId) return fail('当前账号没有团队库')
         if (depositMode(user) === 'none') return fail('管理员只治理，不参与沉淀')
+        // 去重把关（技术规划 §2.3，稳定性检查 ⑧）：项目→团队这一步，团队库同名则挡下、提示改名。
+        if (teamHasSameName(world.assets, user.teamId, source.name)) {
+          return fail(`团队库已有同名「${source.name}」，请改名后再沉淀回团队库`)
+        }
         try {
           const res = deposit(source, user.teamId, user)
           if (res.kind === 'asset') {
@@ -138,11 +217,180 @@ export const useStore = create<StoreState>()(
         }
       },
 
+      runSaveToProject: (node, projectId, spec) => {
+        const { world, currentUserId } = get()
+        const user = findUser(world, currentUserId)
+        const project = world.projects.find((p) => p.id === projectId)
+        if (!user || !project) return fail('数据不存在')
+        const team = getTeam(world, project.teamId)
+        if (!team) return fail('项目所属团队不存在')
+        // 得能进这个项目才能往它的库里上传（子账号免审直接进，但仍要有项目权限）。
+        if (!canSeeProjectAssets(user, project, team)) return fail('你没有权限进入该项目，无法上传')
+        try {
+          const outcome = saveCanvasNodeToProject(node, projectId, spec)
+          set((s) => ({ world: applySaveOutcome(s.world, outcome) }))
+          return ok(saveMessage(outcome))
+        } catch (e) {
+          return fromError(e)
+        }
+      },
+
+      approveApplication: (applicationId) => {
+        const { world, currentUserId, applications } = get()
+        const approver = findUser(world, currentUserId)
+        const appl = applications.find((a) => a.id === applicationId)
+        if (!approver || !appl) return fail('数据不存在')
+        if (appl.status !== 'pending') return fail('这条申请已经处理过了')
+        const applicant = findUser(world, appl.applicantId)
+        if (!applicant) return fail('申请人不存在')
+        if (!canApproveDeposit(approver, applicant)) return fail('只有该子账号的主账号能审批')
+        const source = findAsset(world, appl.assetId)
+        if (!source) return fail('原资产已不存在，无法入库')
+        try {
+          // 复用同一处"入库"实现，保证审批通过和主账号直接沉淀行为一致
+          const master = materializeDeposit(source, appl.toTeamId)
+          set((s) => ({
+            world: addAsset(s.world, master),
+            applications: s.applications.map((a) =>
+              a.id === applicationId ? { ...a, status: 'approved' as const } : a,
+            ),
+            notifications: [
+              ...s.notifications,
+              makeNotification(appl.applicantId, `你的「${appl.assetName}」沉淀申请已通过，已进团队库`),
+            ],
+          }))
+          return ok(`已通过「${appl.assetName}」的沉淀申请，写入团队库`)
+        } catch (e) {
+          return fromError(e)
+        }
+      },
+
+      rejectApplication: (applicationId) => {
+        const { world, currentUserId, applications } = get()
+        const approver = findUser(world, currentUserId)
+        const appl = applications.find((a) => a.id === applicationId)
+        if (!approver || !appl) return fail('数据不存在')
+        if (appl.status !== 'pending') return fail('这条申请已经处理过了')
+        const applicant = findUser(world, appl.applicantId)
+        if (!applicant) return fail('申请人不存在')
+        if (!canApproveDeposit(approver, applicant)) return fail('只有该子账号的主账号能审批')
+        set((s) => ({
+          applications: s.applications.map((a) =>
+            a.id === applicationId ? { ...a, status: 'rejected' as const } : a,
+          ),
+          notifications: [
+            ...s.notifications,
+            makeNotification(appl.applicantId, `你的「${appl.assetName}」沉淀申请被驳回`),
+          ],
+        }))
+        return ok(`已驳回「${appl.assetName}」的沉淀申请`)
+      },
+
+      runContribute: (sourceId, includeLookIds = []) => {
+        const { world, currentUserId } = get()
+        const user = findUser(world, currentUserId)
+        const source = findAsset(world, sourceId)
+        if (!user || !source) return fail('数据不存在')
+        if (!canContributeToPlaza(user)) return fail('只有主账号或子账号能投稿到广场')
+        try {
+          const submission = contributeToPlaza(source, user, includeLookIds)
+          set((s) => ({ plazaSubmissions: [...s.plazaSubmissions, submission] }))
+          const extra = includeLookIds.length ? `（含 ${includeLookIds.length} 套造型）` : '（仅素模）'
+          return ok(`已提交「${source.name}」的广场投稿${source.looks?.length ? extra : ''}，待 admin 审核`)
+        } catch (e) {
+          return fromError(e)
+        }
+      },
+
+      approvePlazaSubmission: (submissionId) => {
+        const { world, currentUserId, plazaSubmissions } = get()
+        const reviewer = findUser(world, currentUserId)
+        const sub = plazaSubmissions.find((x) => x.id === submissionId)
+        if (!reviewer || !sub) return fail('数据不存在')
+        if (!canReviewPlaza(reviewer)) return fail('只有 admin 能审核广场投稿')
+        if (sub.status !== 'pending') return fail('这条投稿已经处理过了')
+        const source = findAsset(world, sub.assetId)
+        if (!source) return fail('原资产已不存在，无法上架')
+        try {
+          const master = materializePlaza(source, sub.submitterId, sub.includeLookIds)
+          set((s) => ({
+            world: addAsset(s.world, master),
+            plazaSubmissions: s.plazaSubmissions.map((x) =>
+              x.id === submissionId ? { ...x, status: 'approved' as const } : x,
+            ),
+            notifications: [
+              ...s.notifications,
+              makeNotification(sub.submitterId, `你投稿的「${sub.assetName}」已通过 admin 审核，已上架素材广场`),
+            ],
+          }))
+          return ok(`已通过「${sub.assetName}」的广场投稿，已上架`)
+        } catch (e) {
+          return fromError(e)
+        }
+      },
+
+      rejectPlazaSubmission: (submissionId) => {
+        const { world, currentUserId, plazaSubmissions } = get()
+        const reviewer = findUser(world, currentUserId)
+        const sub = plazaSubmissions.find((x) => x.id === submissionId)
+        if (!reviewer || !sub) return fail('数据不存在')
+        if (!canReviewPlaza(reviewer)) return fail('只有 admin 能审核广场投稿')
+        if (sub.status !== 'pending') return fail('这条投稿已经处理过了')
+        set((s) => ({
+          plazaSubmissions: s.plazaSubmissions.map((x) =>
+            x.id === submissionId ? { ...x, status: 'rejected' as const } : x,
+          ),
+          notifications: [
+            ...s.notifications,
+            makeNotification(sub.submitterId, `你投稿的「${sub.assetName}」被 admin 驳回`),
+          ],
+        }))
+        return ok(`已驳回「${sub.assetName}」的广场投稿`)
+      },
+
+      runRemovePlaza: (assetId) => {
+        const { world, currentUserId } = get()
+        const user = findUser(world, currentUserId)
+        const asset = findAsset(world, assetId)
+        if (!user || !asset) return fail('数据不存在')
+        if (asset.scope !== 'plaza') return fail('只有广场素材才谈得上下架 / 删除')
+        if (!canRemovePlazaAsset(user, asset)) return fail('你没有权限移除这份广场素材')
+
+        const label = isAdmin(user) ? '下架' : '删除' // admin 是治理下架；作者是删自己投的
+        // admin 下架别人投的 → 通知投稿人；作者删自己的、或官方素材（无投稿人）→ 不发通知
+        const notifyContributor = asset.contributedBy && asset.contributedBy !== user.id
+        set((s) => ({
+          // 只把广场这份拿掉；已被复用/收藏出去的独立副本 id 不同，不受影响
+          world: { ...s.world, assets: s.world.assets.filter((a) => a.id !== assetId) },
+          notifications: notifyContributor
+            ? [...s.notifications, makeNotification(asset.contributedBy!, `你投稿的「${asset.name}」已被 admin 下架`)]
+            : s.notifications,
+        }))
+        return ok(`已${label}「${asset.name}」（已复用出去的副本不受影响）`)
+      },
+
+      markNotificationsRead: (userId) => {
+        set((s) => ({
+          notifications: s.notifications.map((n) =>
+            n.toUserId === userId ? { ...n, read: true } : n,
+          ),
+        }))
+      },
+
       renameAsset: (assetId, newName) => {
         set((s) => ({
           world: {
             ...s.world,
             assets: s.world.assets.map((a) => (a.id === assetId ? { ...a, name: newName } : a)),
+          },
+        }))
+      },
+
+      setCover: (assetId, coverUrl) => {
+        set((s) => ({
+          world: {
+            ...s.world,
+            assets: s.world.assets.map((a) => (a.id === assetId ? { ...a, cover: coverUrl } : a)),
           },
         }))
       },
@@ -172,6 +420,51 @@ function findAsset(world: World, id: string): Asset | undefined {
 /** 不可变地往 world 里加一份资产（返回新的 world）。 */
 function addAsset(world: World, asset: Asset): World {
   return { ...world, assets: [...world.assets, asset] }
+}
+/** 入口一：把画布上传的产出意图不可变地提交进 world（新增 / 追加造型 / 替换素模）。 */
+function applySaveOutcome(world: World, outcome: SaveOutcome): World {
+  switch (outcome.kind) {
+    case 'add':
+      return addAsset(world, outcome.asset)
+    case 'addLook':
+      return {
+        ...world,
+        assets: world.assets.map((a) =>
+          a.id === outcome.charId ? { ...a, looks: [...(a.looks ?? []), outcome.look] } : a,
+        ),
+      }
+    case 'replaceBaseModel':
+      return {
+        ...world,
+        assets: world.assets.map((a) =>
+          a.id === outcome.charId ? { ...a, baseModel: outcome.baseModel, cover: outcome.cover } : a,
+        ),
+      }
+  }
+}
+/** 给入口一的结果配一句给用户看的话。 */
+function saveMessage(outcome: SaveOutcome): string {
+  switch (outcome.kind) {
+    case 'add':
+      return `已上传「${outcome.asset.name}」到项目资产库`
+    case 'addLook':
+      return `已把「${outcome.look.name}」追加为该角色的一个造型`
+    case 'replaceBaseModel':
+      return '已替换该角色的素模'
+  }
+}
+/** 造一条通知（自增 id，够 Demo 用且可预测）。 */
+let _notiSeq = 1
+function makeNotification(toUserId: string, text: string): Notification {
+  return { id: `noti_${_notiSeq++}`, toUserId, text, createdAt: Date.now(), read: false }
+}
+/** 给复用/直接复用的结果补一句"带了哪些造型"的说明（非角色就只说独立副本）。 */
+function lookNote(source: Asset, includeLookIds?: string[]): string {
+  if (!source.looks?.length) return '（独立副本）'
+  if (includeLookIds === undefined) return '（独立副本 · 整份带）'
+  return includeLookIds.length
+    ? `（独立副本 · 素模 + ${includeLookIds.length} 套造型）`
+    : '（独立副本 · 仅素模）'
 }
 function ok(message: string): ActionResult {
   return { ok: true, message }

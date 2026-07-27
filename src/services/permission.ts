@@ -31,19 +31,15 @@ export const getTeam = (world: World, teamId: string | undefined): Team | undefi
 export const getProject = (world: World, projectId: string | undefined): Project | undefined =>
   world.projects.find((p) => p.id === projectId)
 
-/* ─── 三、子账号的「两扇门」──────────────────────────────────────────
+/* ─── 三、子账号的门 A ────────────────────────────────────────────────
  * 门 A = 团队库货架：默认对子账号开，除非主账号把这个子账号单独关掉。
- * 门 B = 别人的项目：默认关，主账号可以一键放开"看全部项目"。            */
+ * 【v4 改动】原来还有门 B（看别人项目），已砍掉：子账号只看被分配的项目，
+ * 想跨项目共享就走团队库/广场。所以这里不再有 doorBAllProjectsOpen。   */
 
 /** 门 A 对某个子账号是否打开（默认开）。 */
 export function doorATeamLibraryOpen(team: Team, sub: User): boolean {
   const closed = team.teamLibraryHiddenSubs ?? []
   return !closed.includes(sub.id)
-}
-
-/** 门 B 是否打开（默认关）。 */
-export function doorBAllProjectsOpen(team: Team): boolean {
-  return team.allowSubsSeeAllProjects === true
 }
 
 /* ─── 四、浏览类权限 ─── */
@@ -68,18 +64,21 @@ export function canBrowseTeamLibrary(user: User, team: Team): boolean {
 }
 
 /**
- * 能不能看到某个「项目」里的资产（门 B 就体现在这里）。
+ * 能不能看到某个「项目」里的资产。
  * - admin：全部项目都能看
  * - owner：只看本团队的项目
- * - sub：本团队的项目里，只看被分配的；除非主账号开了门 B（看全部项目）
+ * - sub：只看本团队里被分配给自己的项目——没分配就是看不到，没有例外。
+ *   （v4 改动：门 B 砍掉后，子账号再没有"看全部项目"的口子。）
+ *
+ * 注意 team 参数保留着：门 A 相关判断和将来可能的团队级策略仍要用它，
+ * 这里刻意不删签名，免得调用处（canSee / 页面）跟着连锁改。
  */
-export function canSeeProjectAssets(user: User, project: Project, team: Team): boolean {
+export function canSeeProjectAssets(user: User, project: Project, _team: Team): boolean {
   if (isAdmin(user)) return true
   if (isOwner(user)) return user.teamId === project.teamId
-  // sub：
+  // sub：本团队 + 被分配，两个条件缺一不可
   if (user.teamId !== project.teamId) return false
-  if (project.assignedSubs.includes(user.id)) return true // 被分配了 → 能看
-  return doorBAllProjectsOpen(team) // 没被分配，就看门 B 有没有一键放开
+  return project.assignedSubs.includes(user.id)
 }
 
 /**
@@ -162,12 +161,30 @@ export function canManagePlaza(user: User): boolean {
   return isAdmin(user)
 }
 
-/** 向广场投稿 / 贡献作品：仅主账号（本期只留口子，实际审核后置）。 */
-export function canContributeToPlaza(user: User): boolean {
-  return isOwner(user)
+/**
+ * 谁能"移除"一份广场素材（v4：上架后不可编辑，只能删/下架）：
+ * - admin：可以下架任何一份广场素材。
+ * - 投稿作者本人：可以删掉自己投上去的那份（contributedBy === 我）。
+ * - 其他人：不行。
+ * 注意：删/下架只是把广场这份拿掉，已经被别人复用/收藏出去的独立副本不受影响。
+ */
+export function canRemovePlazaAsset(user: User, asset: Asset): boolean {
+  if (asset.scope !== 'plaza') return false
+  if (isAdmin(user)) return true
+  return !!asset.contributedBy && asset.contributedBy === user.id
 }
 
-/** 审核广场投稿：仅 admin。 */
+/**
+ * 向广场投稿 / 贡献作品：主账号和子账号都能发起。
+ * 【v4 改动】原来只有主账号能投；现在子账号也能投——因为广场是平台公开层，
+ * 把关人天然是 admin（见 canReviewPlaza），跟"这个人是不是主账号"无关。
+ * admin 只当审核方、自己不投稿。
+ */
+export function canContributeToPlaza(user: User): boolean {
+  return isOwner(user) || isSub(user)
+}
+
+/** 审核广场投稿：仅 admin（不管投稿人是主账号还是子账号，都由 admin 审）。 */
 export function canReviewPlaza(user: User): boolean {
   return isAdmin(user)
 }

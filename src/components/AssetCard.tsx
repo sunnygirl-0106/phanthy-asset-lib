@@ -2,9 +2,9 @@
  * 【组件】AssetCard —— 一张资产卡片（视觉网格的基本单元）
  *
  * 只负责"把一份资产画出来"：大图 + 名字 + 类目，
- * 外加两个小徽章演示血缘/跟随（副本 / 跟随中），让你在界面上就能看到
- * 数据层里 masterId / following 这两个字段的效果。
+ * 外加一个小徽章演示血缘（副本），让你在界面上就能看到数据层里 masterId 的效果。
  * 它不含任何权限判断——能不能出现在网格里，是上层用 canSee 决定的。
+ * （v4：跟随已砍，原"跟随中"徽章删除。）
  */
 
 import type { Asset, Category } from '../data/types'
@@ -24,7 +24,6 @@ export function AssetCard({ asset, onClick }: { asset: Asset; onClick?: () => vo
       <div className={styles.coverWrap}>
         <img className={styles.cover} src={asset.cover} alt={asset.name} loading="lazy" />
         <div className={styles.badges}>
-          {asset.following && <span className={`${styles.badge} ${styles.badgeFollow}`}>跟随中</span>}
           {asset.masterId && <span className={`${styles.badge} ${styles.badgeCopy}`}>副本</span>}
           {asset.status !== 'done' && <span className={styles.badge}>{statusLabel(asset.status)}</span>}
         </div>

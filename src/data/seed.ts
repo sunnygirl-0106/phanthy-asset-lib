@@ -84,12 +84,30 @@ export function createSeedWorld(): World {
   /* ── 资产 ─────────────────────────────────────────────────────── */
   const assets: Asset[] = [
     /* 【广场·官方货架 9】四类目齐（角色/服装/场景/道具）*/
-    asset({ id: 'a_cyber_police', category: 'character', name: '赛博女警', scope: 'plaza', cover: `${IMG}/plaza-shelf/cyber_police_role.png`, fields: { gender: '女', age: '青年', style: '赛博' } }),
+    asset({
+      id: 'a_cyber_police', category: 'character', name: '赛博女警', scope: 'plaza',
+      cover: `${IMG}/plaza-shelf/cyber_police_role.png`,
+      baseModel: `${IMG}/character-base/cyber_police_base.png`,
+      fields: { gender: '女', age: '青年', style: '赛博' },
+      looks: [asset({ id: 'a_cyber_police_look', category: 'character', name: '赛博女警·定妆照', scope: 'plaza', cover: `${IMG}/plaza-shelf/cyber_police_role.png` })],
+    }),
     asset({ id: 'a_cyber_uniform', category: 'costume', name: '女警制服', scope: 'plaza', cover: `${IMG}/plaza-shelf/cyber_police_uniform.png`, fields: { style: '赛博' } }),
     asset({ id: 'a_rainy_rooftop', category: 'scene', name: '雨夜天台', scope: 'plaza', cover: `${IMG}/plaza-shelf/rainy_rooftop_scene.png`, fields: { style: '赛博' } }),
     asset({ id: 'a_holo_bracelet', category: 'prop', name: '全息手环', scope: 'plaza', cover: `${IMG}/plaza-shelf/holographic_bracelet_prop.png`, fields: { style: '赛博' } }),
-    asset({ id: 'a_swordsman', category: 'character', name: '东方剑客', scope: 'plaza', cover: `${IMG}/plaza-shelf/eastern_swordsman_role.png`, fields: { gender: '男', age: '青年', style: '国风' } }),
-    asset({ id: 'a_mech_butler', category: 'character', name: '机械管家', scope: 'plaza', cover: `${IMG}/plaza-shelf/mech_butler_role.png`, fields: { style: '科幻' } }),
+    asset({
+      id: 'a_swordsman', category: 'character', name: '东方剑客', scope: 'plaza',
+      cover: `${IMG}/plaza-shelf/eastern_swordsman_role.png`,
+      baseModel: `${IMG}/character-base/eastern_swordsman_base.png`,
+      fields: { gender: '男', age: '青年', style: '国风' },
+      looks: [asset({ id: 'a_swordsman_look', category: 'character', name: '东方剑客·定妆照', scope: 'plaza', cover: `${IMG}/plaza-shelf/eastern_swordsman_role.png` })],
+    }),
+    asset({
+      id: 'a_mech_butler', category: 'character', name: '机械管家', scope: 'plaza',
+      cover: `${IMG}/plaza-shelf/mech_butler_role.png`,
+      baseModel: `${IMG}/character-base/mech_butler_base.png`,
+      fields: { style: '科幻' },
+      looks: [asset({ id: 'a_mech_butler_look', category: 'character', name: '机械管家·定妆照', scope: 'plaza', cover: `${IMG}/plaza-shelf/mech_butler_role.png` })],
+    }),
     asset({ id: 'a_swordsman_robe', category: 'costume', name: '剑客长袍', scope: 'plaza', cover: `${IMG}/plaza-shelf/swordsman_robe_costume.png`, fields: { style: '国风' } }),
     asset({ id: 'a_cyber_street', category: 'scene', name: '赛博街市', scope: 'plaza', cover: `${IMG}/plaza-shelf/cyber_street_scene.png`, fields: { style: '赛博' } }),
     asset({ id: 'a_lightsaber', category: 'prop', name: '光剑', scope: 'plaza', cover: `${IMG}/plaza-shelf/lightsaber_prop.png`, fields: { style: '科幻' } }),
@@ -97,28 +115,55 @@ export function createSeedWorld(): World {
     /* 【团队A 团队库·母版 9】（苏晚带 3 个造型子资产）*/
     asset({
       id: 'a_suwan', category: 'character', name: '苏晚', scope: 'team', scopeId: IDS.teamA,
-      cover: `${IMG}/team-library/suwan_role.png`, fields: { gender: '女', age: '青年', style: '国风' },
+      cover: `${IMG}/team-library/suwan_role.png`,
+      baseModel: `${IMG}/character-base/suwan_base.png`,
+      fields: { gender: '女', age: '青年', style: '国风' },
       looks: [
+        asset({ id: 'a_suwan_dingzhuang', category: 'character', name: '苏晚·定妆照', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/suwan_role.png` }),
         asset({ id: 'a_suwan_guofeng', category: 'character', name: '苏晚·国风造型', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/suwan_look_guofeng.png` }),
         asset({ id: 'a_suwan_casual', category: 'character', name: '苏晚·便装造型', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/suwan_look_casual.png` }),
         asset({ id: 'a_suwan_cyber', category: 'character', name: '苏晚·赛博造型', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/suwan_look_cyber.png` }),
       ],
     }),
-    asset({ id: 'a_oldk', category: 'character', name: '老K', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/oldk_role.png`, fields: { gender: '男', age: '中年' } }),
+    asset({
+      id: 'a_oldk', category: 'character', name: '老K', scope: 'team', scopeId: IDS.teamA,
+      cover: `${IMG}/team-library/oldk_role.png`,
+      baseModel: `${IMG}/character-base/oldk_base.png`,
+      fields: { gender: '男', age: '中年' },
+      looks: [asset({ id: 'a_oldk_look', category: 'character', name: '老K·定妆照', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/oldk_role.png` })],
+    }),
     asset({ id: 'a_cyber_jacket', category: 'costume', name: '赛博夹克', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/cyber_jacket_costume.png`, fields: { style: '赛博' } }),
     asset({ id: 'a_palace_dress', category: 'costume', name: '国风宫装', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/palace_dress_costume.png`, fields: { style: '国风' } }),
     asset({ id: 'a_ancient_dock', category: 'scene', name: '古镇码头', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/ancient_dock_scene.png`, fields: { style: '国风' } }),
     asset({ id: 'a_folding_fan', category: 'prop', name: '折扇', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/folding_fan_prop.png`, fields: { style: '国风' } }),
 
     /* 【项目·霓虹东京 5】（团队A）*/
-    asset({ id: 'a_ajie', category: 'character', name: '阿杰', scope: 'project', scopeId: IDS.projNeon, cover: `${IMG}/proj-neon-tokyo/ajie_role.png`, fields: { gender: '男', style: '赛博' } }),
-    asset({ id: 'a_neon_dancer', category: 'character', name: '霓虹舞者', scope: 'project', scopeId: IDS.projNeon, cover: `${IMG}/proj-neon-tokyo/neon_dancer_role.png`, fields: { gender: '女', style: '赛博' } }),
+    asset({
+      id: 'a_ajie', category: 'character', name: '阿杰', scope: 'project', scopeId: IDS.projNeon,
+      cover: `${IMG}/proj-neon-tokyo/ajie_role.png`,
+      baseModel: `${IMG}/character-base/ajie_base.png`,
+      fields: { gender: '男', style: '赛博' },
+      looks: [asset({ id: 'a_ajie_look', category: 'character', name: '阿杰·定妆照', scope: 'project', scopeId: IDS.projNeon, cover: `${IMG}/proj-neon-tokyo/ajie_role.png` })],
+    }),
+    asset({
+      id: 'a_neon_dancer', category: 'character', name: '霓虹舞者', scope: 'project', scopeId: IDS.projNeon,
+      cover: `${IMG}/proj-neon-tokyo/neon_dancer_role.png`,
+      baseModel: `${IMG}/character-base/neon_dancer_base.png`,
+      fields: { gender: '女', style: '赛博' },
+      looks: [asset({ id: 'a_neon_dancer_look', category: 'character', name: '霓虹舞者·定妆照', scope: 'project', scopeId: IDS.projNeon, cover: `${IMG}/proj-neon-tokyo/neon_dancer_role.png` })],
+    }),
     asset({ id: 'a_mech_exo', category: 'costume', name: '机甲外骨骼', scope: 'project', scopeId: IDS.projNeon, cover: `${IMG}/proj-neon-tokyo/mech_exoskeleton_costume.png`, fields: { style: '科幻' } }),
     asset({ id: 'a_neon_bar', category: 'scene', name: '霓虹酒吧', scope: 'project', scopeId: IDS.projNeon, cover: `${IMG}/proj-neon-tokyo/neon_bar_scene.png`, fields: { style: '赛博' } }),
     asset({ id: 'a_mech_prosthetic', category: 'prop', name: '机械义肢', scope: 'project', scopeId: IDS.projNeon, cover: `${IMG}/proj-neon-tokyo/mech_prosthetic_prop.png`, fields: { style: '科幻' } }),
 
     /* 【项目·山海志 3】（团队A）*/
-    asset({ id: 'a_shangui', category: 'character', name: '山鬼', scope: 'project', scopeId: IDS.projShanhai, cover: `${IMG}/proj-shanhai/shangui_role.png`, fields: { style: '国风' } }),
+    asset({
+      id: 'a_shangui', category: 'character', name: '山鬼', scope: 'project', scopeId: IDS.projShanhai,
+      cover: `${IMG}/proj-shanhai/shangui_role.png`,
+      baseModel: `${IMG}/character-base/shangui_base.png`,
+      fields: { style: '国风' },
+      looks: [asset({ id: 'a_shangui_look', category: 'character', name: '山鬼·定妆照', scope: 'project', scopeId: IDS.projShanhai, cover: `${IMG}/proj-shanhai/shangui_role.png` })],
+    }),
     asset({ id: 'a_bamboo', category: 'scene', name: '竹林', scope: 'project', scopeId: IDS.projShanhai, cover: `${IMG}/proj-shanhai/bamboo_forest_scene.png`, fields: { style: '国风' } }),
     asset({ id: 'a_token', category: 'prop', name: '令牌', scope: 'project', scopeId: IDS.projShanhai, cover: `${IMG}/proj-shanhai/token_prop.png`, fields: { style: '国风' } }),
 
@@ -126,14 +171,27 @@ export function createSeedWorld(): World {
     asset({
       id: 'a_linjingguan', category: 'character', name: '林警官', scope: 'project', scopeId: IDS.projUrban,
       cover: `${IMG}/proj-urban-mystery/linjingguan_look_cyberjacket.png`,
-      masterId: 'a_cyber_police', following: false, fields: { gender: '女', style: '赛博' },
+      baseModel: `${IMG}/character-base/cyber_police_base.png`,
+      masterId: 'a_cyber_police', fields: { gender: '女', style: '赛博' },
+      looks: [asset({ id: 'a_linjingguan_look', category: 'character', name: '林警官·赛博夹克造型', scope: 'project', scopeId: IDS.projUrban, cover: `${IMG}/proj-urban-mystery/linjingguan_look_cyberjacket.png` })],
     }),
 
     /* 【项目·星际公约 1】（团队B）*/
-    asset({ id: 'a_captain', category: 'character', name: '星舰船长', scope: 'project', scopeId: IDS.projStar, cover: `${IMG}/proj-star-covenant/starship_captain_role.png`, fields: { style: '科幻' } }),
+    asset({
+      id: 'a_captain', category: 'character', name: '星舰船长', scope: 'project', scopeId: IDS.projStar,
+      cover: `${IMG}/proj-star-covenant/starship_captain_role.png`,
+      baseModel: `${IMG}/character-base/starship_captain_base.png`,
+      fields: { style: '科幻' },
+      looks: [asset({ id: 'a_captain_look', category: 'character', name: '星舰船长·定妆照', scope: 'project', scopeId: IDS.projStar, cover: `${IMG}/proj-star-covenant/starship_captain_role.png` })],
+    }),
 
     /* 【项目·孤舟 1】（Solo）*/
-    asset({ id: 'a_indie_lead', category: 'character', name: '孤舟主角', scope: 'project', scopeId: IDS.projBoat, cover: `${IMG}/proj-lone-boat/indie_lead_role.png` }),
+    asset({
+      id: 'a_indie_lead', category: 'character', name: '孤舟主角', scope: 'project', scopeId: IDS.projBoat,
+      cover: `${IMG}/proj-lone-boat/indie_lead_role.png`,
+      baseModel: `${IMG}/character-base/indie_lead_base.png`,
+      looks: [asset({ id: 'a_indie_lead_look', category: 'character', name: '孤舟主角·定妆照', scope: 'project', scopeId: IDS.projBoat, cover: `${IMG}/proj-lone-boat/indie_lead_role.png` })],
+    }),
   ]
 
   return { users, teams, projects, assets }

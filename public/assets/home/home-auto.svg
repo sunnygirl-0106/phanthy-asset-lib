@@ -1,0 +1,12 @@
+<svg preserveAspectRatio="none" width="100%" height="100%" overflow="visible" style="display: block;" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Overlay">
+<rect width="60" height="60" rx="12.8571" fill="var(--fill-0, black)" fill-opacity="0.4"/>
+<path id="Icon" d="M38.9489 26.1648L37.3509 22.6491L33.8352 21.0511L37.3509 19.4531L38.9489 15.9375L40.5469 19.4531L44.0625 21.0511L40.5469 22.6491L38.9489 26.1648V26.1648M38.9489 44.0625L37.3509 40.5469L33.8352 38.9489L37.3509 37.3509L38.9489 33.8352L40.5469 37.3509L44.0625 38.9489L40.5469 40.5469L38.9489 44.0625V44.0625M26.1648 40.2273L22.9688 33.196L15.9375 30L22.9688 26.804L26.1648 19.7727L29.3608 26.804L36.392 30L29.3608 33.196L26.1648 40.2273V40.2273M26.1648 34.027L27.4432 31.2784L30.1918 30L27.4432 28.7216L26.1648 25.973L24.8864 28.7216L22.1378 30L24.8864 31.2784L26.1648 34.027V34.027M26.1648 30V30V30V30V30V30V30V30V30V30" fill="url(#paint0_linear_0_54)"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_54" x1="30" y1="15.9375" x2="30" y2="44.0625" gradientUnits="userSpaceOnUse">
+<stop stop-color="#B9FEFF"/>
+<stop offset="1" stop-color="#00D8DC"/>
+</linearGradient>
+</defs>
+</svg>
