@@ -1,0 +1,131 @@
+/* 作品卡：完整复刻素材广场_设计稿_v4_2 的 home-video-card。用全局 theme token。 */
+
+.card {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  background: var(--panel-2);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.16s, transform 0.16s, background 0.16s;
+}
+
+.card:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: #181b1e;
+  transform: translateY(-2px);
+}
+
+.cover {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #0d0f11;
+}
+
+.cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.18s;
+}
+
+.card:hover .cover img { transform: scale(1.035); }
+
+.cover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, 0.46) 100%);
+}
+
+.play {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #101214;
+}
+.play svg { width: 17px; height: 17px; margin-left: 2px; }
+
+.likes {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.58);
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.likes svg { width: 13px; height: 13px; }
+
+.info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 15px 13px;
+}
+
+/* 标题单行（下面文字部分更紧凑，把比例让给封面） */
+.title {
+  margin: 0;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.94);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.user img {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.user span {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 12px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.time {
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.36);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+}

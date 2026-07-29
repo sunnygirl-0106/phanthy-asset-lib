@@ -206,6 +206,28 @@ describe('入口一 · store 提交（runSaveToProject）', () => {
     const r = store.getState().runSaveToProject(node(), 'proj_neon', { category: 'scene', name: 'x' })
     expect(r.ok).toBe(false)
   })
+
+  it('去重（v5）：新建顶层资产撞项目库同名 → 被挡；加造型（addLook）不受影响', () => {
+    // 霓虹东京已有角色「阿杰」，再新建一个叫「阿杰」的角色 → 被挡
+    const before = projectAssets().length
+    const dup = store.getState().runSaveToProject(node(), 'proj_neon', {
+      category: 'character',
+      as: 'baseModel-new',
+      name: '阿杰',
+    })
+    expect(dup.ok).toBe(false)
+    expect(dup.message).toContain('改名')
+    expect(projectAssets().length).toBe(before) // 没落库
+
+    // 给已有角色加一个造型，即使造型名和别的顶层资产同名（如「霓虹舞者」）也不受去重影响
+    const ok = store.getState().runSaveToProject(node(), 'proj_neon', {
+      category: 'character',
+      as: 'look',
+      targetCharId: 'a_ajie',
+      lookName: '霓虹舞者',
+    })
+    expect(ok.ok).toBe(true)
+  })
 })
 
 describe('入口一→沉淀 · 去重（⑧）', () => {
@@ -277,5 +299,46 @@ describe('演示动线：子账号画布上传 → 沉淀 → 主账号审批 �
     expect(
       store.getState().notifications.filter((n: { toUserId: string }) => n.toUserId === 'u_lin').length,
     ).toBe(1)
+  })
+
+  it('子账号带造型勾选沉淀 → 审批后团队库那份按勾选落库、素模仍在（v5 改动2）', () => {
+    // 小林（子账号，分配了霓虹东京）沉淀「阿杰」，但一个造型都不勾（[]）
+    store.getState().setCurrentUser('u_lin')
+    expect(store.getState().runDeposit('a_ajie', []).ok).toBe(true)
+    const appl = store.getState().applications.at(-1)
+    expect(appl.includeLookIds).toEqual([]) // 勾选（空）记进了申请
+
+    // 主账号审批通过 → 团队库那份：素模在、按勾选（空）不带任何造型
+    store.getState().setCurrentUser('u_sunny')
+    expect(store.getState().approveApplication(appl.id).ok).toBe(true)
+    const master = store
+      .getState()
+      .world.assets.filter(
+        (a: { scope: string; scopeId?: string; name: string }) =>
+          a.scope === 'team' && a.scopeId === 'team_a' && a.name === '阿杰',
+      )
+      .at(-1)
+    expect(master.baseModel).toBeTruthy() // 素模必带
+    expect(master.looks ?? []).toHaveLength(0) // 按勾选：一个造型都没带
+  })
+
+  it('子账号带造型勾选沉淀 → 勾上的造型会一起落库', () => {
+    store.getState().setCurrentUser('u_lin')
+    expect(store.getState().runDeposit('a_ajie', ['a_ajie_look']).ok).toBe(true)
+    const appl = store.getState().applications.at(-1)
+    expect(appl.includeLookIds).toEqual(['a_ajie_look'])
+
+    store.getState().setCurrentUser('u_sunny')
+    expect(store.getState().approveApplication(appl.id).ok).toBe(true)
+    const master = store
+      .getState()
+      .world.assets.filter(
+        (a: { scope: string; scopeId?: string; name: string }) =>
+          a.scope === 'team' && a.scopeId === 'team_a' && a.name === '阿杰',
+      )
+      .at(-1)
+    expect(master.baseModel).toBeTruthy()
+    expect(master.looks).toHaveLength(1)
+    expect(master.looks[0].id).toBe('a_ajie_look')
   })
 })

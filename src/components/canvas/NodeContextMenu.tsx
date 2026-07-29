@@ -1,65 +1,71 @@
 /**
- * 【画布 · 入口一】NodeContextMenu —— 成品节点右键菜单
+ * 【画布 · 入口一】NodeContextMenu —— 节点右键菜单（严格对齐截图）
  *
- * 「上传到项目资产库」是唯一入库闸门，只对"成品 + 图片/音频 + 尚未是项目资产"的节点显示
- * （技术规划 §2.1，稳定性检查 ①②⑤）。不满足时给一句灰字说明为什么不能传。
- * 另提供"标记为成品"（本 Demo 用它代替真实生成完成）与"删除节点"。
+ * 菜单条目与顺序完全照截图：
+ *   保存到资产库 / 上传 / 添加节点 —— 撤销 —— 粘贴 —— 创建副本 / 复制节点 —— 删除节点
+ * 本 Demo 只实现两个真动作：
+ *   · 保存到资产库 → 入库闸门（runSaveToProject，唯一让画布成品进项目库的口子）
+ *   · 删除节点     → 从画布移除
+ * 其余条目只保界面、点击无反应（尚未实现，按需要再接）。
  */
 
-import { canUploadToProject, categoriesForMedia, type CanvasNode } from '../../services/canvasService'
+import { canUploadToProject, type CanvasNode } from '../../services/canvasService'
 import styles from './NodeContextMenu.module.css'
+
+interface Row {
+  key: string
+  label: string
+  shortcut?: string
+  action?: () => void
+  danger?: boolean
+  dividerAfter?: boolean
+}
 
 export function NodeContextMenu({
   node,
   x,
   y,
-  onMarkDone,
-  onUpload,
+  onSave,
   onDelete,
   onClose,
 }: {
   node: CanvasNode
   x: number
   y: number
-  onMarkDone: () => void
-  onUpload: () => void
+  onSave: () => void
   onDelete: () => void
   onClose: () => void
 }) {
-  const canUpload = canUploadToProject(node)
-  const uploadableMedia = categoriesForMedia(node.media).length > 0
-  const isProjectAsset = node.source?.scope === 'project'
+  const canSave = canUploadToProject(node)
 
-  // 为什么不能上传的一句话（仅在成品但不可传时给）。
-  let disabledReason = ''
-  if (node.status === 'done' && !canUpload) {
-    if (!uploadableMedia) disabledReason = '文本 / 视频不入库'
-    else if (isProjectAsset) disabledReason = '已是项目资产，无需重复入库'
-  }
+  const rows: Row[] = [
+    { key: 'save', label: '保存到资产库', action: canSave ? onSave : undefined },
+    { key: 'upload', label: '上传' },
+    { key: 'add', label: '添加节点', dividerAfter: true },
+    { key: 'undo', label: '撤销', shortcut: '⌘Z', dividerAfter: true },
+    { key: 'paste', label: '粘贴', shortcut: '⌘V', dividerAfter: true },
+    { key: 'duplicate', label: '创建副本', shortcut: '⌘D' },
+    { key: 'copy', label: '复制节点', shortcut: '⌘C', dividerAfter: true },
+    { key: 'delete', label: '删除节点', shortcut: '⌫', action: onDelete, danger: true },
+  ]
 
   return (
     <>
-      {/* 点击空白处关闭 */}
+      {/* 点击空白处 / 再次右键关闭 */}
       <div className={styles.backdrop} onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose() }} />
       <div className={styles.menu} style={{ left: x, top: y }}>
-        {node.status !== 'done' && (
-          <button className={styles.item} onClick={onMarkDone}>
-            标记为成品
-            <span className={styles.hint}>（本 Demo 代替真实生成完成）</span>
-          </button>
-        )}
-
-        {canUpload && (
-          <button className={`${styles.item} ${styles.primary}`} onClick={onUpload}>
-            上传到项目资产库
-          </button>
-        )}
-
-        {disabledReason && <div className={styles.disabled}>不可上传 · {disabledReason}</div>}
-
-        <button className={`${styles.item} ${styles.danger}`} onClick={onDelete}>
-          删除节点
-        </button>
+        {rows.map((r) => (
+          <div key={r.key}>
+            <button
+              className={`${styles.item} ${r.danger ? styles.danger : ''} ${r.action ? '' : styles.dim}`}
+              onClick={() => r.action?.()}
+            >
+              <span>{r.label}</span>
+              {r.shortcut && <span className={styles.shortcut}>{r.shortcut}</span>}
+            </button>
+            {r.dividerAfter && <div className={styles.divider} />}
+          </div>
+        ))}
       </div>
     </>
   )

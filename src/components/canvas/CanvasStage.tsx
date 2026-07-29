@@ -14,6 +14,9 @@ export function CanvasStage({
   nodes,
   selectedId,
   onSelect,
+  onNodeMove,
+  onNodeUpload,
+  onNodePreview,
   onNodeContextMenu,
   onDropAsset,
   onStageClick,
@@ -21,6 +24,9 @@ export function CanvasStage({
   nodes: Node[]
   selectedId: string | null
   onSelect: (id: string) => void
+  onNodeMove: (id: string, x: number, y: number) => void
+  onNodeUpload: (node: Node) => void
+  onNodePreview: (node: Node) => void
   onNodeContextMenu: (node: Node, x: number, y: number) => void
   onDropAsset: (payload: DragPayload, x: number, y: number) => void
   onStageClick: () => void
@@ -64,6 +70,9 @@ export function CanvasStage({
           node={n}
           selected={n.id === selectedId}
           onSelect={() => onSelect(n.id)}
+          onMove={onNodeMove}
+          onUpload={() => onNodeUpload(n)}
+          onPreview={() => onNodePreview(n)}
           onContextMenu={(e) => onNodeContextMenu(n, e.clientX, e.clientY)}
         />
       ))}

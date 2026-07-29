@@ -26,6 +26,8 @@ import {
   depositMode,
   canManagePlaza,
   canContributeToPlaza,
+  canRegenerate,
+  canViewPrompt,
   canApproveDeposit,
   getTeam,
 } from '../services/permission'
@@ -34,6 +36,9 @@ import {
   favorite,
   reuse,
   deposit,
+  materializeDeposit,
+  coverOf,
+  removeLook,
   AssetRuleError,
 } from '../services/assetService'
 
@@ -50,13 +55,27 @@ describe('广场权限', () => {
     }
   })
 
-  it('只有 admin 能治理广场；主账号和子账号都能投稿；admin 不投稿', () => {
+  it('只有 admin 能治理广场（v6：投稿改为 scope-aware，见下方专测）', () => {
     expect(canManagePlaza(userById(world, IDS.admin))).toBe(true)
     expect(canManagePlaza(userById(world, IDS.sunny))).toBe(false)
-    // v4：广场投稿的把关人是 admin，所以主账号、子账号都能发起投稿；admin 只审不投
-    expect(canContributeToPlaza(userById(world, IDS.sunny))).toBe(true)
-    expect(canContributeToPlaza(userById(world, IDS.lin))).toBe(true)
-    expect(canContributeToPlaza(userById(world, IDS.admin))).toBe(false)
+  })
+
+  it('贡献到广场按层收口（v6）：主账号团队库/项目库都行；子账号仅项目库；admin 不投', () => {
+    const teamAsset = assetById(world, 'a_suwan') // 团队库
+    const projAsset = assetById(world, 'a_ajie') // 项目库
+    const plazaAsset = assetById(world, 'a_cyber_police') // 广场
+    const sunny = userById(world, IDS.sunny)
+    const lin = userById(world, IDS.lin)
+    const admin = userById(world, IDS.admin)
+    // 主账号：团队库、项目库都能发起
+    expect(canContributeToPlaza(sunny, teamAsset)).toBe(true)
+    expect(canContributeToPlaza(sunny, projAsset)).toBe(true)
+    // 子账号：只能在项目库发起；团队库对子账号封闭
+    expect(canContributeToPlaza(lin, teamAsset)).toBe(false)
+    expect(canContributeToPlaza(lin, projAsset)).toBe(true)
+    // admin：只审不投（对任何层都 false）
+    expect(canContributeToPlaza(admin, teamAsset)).toBe(false)
+    expect(canContributeToPlaza(admin, plazaAsset)).toBe(false)
   })
 
   it('收藏（广场→团队库）只有主账号能做', () => {
@@ -129,6 +148,12 @@ describe('直接复用（广场→项目·产生独立副本）', () => {
     expect(src.name).toBe('赛博女警')
   })
 
+  it('音色默认带入，也可以在直接复用时取消', () => {
+    const src = assetById(world, 'a_cyber_police')
+    expect(directReuse(src, IDS.projNeon).voice).toBeTruthy()
+    expect(directReuse(src, IDS.projNeon, undefined, false).voice).toBeUndefined()
+  })
+
   it('权限：主账号可在本团队项目直接复用；子账号仅限被分配的项目', () => {
     const neon = projectById(world, IDS.projNeon)
     const urban = projectById(world, IDS.projUrban)
@@ -147,6 +172,18 @@ describe('收藏与复用（拉一份就是独立副本，不再有跟随选项�
     expect(copy.scope).toBe('team')
     expect(copy.scopeId).toBe(IDS.teamA)
     expect(copy.masterId).toBe(src.id)
+  })
+
+  it('收藏角色可选带哪些造型：素模必带、造型按勾选（不传=整份、[]=只素模）', () => {
+    const cyber = assetById(world, 'a_cyber_police')
+    const bare = favorite(cyber, IDS.teamA, [])
+    expect(bare.baseModel).toBeTruthy()
+    expect(bare.looks ?? []).toHaveLength(0)
+    const one = favorite(cyber, IDS.teamA, ['a_cyber_police_home'])
+    expect(one.looks?.length).toBe(1)
+    expect(one.looks?.[0].id).toBe('a_cyber_police_home')
+    const all = favorite(cyber, IDS.teamA)
+    expect(all.looks?.length).toBe(2)
   })
 
   it('从团队库复用进项目：独立副本，造型随角色一起带过来', () => {
@@ -216,6 +253,38 @@ describe('沉淀（项目→团队库）', () => {
     expect(() => deposit(src, IDS.teamA, userById(world, IDS.admin))).toThrow(AssetRuleError)
   })
 
+  it('主账号沉淀「素模必带、造型按勾选」（v5 改动2）', () => {
+    const suwan = assetById(world, 'a_suwan') // 带 4 个造型
+    // 勾选一套造型 → 素模在、只带这一套
+    const one = deposit(suwan, IDS.teamA, userById(world, IDS.sunny), ['a_suwan_guofeng'])
+    expect(one.kind).toBe('asset')
+    if (one.kind === 'asset') {
+      expect(one.asset.baseModel).toBeTruthy() // 素模必带
+      expect(one.asset.looks).toHaveLength(1)
+      expect(one.asset.looks![0].id).toBe('a_suwan_guofeng')
+    }
+    // 传空数组 → 只沉淀素模、不带造型
+    const bare = deposit(suwan, IDS.teamA, userById(world, IDS.sunny), [])
+    if (bare.kind === 'asset') {
+      expect(bare.asset.baseModel).toBeTruthy()
+      expect(bare.asset.looks ?? []).toHaveLength(0)
+    }
+    // 不传（undefined）→ 整份带（向后兼容）
+    const whole = deposit(suwan, IDS.teamA, userById(world, IDS.sunny))
+    if (whole.kind === 'asset') {
+      expect(whole.asset.looks!.length).toBe(suwan.looks!.length)
+    }
+  })
+
+  it('子账号沉淀把勾选记进申请（审批通过那刻才按勾选落库）', () => {
+    const suwan = assetById(world, 'a_suwan')
+    const res = deposit(suwan, IDS.teamA, userById(world, IDS.lin), ['a_suwan_guofeng'])
+    expect(res.kind).toBe('application')
+    if (res.kind === 'application') {
+      expect(res.includeLookIds).toEqual(['a_suwan_guofeng'])
+    }
+  })
+
   it('depositMode 反映三种角色的沉淀方式', () => {
     expect(depositMode(userById(world, IDS.sunny))).toBe('direct')
     expect(depositMode(userById(world, IDS.lin))).toBe('apply')
@@ -242,5 +311,78 @@ describe('红线：非成品不能被复用/沉淀/贡献', () => {
 
   it('对"生成中"的资产做收藏也会抛错', () => {
     expect(() => favorite(makeGenerating(world), IDS.teamA)).toThrow(AssetRuleError)
+  })
+})
+
+/* ═══════════════ 七·五、重新生成 / 提示词可见性权限（v6）═══════════════ */
+describe('canRegenerate（重新生成 / 新增造型权限）', () => {
+  it('主账号：团队库、项目库都能重新生成', () => {
+    const sunny = userById(world, IDS.sunny)
+    expect(canRegenerate(sunny, assetById(world, 'a_suwan'))).toBe(true) // 团队库
+    expect(canRegenerate(sunny, assetById(world, 'a_ajie'))).toBe(true) // 项目库
+  })
+  it('子账号：项目库能、团队库不能', () => {
+    const lin = userById(world, IDS.lin)
+    expect(canRegenerate(lin, assetById(world, 'a_ajie'))).toBe(true) // 项目库
+    expect(canRegenerate(lin, assetById(world, 'a_suwan'))).toBe(false) // 团队库
+  })
+  it('广场恒 false；admin 恒 false', () => {
+    const plaza = assetById(world, 'a_cyber_police')
+    expect(canRegenerate(userById(world, IDS.sunny), plaza)).toBe(false) // 广场对谁都不行
+    expect(canRegenerate(userById(world, IDS.admin), assetById(world, 'a_suwan'))).toBe(false) // admin 恒不行
+    expect(canRegenerate(userById(world, IDS.admin), plaza)).toBe(false)
+  })
+})
+
+describe('canViewPrompt（提示词可见性）', () => {
+  it('项目库/团队库可看；广场本期不给看', () => {
+    expect(canViewPrompt(assetById(world, 'a_ajie'))).toBe(true) // 项目库
+    expect(canViewPrompt(assetById(world, 'a_suwan'))).toBe(true) // 团队库
+    expect(canViewPrompt(assetById(world, 'a_cyber_police'))).toBe(false) // 广场
+  })
+})
+
+/* ═══════════════ 七·六、提示词随流转带上（v6 改动二）═══════════════ */
+describe('提示词随副本走（cloneForCopy 带上 prompt，looks 各自带上）', () => {
+  it('直接复用 / 复用 / 收藏 / 沉淀入库：副本 prompt 与源一致、looks 各自带 prompt', () => {
+    const cyber = assetById(world, 'a_cyber_police') // 广场角色，带 prompt + 2 个 look
+    expect(cyber.prompt).toBeTruthy() // 种子已按类目补上提示词
+    expect(cyber.looks?.every((l) => !!l.prompt)).toBe(true)
+
+    const dr = directReuse(cyber, IDS.projNeon)
+    expect(dr.prompt).toBe(cyber.prompt)
+    expect(dr.looks?.map((l) => l.prompt)).toEqual(cyber.looks?.map((l) => l.prompt))
+
+    const suwan = assetById(world, 'a_suwan') // 团队角色，带 4 个 look
+    expect(reuse(suwan, IDS.projNeon).prompt).toBe(suwan.prompt)
+    expect(favorite(cyber, IDS.teamA).prompt).toBe(cyber.prompt)
+
+    const ajie = assetById(world, 'a_ajie')
+    expect(materializeDeposit(ajie, IDS.teamA).prompt).toBe(ajie.prompt)
+  })
+})
+
+/* ═══════════════ 八、展示封面兜底（coverOf，v5 改动4）═══════════════ */
+describe('coverOf：货架上永不空卡', () => {
+  it('有 cover → 用 cover', () => {
+    expect(coverOf({ cover: '/a.png', baseModel: '/base.png' })).toBe('/a.png')
+  })
+  it('cover 空 → 回落素模', () => {
+    expect(coverOf({ cover: '', baseModel: '/base.png' })).toBe('/base.png')
+  })
+  it('cover 与素模都空 → 返回空串', () => {
+    expect(coverOf({ cover: '', baseModel: undefined })).toBe('')
+  })
+})
+
+describe('removeLook：删除详情中的单套造型', () => {
+  it('不可变删除造型；删掉当前封面时自动回落', () => {
+    const source = assetById(world, 'a_suwan')
+    const current = source.looks!.find((look) => look.cover === source.cover) ?? source.looks![0]
+    const next = removeLook(source, current.id)
+    expect(next).not.toBe(source)
+    expect(next.looks?.some((look) => look.id === current.id)).toBe(false)
+    expect(source.looks?.some((look) => look.id === current.id)).toBe(true)
+    expect(next.cover).not.toBe(current.cover)
   })
 })

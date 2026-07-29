@@ -70,10 +70,8 @@ export function canUploadToProject(node: CanvasNode): boolean {
 export type SaveSpec =
   // 服装 / 场景 / 道具 / 音频：单份直接成一份资产
   | { category: 'costume' | 'scene' | 'prop' | 'audio'; name: string }
-  // 图片落角色 · 作为素模：新建一个角色（这张作素模/定妆照）
+  // 图片落角色 · 作为素模：新建一个角色（这张作素模/定妆照）。v5：画布上传素模一律新建角色。
   | { category: 'character'; as: 'baseModel-new'; name: string }
-  // 图片落角色 · 作为素模：替换某个已有角色的素模
-  | { category: 'character'; as: 'baseModel-replace'; targetCharId: string }
   // 图片落角色 · 作为造型：追加为某个已有角色的一个造型
   | { category: 'character'; as: 'look'; targetCharId: string; lookName: string }
 
@@ -84,7 +82,6 @@ export type SaveSpec =
 export type SaveOutcome =
   | { kind: 'add'; asset: Asset } // 新增一份项目资产（服装/场景/道具/音频/角色·新建素模）
   | { kind: 'addLook'; charId: string; look: Asset } // 给已有角色追加一个造型
-  | { kind: 'replaceBaseModel'; charId: string; baseModel: string; cover: string } // 替换已有角色素模
 
 let _seq = 1
 function makeId(prefix: string): string {
@@ -140,7 +137,7 @@ export function saveCanvasNodeToProject(
     return { kind: 'add', asset: buildProjectAsset(node, projectId, spec.category, spec.name) }
   }
 
-  // 图片落"角色"的三种分叉（技术规划 §2.1）。
+  // 图片落"角色"的两种分叉（技术规划 §2.1；v5：素模一律新建、取消替换）。
   switch (spec.as) {
     case 'baseModel-new': {
       // 新建一个角色：这张图作素模 + 封面。
@@ -149,9 +146,6 @@ export function saveCanvasNodeToProject(
       })
       return { kind: 'add', asset }
     }
-    case 'baseModel-replace':
-      // 替换某个已有角色的素模（顺带把封面也换成这张，便于看到变化）。
-      return { kind: 'replaceBaseModel', charId: spec.targetCharId, baseModel: node.cover ?? '', cover: node.cover ?? '' }
     case 'look': {
       // 追加为某个已有角色的一个造型子资产。
       const look = buildProjectAsset(node, projectId, 'character', spec.lookName)
@@ -160,14 +154,31 @@ export function saveCanvasNodeToProject(
   }
 }
 
-/** 团队库同名去重（技术规划 §2.3，稳定性检查 ⑧）：目标团队库里是否已有同名资产。 */
+/**
+ * 库内同名去重（v5：每个库内「顶层资产名唯一」）：某个库（项目库 / 团队库）里是否已有同名顶层资产。
+ *
+ * 造型子资产（角色 looks）天然豁免：造型嵌在 asset.looks 里、不是 world.assets 顶层项，
+ * 所以按 scope + scopeId + name 查 world.assets 只会命中顶层资产、碰不到造型——无需特殊逻辑。
+ * 跨库 / 跨项目允许重名（scopeId 不同即各论各的）。
+ */
+export function libraryHasSameName(
+  assets: Asset[],
+  scope: 'project' | 'team',
+  scopeId: string,
+  name: string,
+  excludeId?: string,
+): boolean {
+  return assets.some(
+    (a) => a.scope === scope && a.scopeId === scopeId && a.name === name && a.id !== excludeId,
+  )
+}
+
+/** 团队库同名去重：`libraryHasSameName` 的 scope='team' 特例（保留旧签名，行为不变）。 */
 export function teamHasSameName(
   assets: Asset[],
   teamId: string,
   name: string,
   excludeId?: string,
 ): boolean {
-  return assets.some(
-    (a) => a.scope === 'team' && a.scopeId === teamId && a.name === name && a.id !== excludeId,
-  )
+  return libraryHasSameName(assets, 'team', teamId, name, excludeId)
 }

@@ -175,13 +175,50 @@ export function canRemovePlazaAsset(user: User, asset: Asset): boolean {
 }
 
 /**
- * 向广场投稿 / 贡献作品：主账号和子账号都能发起。
- * 【v4 改动】原来只有主账号能投；现在子账号也能投——因为广场是平台公开层，
- * 把关人天然是 admin（见 canReviewPlaza），跟"这个人是不是主账号"无关。
- * admin 只当审核方、自己不投稿。
+ * 谁能"删除"一份团队库 / 项目资产库里的资产：
+ * - 只针对 team / project 两层（广场走 canRemovePlazaAsset，那是下架/撤稿）。
+ * - admin 只治理、不碰团队与项目里的创作物，所以不给删。
+ * - 其余账号（owner / sub）能删他们所在层看到的这份。删的只是这一份，
+ *   已被复用/沉淀出去的独立副本 id 不同、不受影响。
  */
-export function canContributeToPlaza(user: User): boolean {
-  return isOwner(user) || isSub(user)
+export function canDeleteLibraryAsset(user: User, asset: Asset): boolean {
+  if (asset.scope !== 'team' && asset.scope !== 'project') return false
+  return !isAdmin(user)
+}
+
+/**
+ * 向广场投稿 / 贡献（v6）：按"在哪一层发起"收口。
+ * - admin：不投稿（只审核）。
+ * - 主账号：团队库、项目库都能发起。
+ * - 子账号：只能在【项目资产库】发起；团队库对子账号封闭。
+ * 【v4→v6】原来只吃 user（owner/sub 都能投）；v6 增加 scope 感知：子账号想让团队库的东西
+ * 进广场，走"复用到项目 → 重新生成 → 沉淀申请"，不在团队库直接投。
+ */
+export function canContributeToPlaza(user: User, asset: Asset): boolean {
+  if (isAdmin(user)) return false
+  if (isOwner(user)) return asset.scope === 'team' || asset.scope === 'project'
+  // sub：仅项目库
+  return isSub(user) && asset.scope === 'project'
+}
+
+/**
+ * 能不能对这份资产"重新生成 / 新增造型"（v6）。
+ * - 广场：一律不行（官方货架、上架后不可编辑）。
+ * - admin：不行（只治理）。
+ * - 主账号：项目库、团队库都行。
+ * - 子账号：只有项目库行；团队库不行（想贡献团队库新造型走"复用到项目→重新生成→沉淀申请"）。
+ * 说明：对造型(look)重新生成时，用它所属顶层角色的 scope 判定（seed 里 look 与角色同 scope）。
+ */
+export function canRegenerate(user: User, asset: Asset): boolean {
+  if (asset.scope === 'plaza') return false
+  if (isAdmin(user)) return false
+  if (isOwner(user)) return asset.scope === 'team' || asset.scope === 'project'
+  return isSub(user) && asset.scope === 'project'
+}
+
+/** 提示词可见性（v6）：项目库/团队库可看可复制；素材广场本期不给用户看。 */
+export function canViewPrompt(asset: Asset): boolean {
+  return asset.scope !== 'plaza'
 }
 
 /** 审核广场投稿：仅 admin（不管投稿人是主账号还是子账号，都由 admin 审）。 */

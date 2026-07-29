@@ -1,82 +1,125 @@
 .node {
   position: absolute;
-  width: 160px;
-  background: var(--panel);
-  border: 1px solid var(--line-mid);
-  border-radius: 10px;
-  overflow: hidden;
-  cursor: pointer;
+  width: 380px;
+  cursor: grab;
   user-select: none;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  touch-action: none;
 }
+.node:active { cursor: grabbing; }
 
-.selected {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent), var(--shadow-float);
-}
-
-.head {
+/* ── 图卡上方一行：图标 + 名字 / 上传按钮 ── */
+.header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--line-soft);
+  padding: 0 2px 8px;
 }
 
-.media {
-  font-size: 11px;
+.headLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   color: var(--text-faint);
+  min-width: 0;
+}
+.code {
+  font-size: 14px;
+  color: var(--text-body);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.status {
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: var(--radius-pill);
-}
-
-.status_done { background: rgba(0, 216, 220, 0.15); color: var(--accent); }
-.status_generating { background: rgba(255, 200, 100, 0.15); color: #ffcf80; }
-.status_empty { background: var(--line-mid); color: var(--text-muted); }
-
-.bodyWrap {
-  aspect-ratio: 4 / 3;
-  background: var(--panel-2);
+.uploadBtn {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
   display: flex;
   align-items: center;
   justify-content: center;
+  color: var(--text-body);
+  background: rgba(44, 47, 50, 0.9);
+  border: 1px solid var(--line-soft);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.uploadBtn:hover { background: rgba(60, 64, 68, 0.95); color: var(--text-main); }
+
+/* ── 图卡 ── */
+.cardWrap { position: relative; }
+
+.card {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--panel-2);
+  border: 1px solid var(--line-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
+}
+
+.selected .card {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), var(--shadow-float);
 }
 
 .cover {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
   display: block;
 }
 
 .textBody {
-  padding: 10px;
-  font-size: 12px;
+  padding: 16px;
+  font-size: 14px;
   color: var(--text-body);
-  line-height: 1.5;
+  line-height: 1.6;
   max-height: 100%;
   overflow: hidden;
+  align-self: flex-start;
 }
+.audioBody { font-size: 15px; color: var(--text-faint); }
+.pending { font-size: 13px; color: var(--text-muted); }
 
-.audioBody {
+/* 预览按钮：右下角浮层 */
+.previewBtn {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: var(--radius-pill);
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  color: #fff;
   font-size: 13px;
+  cursor: pointer;
+}
+.previewBtn:hover { background: rgba(0, 0, 0, 0.72); }
+
+/* 左右连接手柄（装饰，不参与拖动/连线） */
+.handle {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 22, 24, 0.92);
+  border: 1px solid var(--line-mid);
   color: var(--text-faint);
+  pointer-events: none;
 }
-
-.pending {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.name {
-  padding: 6px 8px;
-  font-size: 12px;
-  color: var(--text-main);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+.handleLeft { left: -13px; }
+.handleRight { right: -13px; }

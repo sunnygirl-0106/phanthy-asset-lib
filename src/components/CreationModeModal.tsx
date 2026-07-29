@@ -9,7 +9,6 @@
  * "去全自动"：入口只有工作流 / 画布两种模式（技术规划 §7）。
  */
 
-import type { ProjectTab } from '../hooks/useHashRoute'
 import { useStore, useCurrentUser } from '../store/useStore'
 import { canSeeProjectAssets, getTeam } from '../services/permission'
 import { Modal } from './Modal'
@@ -38,8 +37,8 @@ export function CreationModeModal({
   })
 
   function enter(pid: string) {
-    const tab: ProjectTab = mode // 'workflow' | 'canvas'
-    navigate(`#/project/${pid}/${tab}`)
+    // 工作流 → 直接进工作流整页；无限画布 → 先进该项目的画布列表（再挑/建一张画布）。
+    navigate(mode === 'workflow' ? `#/project/${pid}/workflow` : `#/project/${pid}`)
     onClose()
   }
 

@@ -13,10 +13,28 @@
  * createSeedWorld() 每次返回一份全新的 World，测试之间互不污染。
  * ─────────────────────────────────────────────────────────────────────── */
 
-import type { World, User, Team, Project, Asset } from './types'
+import type { World, User, Team, Project, Canvas, Asset, Category } from './types'
+import { PRESET_VOICES } from './presetVoices'
 
 /** 图片根目录：所有 cover 都以它开头。 */
 const IMG = '/assets'
+
+/* ─── 演示用提示词模板（v6 · 改动七）─────────────────────────────────────
+ * 演示阶段只按类目对号入座：所有角色/造型共用同一段【人物】模板，所有服装共用【服装】模板，
+ * 以此类推。原样照抄、保留方括号占位、不按资产个性化改写。素模与造型不区分（同一段人物模板）。 */
+export const PROMPT_CHARACTER = `【性别】+【年龄段】的角色，【脸型】，【五官特征描述，如眉眼、鼻唇】，【肤色与肤质】。【发型 + 发色 + 发饰状态】，【表情与眼神情绪】。【身材比例与体态】，【姿势动作，如站/坐/回眸/伸手】，整体呈现【气质定位，如清冷/温婉/英气/慵懒】。补充【视角与构图，如正面/三分侧脸/半身/全身】，【光影类型，如柔光/侧逆光/电影感布光】。画质要求：高清写实/插画/二次元等风格，皮肤与发丝细节清晰，睫毛纹理分明，背景虚化突出主体。`
+export const PROMPT_COSTUME = `一套【服装类型 + 整体风格，如古风襦裙/现代西装/未来机能】，【主体颜色 + 辅助配色】。【上装描述：领型、袖型、版型】，【下装或整体轮廓】。【面料材质，如真丝/棉麻/皮革/金属】，呈现对应的【质感与垂坠或硬挺感】。【装饰细节：刺绣/印花/滚边/金属扣/流苏等及其位置】。【配饰：腰带、披风、外搭及其状态】。整体配色基调为【冷/暖/高级灰等】，风格【清雅/华丽/简约/繁复】。画质要求：面料纹理清晰，刺绣与细节可见，自然光下真实的材质质感与光影层次。`
+export const PROMPT_SCENE = `【时间 + 季节 + 天气】的【地点类型，如庭院/街道/森林/室内/异世界】。【主体建筑或环境结构描述】，【近景元素，如水池、桌椅、植物、器物】。【中远景元素，如远山、楼宇、天空】。【氛围光线，如晨光/暮色/月光/灯火】，营造出【整体氛围，如静谧/热闹/苍凉/梦幻】。补充【色调倾向，如青绿/暖黄/冷蓝】，【景深与空间层次】。画质要求：环境细节丰富，光影自然通透，空间纵深感强，电影级场景氛围，与人物主体和谐融合，背景服务于整体意境。`
+export const PROMPT_PROP = `一件【道具类型，如武器/器皿/乐器/书卷/法器/日常物件】，【整体造型与轮廓】。【主体材质，如金属/木质/玉石/陶瓷/织物】，【颜色与光泽感】。【表面纹样或雕刻细节，如花纹、符文、铭文及其分布】。【尺寸比例与结构部件】，【使用或摆放状态，如手持/悬浮/置于台上】。【附加元素，如光效、流苏、镶嵌宝石、磨损痕迹】，体现【道具的年代感或功能属性】。画质要求：材质质感真实，细节纹理清晰，光影反射自然，主体突出，可作为特写或点缀元素融入画面。`
+
+/** 类目 → 演示提示词模板（audio：seed 里当前没有音频资产，占位空串）。 */
+const PROMPT_BY_CATEGORY: Record<Category, string> = {
+  character: PROMPT_CHARACTER,
+  costume: PROMPT_COSTUME,
+  scene: PROMPT_SCENE,
+  prop: PROMPT_PROP,
+  audio: '',
+}
 
 /* ─── 账号 / 团队 / 项目 id 常量（集中定义，避免裸字符串写错）─── */
 export const IDS = {
@@ -48,6 +66,9 @@ function asset(
     status: 'done',
     fields: {},
     tags: [],
+    // 演示提示词（v6）：按类目对号入座；角色与其每个造型都走同一段【人物】模板。
+    // partial 里没有 prompt，所以下面的 ...partial 不会覆盖它（种子不做个性化改写）。
+    prompt: PROMPT_BY_CATEGORY[partial.category],
     createdAt: 0,
     ...partial,
   }
@@ -74,11 +95,24 @@ export function createSeedWorld(): World {
 
   /* ── 项目（封面用真实图）── */
   const projects: Project[] = [
-    { id: IDS.projNeon, name: '霓虹东京', teamId: IDS.teamA, cover: `${IMG}/project-covers/neon_tokyo_cover.png`, assignedSubs: [IDS.lin] },
-    { id: IDS.projShanhai, name: '山海志', teamId: IDS.teamA, cover: `${IMG}/project-covers/shanhai_cover.png`, assignedSubs: [IDS.lin] },
-    { id: IDS.projUrban, name: '都市迷案', teamId: IDS.teamA, cover: `${IMG}/project-covers/urban_mystery_cover.png`, assignedSubs: [IDS.may] },
-    { id: IDS.projStar, name: '星际公约', teamId: IDS.teamB, cover: `${IMG}/project-covers/starcovenant_cover.png`, assignedSubs: [IDS.lu] },
-    { id: IDS.projBoat, name: '孤舟', teamId: IDS.teamSolo, cover: `${IMG}/project-covers/loneboat_cover.png`, assignedSubs: [] },
+    { id: IDS.projNeon, name: '霓虹东京', tag: '赛博', teamId: IDS.teamA, cover: `${IMG}/project-covers/neon_tokyo_cover.png`, createdAt: 1_721_620_000_000, assignedSubs: [IDS.lin] },
+    { id: IDS.projShanhai, name: '山海志', tag: '国风', teamId: IDS.teamA, cover: `${IMG}/project-covers/shanhai_cover.png`, createdAt: 1_721_360_000_000, assignedSubs: [IDS.lin] },
+    { id: IDS.projUrban, name: '都市迷案', tag: '写实', teamId: IDS.teamA, cover: `${IMG}/project-covers/urban_mystery_cover.png`, createdAt: 1_721_190_000_000, assignedSubs: [IDS.may] },
+    { id: IDS.projStar, name: '星际公约', tag: '科幻', teamId: IDS.teamB, cover: `${IMG}/project-covers/starcovenant_cover.png`, createdAt: 1_720_980_000_000, assignedSubs: [IDS.lu] },
+    { id: IDS.projBoat, name: '孤舟', tag: '写实', teamId: IDS.teamSolo, cover: `${IMG}/project-covers/loneboat_cover.png`, createdAt: 1_720_760_000_000, assignedSubs: [] },
+  ]
+
+  /* ── 画布：每个项目下的"无限画布"草稿台。列表缩略图先复用项目封面 ── */
+  const canvas = (id: string, projectId: string, name: string, cover: string, createdAt: number): Canvas => ({
+    id, projectId, name, cover, createdAt,
+  })
+  const canvases: Canvas[] = [
+    canvas('cv_neon_1', IDS.projNeon, '开场·雨夜街头', `${IMG}/proj-neon-tokyo/neon_bar_scene.png`, 1_721_620_000_000),
+    canvas('cv_neon_2', IDS.projNeon, '追逐分镜', `${IMG}/project-covers/neon_tokyo_cover.png`, 1_721_450_000_000),
+    canvas('cv_shanhai_1', IDS.projShanhai, '竹林初见', `${IMG}/proj-shanhai/bamboo_forest_scene.png`, 1_721_300_000_000),
+    canvas('cv_urban_1', IDS.projUrban, '案发现场', `${IMG}/project-covers/urban_mystery_cover.png`, 1_721_200_000_000),
+    canvas('cv_star_1', IDS.projStar, '星舰甲板', `${IMG}/project-covers/starcovenant_cover.png`, 1_721_100_000_000),
+    canvas('cv_boat_1', IDS.projBoat, '独木出海', `${IMG}/project-covers/loneboat_cover.png`, 1_721_000_000_000),
   ]
 
   /* ── 资产 ─────────────────────────────────────────────────────── */
@@ -89,7 +123,11 @@ export function createSeedWorld(): World {
       cover: `${IMG}/plaza-shelf/cyber_police_role.png`,
       baseModel: `${IMG}/character-base/cyber_police_base.png`,
       fields: { gender: '女', age: '青年', style: '赛博' },
-      looks: [asset({ id: 'a_cyber_police_look', category: 'character', name: '赛博女警·定妆照', scope: 'plaza', cover: `${IMG}/plaza-shelf/cyber_police_role.png` })],
+      voice: { ...PRESET_VOICES[0] }, // 广场角色有音色、可试听、但不可改
+      looks: [
+        asset({ id: 'a_cyber_police_look', category: 'character', name: '赛博女警·定妆照', scope: 'plaza', cover: `${IMG}/plaza-shelf/cyber_police_role.png` }),
+        asset({ id: 'a_cyber_police_home', category: 'character', name: '赛博女警·居家造型', scope: 'plaza', cover: `${IMG}/plaza-shelf/cyber_police_home.png` }),
+      ],
     }),
     asset({ id: 'a_cyber_uniform', category: 'costume', name: '女警制服', scope: 'plaza', cover: `${IMG}/plaza-shelf/cyber_police_uniform.png`, fields: { style: '赛博' } }),
     asset({ id: 'a_rainy_rooftop', category: 'scene', name: '雨夜天台', scope: 'plaza', cover: `${IMG}/plaza-shelf/rainy_rooftop_scene.png`, fields: { style: '赛博' } }),
@@ -118,6 +156,8 @@ export function createSeedWorld(): World {
       cover: `${IMG}/team-library/suwan_role.png`,
       baseModel: `${IMG}/character-base/suwan_base.png`,
       fields: { gender: '女', age: '青年', style: '国风' },
+      voice: { ...PRESET_VOICES[0] }, // 已设置 + 可编辑
+      createdAt: 1_785_000_000_000,
       looks: [
         asset({ id: 'a_suwan_dingzhuang', category: 'character', name: '苏晚·定妆照', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/suwan_role.png` }),
         asset({ id: 'a_suwan_guofeng', category: 'character', name: '苏晚·国风造型', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/suwan_look_guofeng.png` }),
@@ -130,12 +170,14 @@ export function createSeedWorld(): World {
       cover: `${IMG}/team-library/oldk_role.png`,
       baseModel: `${IMG}/character-base/oldk_base.png`,
       fields: { gender: '男', age: '中年' },
+      voice: { ...PRESET_VOICES[1] }, // 已设置 + 可编辑
+      createdAt: 1_784_600_000_000,
       looks: [asset({ id: 'a_oldk_look', category: 'character', name: '老K·定妆照', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/oldk_role.png` })],
     }),
-    asset({ id: 'a_cyber_jacket', category: 'costume', name: '赛博夹克', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/cyber_jacket_costume.png`, fields: { style: '赛博' } }),
-    asset({ id: 'a_palace_dress', category: 'costume', name: '国风宫装', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/palace_dress_costume.png`, fields: { style: '国风' } }),
-    asset({ id: 'a_ancient_dock', category: 'scene', name: '古镇码头', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/ancient_dock_scene.png`, fields: { style: '国风' } }),
-    asset({ id: 'a_folding_fan', category: 'prop', name: '折扇', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/folding_fan_prop.png`, fields: { style: '国风' } }),
+    asset({ id: 'a_cyber_jacket', category: 'costume', name: '赛博夹克', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/cyber_jacket_costume.png`, fields: { style: '赛博' }, createdAt: 1_784_300_000_000 }),
+    asset({ id: 'a_palace_dress', category: 'costume', name: '国风宫装', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/palace_dress_costume.png`, fields: { style: '国风' }, createdAt: 1_784_000_000_000 }),
+    asset({ id: 'a_ancient_dock', category: 'scene', name: '古镇码头', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/ancient_dock_scene.png`, fields: { style: '国风' }, createdAt: 1_783_700_000_000 }),
+    asset({ id: 'a_folding_fan', category: 'prop', name: '折扇', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/folding_fan_prop.png`, fields: { style: '国风' }, createdAt: 1_783_400_000_000 }),
 
     /* 【项目·霓虹东京 5】（团队A）*/
     asset({
@@ -194,7 +236,7 @@ export function createSeedWorld(): World {
     }),
   ]
 
-  return { users, teams, projects, assets }
+  return { users, teams, projects, canvases, assets }
 }
 
 /* ─── 一些测试/界面里常用的取数小助手 ─── */

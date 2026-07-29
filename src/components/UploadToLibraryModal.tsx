@@ -4,7 +4,7 @@
  * 按媒介给类目（技术规划 §2.1）：
  *   · 图片 → 让用户选 角色 / 服装 / 场景 / 道具
  *   · 音频 → 直接落"音频"类目
- * 图片落"角色"的特殊分叉：作为素模（新建角色 / 替换已有角色素模）或作为造型（追加到已有角色）。
+ * 图片落"角色"的特殊分叉：作为素模（v5：一律新建角色）或作为造型（追加到已有角色）。
  * 其它四类都是单份直接成一份资产。
  *
  * 本组件只负责"收集用户填的规格 spec"，真正提交（runSaveToProject）交给上层。
@@ -31,7 +31,7 @@ export function UploadToLibraryModal({
   onClose,
 }: {
   node: CanvasNode
-  projectCharacters: Asset[] // 本项目已有的角色（供"替换素模/追加造型"选择）
+  projectCharacters: Asset[] // 本项目已有的角色（供"追加造型"选目标角色用）
   onConfirm: (spec: SaveSpec) => void
   onClose: () => void
 }) {
@@ -39,9 +39,8 @@ export function UploadToLibraryModal({
   const [category, setCategory] = useState<Category>(allowed[0])
   const [name, setName] = useState(node.name)
 
-  // 角色分叉的局部状态
+  // 角色分叉的局部状态（v5：素模一律新建角色，取消"替换已有素模"）
   const [charAs, setCharAs] = useState<'baseModel' | 'look'>('baseModel')
-  const [baseMode, setBaseMode] = useState<'new' | 'replace'>('new')
   const [targetCharId, setTargetCharId] = useState<string>(projectCharacters[0]?.id ?? '')
   const [lookName, setLookName] = useState(node.name)
 
@@ -50,23 +49,21 @@ export function UploadToLibraryModal({
     if (spec) onConfirm(spec)
   }
 
-  /** 按当前选择拼出 SaveSpec；不合法（如要替换/追加却没有可选角色）返回 null。 */
+  /** 按当前选择拼出 SaveSpec；不合法（如要追加造型却没有可选角色）返回 null。 */
   function buildSpec(): SaveSpec | null {
     if (category !== 'character') {
       return { category, name: name.trim() || node.name }
     }
     if (charAs === 'baseModel') {
-      if (baseMode === 'new') return { category: 'character', as: 'baseModel-new', name: name.trim() || node.name }
-      if (!targetCharId) return null
-      return { category: 'character', as: 'baseModel-replace', targetCharId }
+      // v5：素模一律新建角色。
+      return { category: 'character', as: 'baseModel-new', name: name.trim() || node.name }
     }
     // 作为造型
     if (!targetCharId) return null
     return { category: 'character', as: 'look', targetCharId, lookName: lookName.trim() || node.name }
   }
 
-  const needsTarget =
-    category === 'character' && (charAs === 'look' || (charAs === 'baseModel' && baseMode === 'replace'))
+  const needsTarget = category === 'character' && charAs === 'look'
   const noCharToTarget = needsTarget && projectCharacters.length === 0
 
   return (
@@ -105,25 +102,15 @@ export function UploadToLibraryModal({
               </div>
             </div>
 
+            {/* 新建角色：填名字（v5：画布上传素模一律新建角色）*/}
             {charAs === 'baseModel' && (
-              <div className={styles.field}>
-                <label className={styles.label}>素模方式</label>
-                <div className={styles.chips}>
-                  <button className={`${styles.chip} ${baseMode === 'new' ? styles.chipOn : ''}`} onClick={() => setBaseMode('new')}>新建角色</button>
-                  <button className={`${styles.chip} ${baseMode === 'replace' ? styles.chipOn : ''}`} onClick={() => setBaseMode('replace')}>替换已有角色素模</button>
-                </div>
-              </div>
-            )}
-
-            {/* 新建角色：填名字 */}
-            {charAs === 'baseModel' && baseMode === 'new' && (
               <div className={styles.field}>
                 <label className={styles.label}>新角色名</label>
                 <input className={styles.input} value={name} onChange={(e) => setName(e.target.value)} />
               </div>
             )}
 
-            {/* 替换素模 / 追加造型：选目标角色 */}
+            {/* 追加造型：选目标角色 */}
             {needsTarget && (
               <div className={styles.field}>
                 <label className={styles.label}>目标角色</label>

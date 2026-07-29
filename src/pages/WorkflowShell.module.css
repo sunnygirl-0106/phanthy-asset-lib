@@ -112,12 +112,6 @@
   margin: 0;
 }
 
-.headSub {
-  font-size: 13px;
-  color: var(--text-faint);
-  margin: 4px 0 0;
-}
-
 .stepGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -150,83 +144,4 @@
   color: var(--text-faint);
   line-height: 1.6;
   margin: 0;
-}
-
-/* ── 5 类目项目资产陈列 ── */
-.shelf {
-  border-top: 1px solid var(--line-soft);
-  padding-top: 20px;
-}
-
-.shelfHead {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.shelfTitle {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-main);
-  margin: 0;
-}
-
-.shelfNote {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.catBlock { margin-bottom: 20px; }
-
-.catHead {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.catName {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-body);
-}
-
-.catCount {
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: var(--radius-pill);
-  background: var(--line-mid);
-  color: var(--text-faint);
-  font-size: 11px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.catEmpty {
-  font-size: 12px;
-  color: var(--text-muted);
-  padding: 8px 0;
-}
-
-.catGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 14px;
-}
-
-.statusBar {
-  margin-top: 24px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line-soft);
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.statusBar strong {
-  color: var(--text-faint);
-  font-weight: 600;
-  margin-left: 4px;
 }

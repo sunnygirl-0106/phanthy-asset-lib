@@ -1,0 +1,141 @@
+/* 素材广场：上「平台作品」+ 下「精选素材」。整页自适应屏宽，用全局 theme token。 */
+
+.page {
+  width: 100%;
+  max-width: 1280px; /* 自适应但不至于太宽：Mac 等常规屏也能居中留边，超宽屏更收敛 */
+  margin: 0 auto;
+  padding: 28px 40px 120px; /* 底部留白给右下角人物切换器 */
+  color: var(--text-main);
+}
+
+/* ── 顶部全局搜索（对齐 Figma 1:418：暗色胶囊 + 放大镜 + 占位）── */
+.topBar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 22px;
+}
+.search {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  width: 300px;
+  max-width: 100%;
+  height: 42px;
+  padding: 0 16px;
+  border: 1px solid var(--line-mid);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.05);
+  transition: border-color 0.15s;
+}
+.search:focus-within { border-color: var(--line-strong); }
+.search svg { width: 16px; height: 16px; opacity: 0.5; flex-shrink: 0; }
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--text-body);
+}
+
+/* ── 分区标题（大字 h2 + 小字副标题，右侧可挂排序组）── */
+.secHead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 0 0 18px;
+}
+.secTitle {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.secSub {
+  margin: 9px 0 0;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 14px;
+  line-height: 18px;
+}
+
+.assetsSection { margin-top: 48px; }
+
+/* 排序药丸组（最新 / 最热）*/
+.sortGroup {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  flex: 0 0 auto;
+}
+.sortBtn {
+  height: 34px;
+  min-width: 60px;
+  padding: 0 18px;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.16s, color 0.16s;
+}
+.sortOn { background: rgba(255, 255, 255, 0.9); color: #111; font-weight: 500; }
+
+/* ── 作品墙网格：封面占大头，卡片放大、随屏自适应 ── */
+.vgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+/* ── 精选素材：类目胶囊（白底选中，参考截屏）── */
+.chips {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  margin-bottom: 22px;
+}
+.chip {
+  height: 34px;
+  min-width: 54px;
+  padding: 0 16px;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.16s, color 0.16s;
+}
+.chip:hover:not(.chipOn) { color: rgba(255, 255, 255, 0.82); }
+.chipOn { background: rgba(255, 255, 255, 0.9); color: #111; font-weight: 600; }
+
+/* ── 素材网格：满幅封面卡（≈3:4），无边框、无边栏 ── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(224px, 1fr));
+  gap: 18px;
+}
+
+.empty {
+  padding: 80px 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+@media (max-width: 720px) {
+  .page { padding: 16px 16px 100px; }
+  .vgrid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+  .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .secTitle { font-size: 22px; }
+}

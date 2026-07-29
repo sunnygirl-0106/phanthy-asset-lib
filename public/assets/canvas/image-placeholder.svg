@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240" fill="none">
+  <defs>
+    <linearGradient id="ph" x1="0" y1="0" x2="320" y2="240" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2f8f9d"/>
+      <stop offset="0.5" stop-color="#4257a6"/>
+      <stop offset="1" stop-color="#6d3a8c"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="240" fill="url(#ph)"/>
+  <rect width="320" height="240" fill="#000000" fill-opacity="0.08"/>
+  <g fill="none" stroke="#ffffff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round">
+    <rect x="102" y="76" width="116" height="88" rx="12"/>
+    <circle cx="132" cy="106" r="12" fill="#ffffff" stroke="none"/>
+    <path d="M110 162l32-32 22 20 20-17 26 29"/>
+  </g>
+  <text x="160" y="200" text-anchor="middle" font-family="MiSans, PingFang SC, sans-serif" font-size="16" fill="#ffffff" fill-opacity="0.9">示例图片</text>
+</svg>

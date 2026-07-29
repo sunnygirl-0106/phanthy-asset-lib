@@ -1,0 +1,125 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.66);
+  backdrop-filter: blur(2px);
+}
+
+.panel {
+  position: relative;
+  width: 100%;
+  max-width: 960px;
+  padding: 40px 40px 44px;
+  border-radius: 18px;
+  background: var(--panel);
+  border: 1px solid var(--line-mid);
+  box-shadow: var(--shadow-float);
+  animation: pop 0.14s ease-out;
+}
+
+@keyframes pop {
+  from { opacity: 0; transform: translateY(6px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-body);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.close:hover { background: rgba(255, 255, 255, 0.16); }
+
+.title {
+  text-align: center;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0;
+}
+.sub {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-faint);
+  margin: 10px 0 28px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+.card {
+  padding: 22px 22px 20px;
+  border-radius: 14px;
+  background: var(--panel-3);
+  border: 1px solid var(--line-soft);
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s, background 0.15s;
+}
+.card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  background: var(--panel);
+}
+.cardDisabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+.cardDisabled:hover {
+  border-color: var(--line-soft);
+  transform: none;
+  background: var(--panel-3);
+}
+
+.iconWrap {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 216, 220, 0.12);
+  margin-bottom: 18px;
+}
+.icon { width: 26px; height: 26px; }
+
+.cardTitle {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 10px;
+}
+.cardDesc {
+  font-size: 13px;
+  color: var(--text-faint);
+  line-height: 1.7;
+  margin: 0 0 24px;
+  min-height: 44px;
+}
+
+.cta {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.ctaMuted { color: var(--text-muted); font-weight: 500; }
+
+@media (max-width: 720px) {
+  .grid { grid-template-columns: 1fr; }
+  .panel { padding: 32px 20px; }
+  .cardDesc { min-height: 0; }
+}

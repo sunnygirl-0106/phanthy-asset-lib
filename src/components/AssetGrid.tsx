@@ -22,7 +22,6 @@ import { useStore, useCurrentUser } from '../store/useStore'
 import { canSee } from '../services/permission'
 import { AssetCard } from './AssetCard'
 import { CategoryTabs, type CategoryFilter } from './CategoryTabs'
-import { Modal } from './Modal'
 import { AssetDetail } from './AssetDetail'
 import styles from './AssetGrid.module.css'
 
@@ -62,17 +61,19 @@ export function AssetGrid({ scope, projectId }: { scope: Scope; projectId?: stri
           <p className={styles.count}>共 {visible.length} 项</p>
           <div className={styles.grid}>
             {visible.map((a) => (
-              <AssetCard key={a.id} asset={a} onClick={() => setDetailAssetId(a.id)} />
+              <AssetCard
+                key={a.id}
+                asset={a}
+                onClick={() => setDetailAssetId(a.id)}
+              />
             ))}
           </div>
         </>
       )}
 
-      {/* 资产详情弹窗 */}
+      {/* 资产详情弹窗（自带外壳，见 AssetDetail） */}
       {detailAssetId && (
-        <Modal onClose={() => setDetailAssetId(null)}>
-          <AssetDetail assetId={detailAssetId} onClose={() => setDetailAssetId(null)} />
-        </Modal>
+        <AssetDetail assetId={detailAssetId} onClose={() => setDetailAssetId(null)} />
       )}
     </div>
   )

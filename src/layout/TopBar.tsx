@@ -1,8 +1,11 @@
 /**
  * 【布局】TopBar —— 深色顶栏 + 四大板块导航
  *
- * 四板块（技术规划 §4.1）：创作中心 / 项目管理 / 团队资产库 / 素材广场。
- * 右侧：通知铃铛 + 头像菜单（审核中心从这里进，仅主账号/admin 可见，带待办红点）。
+ * 四板块（技术规划 §4.1）：创作中心 / 项目管理 / 团队资产库 / 素材广场
+ *   （创作中心点击最频繁，排第一位）。
+ * v6 视觉对齐团队资产库 Figma（node 1:2 的 TopNavBar）：
+ *   左：品牌 logo + PhanthyMovie；中：四板块（当前板块白字 + 青色下划线，其余灰字）；
+ *   右：充值中心（青色）+ 通知铃铛 + 头像菜单（审核中心从这里进）。
  *
  * 顶栏只管"当前在哪个板块高亮 + 点了去哪"，具体页面渲染在 AppShell 里按 route 分发。
  * 高亮判断：项目相关子路由（project）都归到"项目管理"板块。
@@ -32,7 +35,11 @@ export function TopBar({
 
   return (
     <header className={styles.topbar}>
-      <div className={styles.brand}>PhantyMovie</div>
+      <div className={styles.brand}>
+        <img className={styles.logo} src="/assets/icons/brand-logo.svg" alt="" aria-hidden />
+        <span className={styles.brandName}>PhanthyMovie</span>
+      </div>
+
       <nav className={styles.nav}>
         {NAV.map((item) => (
           <button
@@ -44,7 +51,9 @@ export function TopBar({
           </button>
         ))}
       </nav>
+
       <div className={styles.right}>
+        <button className={styles.recharge}>充值中心</button>
         <NotificationBell />
         <AvatarMenu route={route} navigate={navigate} />
       </div>

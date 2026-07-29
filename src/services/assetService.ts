@@ -57,15 +57,42 @@ function cloneForCopy(source: Asset, overrides: Partial<Asset>): Asset {
     status: 'done', // 能被拷贝的必然是成品
     masterId: source.id, // ← 血缘：从谁拷来的
     baseModel: source.baseModel, // ← 素模是角色本体，随角色一起走（之前漏拷了）
+    prompt: source.prompt, // ← v6：提示词随图走（素模提示词）
     cover: source.cover,
     fields: { ...source.fields }, // 复制一份，避免和母版共享同一个对象
     tags: [...source.tags], // 同上，本地标签独立
-    voiceId: source.voiceId,
+    voice: source.voice ? { ...source.voice } : undefined, // 音色是锚点、必带、深拷贝（不参与 pickLooks 勾选）
     looks: source.looks ? source.looks.map((l) => ({ ...l })) : undefined,
     createdAt: Date.now(),
     ...overrides,
   }
   return copy
+}
+
+/**
+ * 展示用封面（v5 改动4）：用户自选封面优先，缺省回落素模，再缺省用空串。
+ * 角色必有素模，所以货架上永不空卡。cover 仍是「用户自选」的可空字段，选填、不改存储语义。
+ */
+export function coverOf(asset: Pick<Asset, 'cover' | 'baseModel'>): string {
+  return asset.cover || asset.baseModel || ''
+}
+
+/** 删除角色的一套造型；若删的是当前封面，自动回落到剩余造型或素模。 */
+export function removeLook(source: Asset, lookId: string): Asset {
+  if (!source.looks?.some((look) => look.id === lookId)) {
+    throw new AssetRuleError('造型不存在')
+  }
+  const looks = source.looks.filter((look) => look.id !== lookId)
+  const removedCurrentCover = source.looks.some(
+    (look) => look.id === lookId && look.cover === source.cover,
+  )
+  return {
+    ...source,
+    looks: looks.length ? looks : undefined,
+    cover: removedCurrentCover
+      ? looks[0]?.cover ?? source.baseModel ?? ''
+      : source.cover,
+  }
 }
 
 /** 红线校验：不是成品就不许流转。 */
@@ -105,8 +132,14 @@ function pickLooks(source: Asset, includeLookIds?: string[]): { looks: Asset[] |
 /**
  * 直接复用：广场 → 项目。随手用，产生一份独立副本（快照）。
  * 角色可用 includeLookIds 选带哪些造型（素模必带；不传=整份带、[]=只带素模）。
+ * includeVoice 默认 true；显式传 false 时不带音色。
  */
-export function directReuse(source: Asset, targetProjectId: string, includeLookIds?: string[]): Asset {
+export function directReuse(
+  source: Asset,
+  targetProjectId: string,
+  includeLookIds?: string[],
+  includeVoice = true,
+): Asset {
   assertDone(source, '直接复用')
   const { looks, cover } = pickLooks(source, includeLookIds)
   return cloneForCopy(source, {
@@ -114,6 +147,7 @@ export function directReuse(source: Asset, targetProjectId: string, includeLookI
     scopeId: targetProjectId,
     looks,
     cover,
+    voice: includeVoice ? (source.voice ? { ...source.voice } : undefined) : undefined,
   })
 }
 
@@ -121,11 +155,14 @@ export function directReuse(source: Asset, targetProjectId: string, includeLookI
  * 收藏：广场 → 团队库。由主账号打理，拿到手就是一份独立副本。
  * （v4：收藏 = 直接拷进团队库，不再有"跟随/不跟随"的选择。）
  */
-export function favorite(source: Asset, targetTeamId: string): Asset {
+export function favorite(source: Asset, targetTeamId: string, includeLookIds?: string[]): Asset {
   assertDone(source, '收藏')
+  const { looks, cover } = pickLooks(source, includeLookIds) // 素模必带、造型按勾选、封面重挑一张带上来的图
   return cloneForCopy(source, {
     scope: 'team',
     scopeId: targetTeamId,
+    looks,
+    cover,
   })
 }
 
@@ -166,13 +203,18 @@ export interface DepositApplication {
   fromScopeId: string | undefined // 来自哪个项目
   toTeamId: string
   applicantId: string
+  /**
+   * 沉淀角色时，子账号申请那刻勾选的造型 id 列表（素模始终带上、不用选）。
+   * 审批通过那一刻才按这个勾选落库。空数组 = 只沉淀素模；非角色类目恒为空。
+   */
+  includeLookIds: string[]
   status: 'pending' | 'approved' | 'rejected'
   createdAt: number
 }
 
 export type DepositResult = { kind: 'asset'; asset: Asset } | DepositApplication
 
-export function deposit(source: Asset, targetTeamId: string, actor: User): DepositResult {
+export function deposit(source: Asset, targetTeamId: string, actor: User, includeLookIds?: string[]): DepositResult {
   assertDone(source, '沉淀')
   const mode = depositMode(actor)
 
@@ -181,7 +223,7 @@ export function deposit(source: Asset, targetTeamId: string, actor: User): Depos
   }
 
   if (mode === 'apply') {
-    // 子账号：只生成一条待审批申请，并不真的写入团队库。
+    // 子账号：只生成一条待审批申请，并不真的写入团队库。勾选结果记进申请，审批通过才落库。
     return {
       kind: 'application',
       id: makeId('appl'),
@@ -190,6 +232,7 @@ export function deposit(source: Asset, targetTeamId: string, actor: User): Depos
       fromScopeId: source.scopeId,
       toTeamId: targetTeamId,
       applicantId: actor.id,
+      includeLookIds: includeLookIds ?? [],
       status: 'pending',
       createdAt: Date.now(),
     }
@@ -197,7 +240,7 @@ export function deposit(source: Asset, targetTeamId: string, actor: User): Depos
 
   // 主账号：直接产生一份团队母版。
   // 注意：沉淀出来的是"新母版"，不是某个母版的副本，所以不设 masterId。
-  return { kind: 'asset', asset: materializeDeposit(source, targetTeamId) }
+  return { kind: 'asset', asset: materializeDeposit(source, targetTeamId, includeLookIds) }
 }
 
 /**
@@ -205,12 +248,15 @@ export function deposit(source: Asset, targetTeamId: string, actor: User): Depos
  * 主账号直接沉淀、以及主账号审批通过子账号的申请，最终都走这里——
  * 保证"入库"这一步只有一处实现，行为一致。
  */
-export function materializeDeposit(source: Asset, targetTeamId: string): Asset {
+export function materializeDeposit(source: Asset, targetTeamId: string, includeLookIds?: string[]): Asset {
   assertDone(source, '沉淀入库')
+  const { looks, cover } = pickLooks(source, includeLookIds) // 素模必带、造型按勾选、封面重挑一张带上来的图
   return cloneForCopy(source, {
     scope: 'team',
     scopeId: targetTeamId,
     masterId: undefined, // ← 它自己就是团队母版
+    looks,
+    cover,
   })
 }
 

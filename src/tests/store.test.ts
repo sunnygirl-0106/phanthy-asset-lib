@@ -87,6 +87,152 @@ describe('store 流转动作', () => {
   })
 })
 
+describe('重新生成 / 新增造型（v6 占位动作，只落提示词 + 反馈）', () => {
+  const byId = (id: string) =>
+    store.getState().world.assets.find((a: { id: string }) => a.id === id)
+
+  it('regenerateBaseModel：只改素模 prompt，不动任何造型', () => {
+    const before = byId('a_suwan') // Sunny(主账号) 团队库角色，可重新生成
+    const looksBefore = before.looks.map((l: { id: string; prompt?: string }) => ({ id: l.id, prompt: l.prompt }))
+    const r = store.getState().regenerateBaseModel('a_suwan', '新素模提示词')
+    expect(r.ok).toBe(true)
+    const after = byId('a_suwan')
+    expect(after.prompt).toBe('新素模提示词') // 素模提示词改了
+    expect(after.looks.map((l: { id: string; prompt?: string }) => ({ id: l.id, prompt: l.prompt }))).toEqual(looksBefore) // 造型一个没动
+  })
+
+  it('regenerateLook：只改目标造型，不动 baseModel 与其它造型', () => {
+    const before = byId('a_suwan')
+    const baseModelBefore = before.baseModel
+    const otherBefore = before.looks.find((l: { id: string }) => l.id === 'a_suwan_casual').prompt
+    const r = store.getState().regenerateLook('a_suwan', 'a_suwan_guofeng', '新国风造型提示词')
+    expect(r.ok).toBe(true)
+    const after = byId('a_suwan')
+    expect(after.looks.find((l: { id: string }) => l.id === 'a_suwan_guofeng').prompt).toBe('新国风造型提示词') // 目标造型改了
+    expect(after.baseModel).toBe(baseModelBefore) // 素模没动
+    expect(after.looks.find((l: { id: string }) => l.id === 'a_suwan_casual').prompt).toBe(otherBefore) // 别的造型没动
+  })
+
+  it('addLook：looks 长度 +1，新造型带上 prompt', () => {
+    const before = byId('a_suwan').looks.length
+    const r = store.getState().addLook('a_suwan', '一套夜行造型提示词', '夜行造型')
+    expect(r.ok).toBe(true)
+    const looks = byId('a_suwan').looks
+    expect(looks.length).toBe(before + 1)
+    const added = looks.at(-1)
+    expect(added.name).toBe('夜行造型')
+    expect(added.prompt).toBe('一套夜行造型提示词')
+  })
+
+  it('权限：子账号对团队库角色不能重新生成 / 新增造型（广场恒挡）', () => {
+    store.getState().setCurrentUser('u_lin') // 子账号
+    expect(store.getState().regenerateBaseModel('a_suwan', 'x').ok).toBe(false) // 团队库，子账号不行
+    expect(store.getState().addLook('a_suwan', 'x').ok).toBe(false)
+    store.getState().setCurrentUser('u_admin')
+    expect(store.getState().regenerateBaseModel('a_cyber_police', 'x').ok).toBe(false) // 广场恒挡
+  })
+})
+
+describe('音色（听觉身份锚点，随角色走 · 恒 1 个）', () => {
+  it('setVoice 后资产 .voice 更新；clearVoice 后为 undefined', () => {
+    const voice = { id: 'preset_voice_m01', type: 'preset' as const, name: '沉稳男声', gender: '男', previewUrl: '/assets/voices/preset_voice_male.mp3' }
+    store.getState().setVoice('a_ajie', voice)
+    expect(store.getState().world.assets.find((a: { id: string }) => a.id === 'a_ajie').voice.name).toBe('沉稳男声')
+    store.getState().clearVoice('a_ajie')
+    expect(store.getState().world.assets.find((a: { id: string }) => a.id === 'a_ajie').voice).toBeUndefined()
+  })
+
+  it('带音色的角色流转 → 副本带着音色，且是深拷贝（独立引用）', () => {
+    const suwan = store.getState().world.assets.find((a: { id: string }) => a.id === 'a_suwan')
+    expect(suwan.voice).toBeTruthy() // 种子里苏晚已配音色
+
+    // 四条流转线都走 cloneForCopy，都应带上音色且不共享引用
+    store.getState().runReuse('a_suwan', 'proj_neon')            // 团队→项目
+    store.getState().runDirectReuse('a_cyber_police', 'proj_neon') // 广场→项目（赛博女警也有音色）
+    store.getState().runFavorite('a_cyber_police')               // 广场→团队库
+    store.getState().runDeposit('a_ajie')                        // 项目→团队（阿杰无音色，验不炸）
+
+    const reuseCopy = store.getState().world.assets.filter((a: { masterId?: string }) => a.masterId === 'a_suwan').at(-1)
+    expect(reuseCopy.voice).toBeTruthy()
+    expect(reuseCopy.voice.name).toBe(suwan.voice.name)
+    expect(reuseCopy.voice).not.toBe(suwan.voice) // 深拷贝：不是同一个对象引用
+  })
+})
+
+describe('库内顶层资产名唯一（v5：改名 / 复用 / 直接复用去重）', () => {
+  const byId = (id: string) =>
+    store.getState().world.assets.find((a: { id: string }) => a.id === id)
+  const projCount = (pid: string) =>
+    store.getState().world.assets.filter((a: { scope: string; scopeId?: string }) => a.scope === 'project' && a.scopeId === pid).length
+
+  it('改名撞同库已有顶层名 → 被挡、提示改名', () => {
+    // 霓虹东京里已有「霓虹舞者」，把「阿杰」改成「霓虹舞者」应被挡
+    const r = store.getState().renameAsset('a_ajie', '霓虹舞者')
+    expect(r.ok).toBe(false)
+    expect(r.message).toContain('改名')
+    expect(byId('a_ajie').name).toBe('阿杰') // 没改成
+  })
+
+  it('改成不冲突的名字 → 成功', () => {
+    const r = store.getState().renameAsset('a_ajie', '阿杰·改')
+    expect(r.ok).toBe(true)
+    expect(byId('a_ajie').name).toBe('阿杰·改')
+  })
+
+  it('跨库同名允许：改成另一个项目已有的名字 → 成功', () => {
+    // 山鬼在山海志（proj_shanhai），把霓虹东京的阿杰改成「山鬼」应成功（不同项目各论各的）
+    const r = store.getState().renameAsset('a_ajie', '山鬼')
+    expect(r.ok).toBe(true)
+    expect(byId('a_ajie').name).toBe('山鬼')
+  })
+
+  it('复用进已有同名顶层资产的项目 → 被挡；换个项目 → 成功', () => {
+    // 先把团队库「苏晚」复用进霓虹东京（此前没有苏晚）→ 成功
+    expect(store.getState().runReuse('a_suwan', 'proj_neon').ok).toBe(true)
+    const before = projCount('proj_neon')
+    // 再复用一次同名进同项目 → 被挡
+    const r = store.getState().runReuse('a_suwan', 'proj_neon')
+    expect(r.ok).toBe(false)
+    expect(r.message).toContain('改名')
+    expect(projCount('proj_neon')).toBe(before) // 没落库
+    // 复用进没有苏晚的另一个项目（山海志）→ 成功
+    expect(store.getState().runReuse('a_suwan', 'proj_shanhai').ok).toBe(true)
+  })
+
+  it('直接复用进已有同名的项目 → 被挡', () => {
+    // 广场「赛博女警」先直接复用进霓虹东京 → 成功
+    expect(store.getState().runDirectReuse('a_cyber_police', 'proj_neon').ok).toBe(true)
+    // 再直接复用同名进同项目 → 被挡
+    const r = store.getState().runDirectReuse('a_cyber_police', 'proj_neon')
+    expect(r.ok).toBe(false)
+    expect(r.message).toContain('改名')
+  })
+})
+
+describe('收藏去重（广场 → 团队库，v5 改动1）', () => {
+  const teamCount = () =>
+    store.getState().world.assets.filter((a: { scope: string }) => a.scope === 'team').length
+
+  it('收藏一份与团队库现有母版同名的广场资产 → 被挡下、提示改名', () => {
+    // Sunny(主账号) 先把广场「东方剑客」收藏进团队A团队库 → 团队库 +1
+    const before = teamCount()
+    expect(store.getState().runFavorite('a_swordsman').ok).toBe(true)
+    expect(teamCount()).toBe(before + 1)
+    // 再收藏同一份广场资产 → 团队库已有同名，挡下、提示改名
+    const r = store.getState().runFavorite('a_swordsman')
+    expect(r.ok).toBe(false)
+    expect(r.message).toContain('改名')
+    expect(teamCount()).toBe(before + 1) // 没有再落库
+  })
+
+  it('对不冲突的名字（不同广场资产）→ 收藏成功、团队库 +1', () => {
+    const before = teamCount()
+    const r = store.getState().runFavorite('a_mech_butler') // 机械管家，团队库没有同名
+    expect(r.ok).toBe(true)
+    expect(teamCount()).toBe(before + 1)
+  })
+})
+
 describe('审批中心（子账号沉淀 → 主账号审批）', () => {
   const teamCount = () =>
     store.getState().world.assets.filter((a: { scope: string }) => a.scope === 'team').length

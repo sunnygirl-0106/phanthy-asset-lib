@@ -4,69 +4,96 @@
   z-index: 40;
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: 12px 20px;
-  background: var(--panel-float);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--line-soft);
+  gap: 24px;
+  height: 48px;
+  padding: 0 16px;
+  background: var(--bg);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line-mid);
 }
 
 .brand {
-  font-size: 15px;
-  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.logo {
+  width: 27px;
+  height: 27px;
+  display: block;
+}
+
+.brandName {
+  font-size: 16px;
+  font-weight: 600;
   color: var(--text-main);
-  letter-spacing: 0.02em;
 }
 
 .nav {
   display: flex;
-  gap: 6px;
+  gap: 24px;
   flex: 1;
+  justify-content: center;
+  height: 100%;
 }
 
 .tab {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border-radius: var(--radius-pill);
-  border: 1px solid transparent;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
   background: transparent;
-  color: var(--text-muted);
-  font-size: 14px;
+  color: #9ca3af;
+  font-size: 13px;
   cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
 }
 
-.tab:hover { background: var(--line-soft); color: var(--text-body); }
+.tab:hover { color: var(--text-body); }
 
 .tabActive {
-  background: var(--accent);
-  color: var(--bg);
+  color: #fff;
+  font-weight: 500;
+  border-bottom-color: var(--accent);
 }
 
-.tabActive:hover { background: var(--accent); color: var(--bg); }
+.tabActive:hover { color: #fff; }
 
 .right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
+
+.recharge {
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.recharge:hover { opacity: 0.85; }
 
 /* 窄屏：顶栏可换行、间距收紧，导航不再挤成一行溢出 */
 @media (max-width: 720px) {
   .topbar {
+    height: auto;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 12px;
     padding: 10px 14px;
   }
   .nav {
     order: 3;
     flex-basis: 100%;
+    justify-content: flex-start;
+    gap: 16px;
+    height: 40px;
     overflow-x: auto;
   }
   .tab {
-    padding: 6px 10px;
-    font-size: 13px;
     white-space: nowrap;
   }
 }

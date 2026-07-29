@@ -1,0 +1,48 @@
+/* 单条悬浮选项条：加号 + 一组图标全部收在同一条竖排胶囊里（对齐截图）。 */
+.bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 7px;
+  border-radius: 18px;
+  background: rgba(28, 30, 32, 0.92);
+  border: 1px solid var(--line-soft);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-float);
+}
+
+.addBtn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f4f4f5;
+  color: #111;
+  cursor: pointer;
+  transition: transform 0.12s, background 0.12s;
+}
+.addBtn:hover { transform: scale(1.06); }
+.addOn { background: var(--accent); color: #062227; }
+
+.divider {
+  width: 24px;
+  height: 1px;
+  background: var(--line-mid);
+  margin: 2px 0;
+}
+
+.iconBtn {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.iconBtn:hover { background: var(--line-soft); color: var(--text-body); }
+.iconOn { background: rgba(0, 216, 220, 0.14); color: var(--accent); }

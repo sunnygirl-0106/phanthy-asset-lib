@@ -41,6 +41,24 @@ export type Scope = 'plaza' | 'team' | 'project'
 export type Category = 'character' | 'costume' | 'scene' | 'prop' | 'audio'
 //                      角色         服装         场景       道具     音频
 
+/** 音色来源：预置库挑的，还是用户复刻的。 */
+export type VoiceType = 'preset' | 'cloned'
+
+/**
+ * 音色 = 角色的"听觉身份锚点"（1 个，是素模的孪生兄弟，不是造型）。
+ * 本期无后端：预置音色 previewUrl 指向真实 mp3；复刻音色 previewUrl 先回放用户上传的原音占位。
+ */
+export interface Voice {
+  id: string             // 音色标识：预置=固定 id；复刻=本期前端生成的占位 id
+  type: VoiceType        // 'preset' | 'cloned'
+  name: string           // 展示名，如"清透女声" / "男主·磁性低音"
+  gender?: string        // '男' | '女'（预置带上，便于展示）
+  previewUrl: string     // 试听音源：预置=/assets/voices/xxx.mp3；复刻=上传原音的 objectURL（占位）
+  sampleUrl?: string     // 复刻源料：用户上传的 5–10s 录音（仅 type==='cloned'）
+  sampleDuration?: number// 复刻源料时长（秒），仅 cloned
+  providerVoiceId?: string // 接入豆包后真正的音色/speaker_id；本期恒为空（占位，标记"待接入"）
+}
+
 /**
  * 资产状态机：资产"成不成立"看状态，不看有没有图。
  * 红线规则：只有 'done'（成品）才能被复用 / 沉淀 / 贡献。
@@ -96,7 +114,22 @@ export interface Project {
   name: string
   teamId: string          // 归属团队
   cover: string
+  tag?: string            // 展示用风格标签（写实 / 赛博 / 国风…），仅界面陈列，不参与权限
+  createdAt?: number       // 创建时间（项目管理列表按它排序 / 展示）
   assignedSubs: string[]  // 被授权进入本项目的子账号 id 列表
+}
+
+/**
+ * 画布 = 项目下的一张"无限画布"草稿台。一个项目可有多张画布（对应界面上的"画布列表"）。
+ * 画布本身只是入口 + 元信息；里面摆的节点是纯 UI 侧数据（见 canvasService.CanvasNode），
+ * 拖节点不入库、不产副本——只有右键"上传到项目资产库"那一刻才产生 world 资产（红线 3）。
+ */
+export interface Canvas {
+  id: string
+  projectId: string
+  name: string
+  cover: string     // 列表缩略图
+  createdAt: number
 }
 
 
@@ -136,10 +169,20 @@ export interface Asset {
   masterId?: string     // 母版血缘：从哪个资产拷来的。原创资产没有（它自己就是母版）。纯信息，不挂同步行为。
 
   baseModel?: string    // 素模：角色的"基础形象/身份锚点"（穿白衣、无戏服），做参考图用；仅角色有、始终作详情锚点展示
+
+  /**
+   * 图片级提示词（v6）：产出这张图的出图提示词，跟"人设/角色设定"无关。
+   * - 角色（顶层 Asset）：这里存的是【素模】那张图的提示词。
+   * - 造型（looks[] 里的每个 Asset）：各自存自己那套造型图的提示词。
+   * - 扁平资产（服装/场景/道具/音频）：这份资产自己那张图/段音的提示词。
+   * 本地字段，随副本走、可改，不参与库内去重。
+   */
+  prompt?: string
+
   cover: string
   fields: AssetFields
   tags: string[]        // 本地标签：改了不断链
-  voiceId?: string      // 角色音色（角色专有字段，本期占位）
+  voice?: Voice         // 角色音色：1 个；通常随角色走，广场直接复用时可取消；仅角色有
   looks?: Asset[]       // 角色的造型变体子资产（角色×服装生的成品图，挂在角色下）
   contributedBy?: string // 广场素材专用：是谁投稿上架的。作者本人可删自己投的；admin 可下架任何一份。种子里的官方素材没有这个字段（只有 admin 能下架）。
   createdAt: number
@@ -170,5 +213,6 @@ export interface World {
   users: User[]
   teams: Team[]
   projects: Project[]
+  canvases: Canvas[]
   assets: Asset[]
 }
