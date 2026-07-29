@@ -25,7 +25,7 @@ export interface PlazaWork {
   desc: string      // 播放页简介：讲清用了广场哪几份素材
 }
 
-const IMG = '/assets'
+const IMG = assetUrl('assets')
 
 export const PLAZA_WORKS: PlazaWork[] = [
   {
@@ -105,3 +105,4 @@ export const PLAZA_WORKS: PlazaWork[] = [
 /** 点赞 / 播放量的"万"制格式：12800 → 1.3万。 */
 export const fmtLike = (v: number): string =>
   v >= 10000 ? `${(v / 10000).toFixed(v % 10000 === 0 ? 0 : 1)}万` : String(v)
+import { assetUrl } from '../utils/assets'

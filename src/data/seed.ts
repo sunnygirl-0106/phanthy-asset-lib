@@ -6,18 +6,19 @@
  * 这个文件负责什么：把 demo所需素材 里那 41 张图、7 个账号、5 个项目，
  * 组织成一份能驱动界面、也能验证规则的假数据（World）。
  *
- * 图片路径约定：图片放在工程的 public/assets/ 下，浏览器按 `/assets/...` 访问。
- *   例如 team-library/suwan_role.png → cover: '/assets/team-library/suwan_role.png'
- * （public/ 里的文件 Vite 会原样对外提供，所以用 / 开头的绝对路径即可。）
+ * 图片路径约定：图片放在工程的 public/assets/ 下，通过 assetUrl() 生成 URL。
+ *   例如 team-library/suwan_role.png → cover: assetUrl('assets/team-library/suwan_role.png')
+ * （这样本地根路径与 GitHub Pages 的项目子路径都能正确访问。）
  *
  * createSeedWorld() 每次返回一份全新的 World，测试之间互不污染。
  * ─────────────────────────────────────────────────────────────────────── */
 
 import type { World, User, Team, Project, Canvas, Asset, Category } from './types'
 import { PRESET_VOICES } from './presetVoices'
+import { assetUrl } from '../utils/assets'
 
 /** 图片根目录：所有 cover 都以它开头。 */
-const IMG = '/assets'
+const IMG = assetUrl('assets')
 
 /* ─── 演示用提示词模板（v6 · 改动七）─────────────────────────────────────
  * 演示阶段只按类目对号入座：所有角色/造型共用同一段【人物】模板，所有服装共用【服装】模板，

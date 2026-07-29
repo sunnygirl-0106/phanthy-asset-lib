@@ -13,6 +13,7 @@
 import { useEffect } from 'react'
 import type { Project } from '../data/types'
 import type { Route } from '../hooks/useHashRoute'
+import { assetUrl } from '../utils/assets'
 import styles from './ProjectModeModal.module.css'
 
 interface Mode {
@@ -42,7 +43,7 @@ export function ProjectModeModal({
   const modes: Mode[] = [
     {
       key: 'workflow',
-      icon: '/assets/home/home-workflow.svg',
+      icon: assetUrl('assets/home/home-workflow.svg'),
       title: '工作流',
       desc: '适合流程化拆解与自动化生成，强调创作链路与环节衔接。',
       to: `#/project/${project.id}/workflow`,
@@ -50,14 +51,14 @@ export function ProjectModeModal({
     },
     {
       key: 'auto',
-      icon: '/assets/home/home-auto.svg',
+      icon: assetUrl('assets/home/home-auto.svg'),
       title: '全自动 AI 生成',
       desc: '适合自动拆图、批量出图与生成，偏向高效率批处理制作。',
       cta: '即将开放',
     },
     {
       key: 'canvas',
-      icon: '/assets/home/home-canvas.svg',
+      icon: assetUrl('assets/home/home-canvas.svg'),
       title: '无限画布',
       desc: '进入画布列表，使用节点式创作方式组织镜头、图片与全景生成。',
       to: `#/project/${project.id}`,

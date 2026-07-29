@@ -8,10 +8,11 @@
 
 import { useRef } from 'react'
 import { canUploadToProject, type CanvasNode as Node } from '../../services/canvasService'
+import { assetUrl } from '../../utils/assets'
 import styles from './CanvasNode.module.css'
 
 /** 在线占位图（人像照）加载失败（断网等）时回落的本地占位图。 */
-const LOCAL_FALLBACK = '/assets/canvas/image-placeholder.svg'
+const LOCAL_FALLBACK = assetUrl('assets/canvas/image-placeholder.svg')
 
 export function CanvasNode({
   node,

@@ -21,6 +21,7 @@ import { CanvasSidebar } from '../components/canvas/CanvasSidebar'
 import { CanvasAssetPanel, type DragPayload } from '../components/canvas/CanvasAssetPanel'
 import { NodeContextMenu } from '../components/canvas/NodeContextMenu'
 import { UploadToLibraryModal } from '../components/UploadToLibraryModal'
+import { assetUrl } from '../utils/assets'
 import styles from './CanvasShell.module.css'
 
 const ADD_MEDIA: { media: Media; label: string }[] = [
@@ -36,12 +37,12 @@ const ADD_MEDIA: { media: Media; label: string }[] = [
  * 按序取图 → 同一节点每次同一张、上传进资产库后各层看到的也一致。
  */
 const PLACEHOLDER_POOL = [
-  '/assets/canvas/portraits/portrait-1.jpg',
-  '/assets/canvas/portraits/portrait-2.jpg',
-  '/assets/canvas/portraits/portrait-3.jpg',
-  '/assets/canvas/portraits/portrait-4.jpg',
-  '/assets/canvas/portraits/portrait-5.jpg',
-  '/assets/canvas/portraits/portrait-6.jpg',
+  assetUrl('assets/canvas/portraits/portrait-1.jpg'),
+  assetUrl('assets/canvas/portraits/portrait-2.jpg'),
+  assetUrl('assets/canvas/portraits/portrait-3.jpg'),
+  assetUrl('assets/canvas/portraits/portrait-4.jpg'),
+  assetUrl('assets/canvas/portraits/portrait-5.jpg'),
+  assetUrl('assets/canvas/portraits/portrait-6.jpg'),
 ]
 
 /** 左侧悬浮工具条上唯一“开着”的浮层：加节点菜单 / 资产面板 / 都关。 */

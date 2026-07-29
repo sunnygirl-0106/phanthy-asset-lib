@@ -17,6 +17,7 @@ import { coverOf } from '../../services/assetService'
 import { AssetCard } from '../AssetCard'
 import { AssetDetail } from '../AssetDetail'
 import { CategoryTabs, type CategoryFilter } from '../CategoryTabs'
+import { assetUrl } from '../../utils/assets'
 import styles from './CanvasAssetPanel.module.css'
 
 /** 拖拽载荷：落到画布时用它造节点。 */
@@ -156,7 +157,7 @@ export function CanvasAssetPanel({
           ))}
         </div>
         <div className={styles.search}>
-          <img className={styles.searchIcon} src="/assets/icons/filter-search.svg" alt="" aria-hidden />
+          <img className={styles.searchIcon} src={assetUrl('assets/icons/filter-search.svg')} alt="" aria-hidden />
           <input
             className={styles.searchInput}
             placeholder="搜索全部资产"

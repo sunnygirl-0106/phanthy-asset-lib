@@ -9,6 +9,7 @@ import { useState } from 'react'
 import type { Route } from '../hooks/useHashRoute'
 import { HomeEntryCard } from '../components/HomeEntryCard'
 import { CreationModeModal } from '../components/CreationModeModal'
+import { assetUrl } from '../utils/assets'
 import page from './page.module.css'
 import styles from './HomePage.module.css'
 
@@ -25,13 +26,13 @@ export function HomePage({ navigate }: { navigate: (to: Route | string) => void 
 
       <div className={styles.cards}>
         <HomeEntryCard
-          icon="/assets/home/home-workflow.svg"
+          icon={assetUrl('assets/home/home-workflow.svg')}
           title="工作流"
           desc="剧本拆解 → 分镜 → 逐镜生成的流水线式创作，适合成片导向。"
           onClick={() => setPickMode('workflow')}
         />
         <HomeEntryCard
-          icon="/assets/home/home-canvas.svg"
+          icon={assetUrl('assets/home/home-canvas.svg')}
           title="无限画布"
           desc="自由摆放文本/图片/视频/音频节点的草稿台，边比划边沉淀项目资产。"
           onClick={() => setPickMode('canvas')}

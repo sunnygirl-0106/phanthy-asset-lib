@@ -15,14 +15,15 @@ import type { Category } from '../data/types'
 import { useStore } from '../store/useStore'
 import { AssetCard } from './AssetCard'
 import { AssetDetail } from './AssetDetail'
+import { assetUrl } from '../utils/assets'
 import styles from './ProjectAssetLibrary.module.css'
 
 /** 顶部类目 Tab：顺序对齐团队库与截图（项目资产暂无音频，故不陈列）。 */
 const CATEGORIES: { key: Category; label: string; icon: string }[] = [
-  { key: 'character', label: '角色', icon: '/assets/icons/cat-character.svg' },
-  { key: 'costume', label: '服装', icon: '/assets/icons/cat-costume.svg' },
-  { key: 'scene', label: '场景', icon: '/assets/icons/cat-scene.svg' },
-  { key: 'prop', label: '道具', icon: '/assets/icons/cat-prop.svg' },
+  { key: 'character', label: '角色', icon: assetUrl('assets/icons/cat-character.svg') },
+  { key: 'costume', label: '服装', icon: assetUrl('assets/icons/cat-costume.svg') },
+  { key: 'scene', label: '场景', icon: assetUrl('assets/icons/cat-scene.svg') },
+  { key: 'prop', label: '道具', icon: assetUrl('assets/icons/cat-prop.svg') },
 ]
 
 export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
@@ -105,18 +106,18 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
             className={`${styles.btn} ${batch ? styles.btnOn : ''}`}
             onClick={() => (batch ? exitBatch() : setBatch(true))}
           >
-            <img className={styles.btnIcon} src="/assets/icons/batch-all.svg" alt="" aria-hidden />
+            <img className={styles.btnIcon} src={assetUrl('assets/icons/batch-all.svg')} alt="" aria-hidden />
             批量操作
           </button>
 
           <button className={styles.btn} onClick={() => setSortDesc((v) => !v)}>
-            <img className={styles.btnIcon} src="/assets/icons/sort-two.svg" alt="" aria-hidden />
+            <img className={styles.btnIcon} src={assetUrl('assets/icons/sort-two.svg')} alt="" aria-hidden />
             {sortDesc ? '时间倒序' : '时间正序'}
-            <img className={styles.btnCaret} src="/assets/icons/chevron-down.svg" alt="" aria-hidden />
+            <img className={styles.btnCaret} src={assetUrl('assets/icons/chevron-down.svg')} alt="" aria-hidden />
           </button>
 
           <div className={styles.search}>
-            <img className={styles.btnIcon} src="/assets/icons/filter-search.svg" alt="" aria-hidden />
+            <img className={styles.btnIcon} src={assetUrl('assets/icons/filter-search.svg')} alt="" aria-hidden />
             <input
               className={styles.searchInput}
               placeholder="搜索"

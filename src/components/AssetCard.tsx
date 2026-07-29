@@ -12,6 +12,7 @@
 import type { ReactNode } from 'react'
 import type { Asset, Category } from '../data/types'
 import { coverOf } from '../services/assetService'
+import { assetUrl } from '../utils/assets'
 import styles from './AssetCard.module.css'
 
 const CATEGORY_LABEL: Record<Category, string> = {
@@ -86,7 +87,7 @@ export function AssetCard({
         {multiLook && (
           <div className={styles.overlayRight}>
             <span className={styles.lookCount} title={`素模 + ${lookCount - 1} 套造型 · 共 ${lookCount} 张`}>
-              <img src="/assets/icons/multi-angle.svg" alt="" aria-hidden />
+              <img src={assetUrl('assets/icons/multi-angle.svg')} alt="" aria-hidden />
               {lookCount}
             </span>
           </div>

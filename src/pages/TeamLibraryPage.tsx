@@ -16,14 +16,15 @@ import { useStore, useCurrentUser } from '../store/useStore'
 import { canSee } from '../services/permission'
 import { AssetCard } from '../components/AssetCard'
 import { AssetDetail } from '../components/AssetDetail'
+import { assetUrl } from '../utils/assets'
 import styles from './TeamLibraryPage.module.css'
 
 /** 边栏类目：顺序与图标对齐设计稿（音频本期团队库无内容，暂不陈列）。 */
 const CATEGORIES: { key: Category; label: string; icon: string }[] = [
-  { key: 'character', label: '角色', icon: '/assets/icons/cat-character.svg' },
-  { key: 'costume', label: '服装', icon: '/assets/icons/cat-costume.svg' },
-  { key: 'scene', label: '场景', icon: '/assets/icons/cat-scene.svg' },
-  { key: 'prop', label: '道具', icon: '/assets/icons/cat-prop.svg' },
+  { key: 'character', label: '角色', icon: assetUrl('assets/icons/cat-character.svg') },
+  { key: 'costume', label: '服装', icon: assetUrl('assets/icons/cat-costume.svg') },
+  { key: 'scene', label: '场景', icon: assetUrl('assets/icons/cat-scene.svg') },
+  { key: 'prop', label: '道具', icon: assetUrl('assets/icons/cat-prop.svg') },
 ]
 
 export function TeamLibraryPage() {
@@ -109,17 +110,17 @@ export function TeamLibraryPage() {
               className={`${styles.btn} ${batch ? styles.btnOn : ''}`}
               onClick={() => (batch ? exitBatch() : setBatch(true))}
             >
-              <img className={styles.btnIcon} src="/assets/icons/batch-all.svg" alt="" aria-hidden />
+              <img className={styles.btnIcon} src={assetUrl('assets/icons/batch-all.svg')} alt="" aria-hidden />
               批量操作
             </button>
 
             <button className={`${styles.btn} ${styles.btnSort}`} onClick={() => setSortDesc((v) => !v)}>
-              <img className={styles.btnIcon} src="/assets/icons/sort-two.svg" alt="" aria-hidden />
+              <img className={styles.btnIcon} src={assetUrl('assets/icons/sort-two.svg')} alt="" aria-hidden />
               智能排序（{sortDesc ? '最新' : '最早'}）
             </button>
 
             <div className={styles.search}>
-              <img className={styles.btnIcon} src="/assets/icons/filter-search.svg" alt="" aria-hidden />
+              <img className={styles.btnIcon} src={assetUrl('assets/icons/filter-search.svg')} alt="" aria-hidden />
               <input
                 className={styles.searchInput}
                 placeholder="搜索"

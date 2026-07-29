@@ -21,6 +21,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { World, User, Asset, Canvas, Notification, Voice } from '../data/types'
 import { createSeedWorld, IDS } from '../data/seed'
+import { assetUrl } from '../utils/assets'
 import {
   directReuse,
   favorite,
@@ -687,7 +688,7 @@ function saveMessage(outcome: SaveOutcome): string {
   }
 }
 /** 新增造型（v6）的占位图：Demo 无生图后端，新造型先用本地占位图，接模型后换真图。 */
-const LOOK_PLACEHOLDER = '/assets/canvas/image-placeholder.svg'
+const LOOK_PLACEHOLDER = assetUrl('assets/canvas/image-placeholder.svg')
 /** 新增造型的自增 id 计数器（够 Demo 用且可预测）。 */
 let _lookSeq = 1
 /** 新建画布的自增 id 计数器（够 Demo 用且可预测）。 */

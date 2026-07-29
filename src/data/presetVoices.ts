@@ -8,6 +8,7 @@
  * ─────────────────────────────────────────────────────────────────────── */
 
 import type { Voice } from './types'
+import { assetUrl } from '../utils/assets'
 
 /** 本期预置音色库：一男一女，各带真实可试听音源。 */
 export const PRESET_VOICES: Voice[] = [
@@ -16,14 +17,14 @@ export const PRESET_VOICES: Voice[] = [
     type: 'preset',
     name: '清透女声',
     gender: '女',
-    previewUrl: '/assets/voices/preset_voice_female.mp3',
+    previewUrl: assetUrl('assets/voices/preset_voice_female.mp3'),
   },
   {
     id: 'preset_voice_m01',
     type: 'preset',
     name: '沉稳男声',
     gender: '男',
-    previewUrl: '/assets/voices/preset_voice_male.mp3',
+    previewUrl: assetUrl('assets/voices/preset_voice_male.mp3'),
   },
 ]
 

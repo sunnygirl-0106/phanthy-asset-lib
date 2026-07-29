@@ -14,6 +14,7 @@
 import type { Route } from '../hooks/useHashRoute'
 import { NotificationBell } from '../components/NotificationBell'
 import { AvatarMenu } from './AvatarMenu'
+import { assetUrl } from '../utils/assets'
 import styles from './TopBar.module.css'
 
 const NAV: { key: Route['name']; label: string; to: string }[] = [
@@ -36,7 +37,7 @@ export function TopBar({
   return (
     <header className={styles.topbar}>
       <div className={styles.brand}>
-        <img className={styles.logo} src="/assets/icons/brand-logo.svg" alt="" aria-hidden />
+        <img className={styles.logo} src={assetUrl('assets/icons/brand-logo.svg')} alt="" aria-hidden />
         <span className={styles.brandName}>PhanthyMovie</span>
       </div>
 
