@@ -237,8 +237,10 @@ export function AssetDetail({
 
   // 能不能改这份资产的音色：只有"角色"有音色；广场官方素材不可编辑；admin 只治理不创作。
   const isCharacter = asset.category === 'character'
-  // 多图变体的分区名：角色叫「造型」，场景/道具等其它品类叫「其他样式」（能力一致、只是叫法不同）。
-  const stylesLabel = isCharacter ? '造型' : '其他样式'
+  // 多图变体的分区名：角色本体是「素模」，素模之外挂在 looks 里的都是「其他造型」；
+  // 场景/道具等其它品类同理叫「其他样式」（能力一致、只是叫法不同）。
+  // 都用「其他…」口径，没有时统一显示（0），和场景/道具闭环。
+  const stylesLabel = isCharacter ? '其他造型' : '其他样式'
   const canEditVoice = isCharacter && asset.scope !== 'plaza' && !isAdmin(user)
   const canDeleteWhole =
     canDeleteLibraryAsset(user, asset) || canRemovePlazaAsset(user, asset)
@@ -915,11 +917,11 @@ export function AssetDetail({
                 <p className={styles.secT}>{stylesLabel} <span className={styles.cnt}>（{asset.looks?.length ?? 0}）</span></p>
                 {hasLooks && <p className={styles.secD}>选一张作为封面</p>}
                 <div className={styles.looks}>
-                  {/* 素模作为封面选项：canEditCover 时排在第一位，允许用户换回素模当封面 */}
-                  {canEditCover && asset.baseModel && (
-                    <div className={`${styles.look} ${isBaseModelCover ? styles.lookOn : ''}`}>
+                  {/* 当前封面只在左栏大图显示，右侧网格一律不重复它——所以卡片数恒等于「其他造型」计数。
+                      素模作为可换回封面的选项：只在它「不是当前封面」时才排进来（可编辑封面时）。 */}
+                  {canEditCover && asset.baseModel && !isBaseModelCover && (
+                    <div className={styles.look}>
                       <img src={asset.baseModel} alt="素模" loading="lazy" />
-                      {isBaseModelCover && <span className={styles.coverBadge}>封面</span>}
                       {canDeleteWhole && (
                         <button
                           type="button"
@@ -931,19 +933,15 @@ export function AssetDetail({
                         </button>
                       )}
                       <div className={styles.lkNm}>素模</div>
-                      {!isBaseModelCover && (
-                        <div className={styles.lookOv}>
-                          <button className={styles.tbtn} onClick={() => setCover(asset.id, '')}>设为封面</button>
-                        </div>
-                      )}
+                      <div className={styles.lookOv}>
+                        <button className={styles.tbtn} onClick={() => setCover(asset.id, '')}>设为封面</button>
+                      </div>
                     </div>
                   )}
-                  {(asset.looks ?? []).map((look) => {
-                    const isCover = look.cover === asset.cover
-                    return (
-                      <div key={look.id} className={`${styles.look} ${isCover ? styles.lookOn : ''}`}>
+                  {/* 造型卡：过滤掉「正作为封面」的那套，它已经在左栏大图显示，避免右侧重复出现。 */}
+                  {(asset.looks ?? []).filter((look) => look.cover !== asset.cover).map((look) => (
+                      <div key={look.id} className={styles.look}>
                         <img src={look.cover} alt={look.name} loading="lazy" />
-                        {isCover && <span className={styles.coverBadge}>封面</span>}
                         <div className={`${styles.thumbIcons} ${canDeleteLibraryAsset(user, asset) ? styles.thumbIconsShifted : ''}`}>
                           <button className={styles.thumbBtn} title="放大查看" onClick={() => setPreview({ src: look.cover, name: look.name })}><ZoomIcon /></button>
                           <button className={styles.thumbBtn} title="下载原图" onClick={() => downloadImage(look.cover, `${asset.name}·${look.name}`)}><DownloadIcon /></button>
@@ -968,14 +966,13 @@ export function AssetDetail({
                           </button>
                         )}
                         <div className={styles.lkNm}>{look.name}</div>
-                        {!isCover && canEditCover && (
+                        {canEditCover && (
                           <div className={styles.lookOv}>
                             <button className={styles.tbtn} onClick={() => setCover(asset.id, look.cover)}>设为封面</button>
                           </div>
                         )}
                       </div>
-                    )
-                  })}
+                  ))}
                   {/* ＋新增造型（v6）：有权限（canRegenerate）才显示，用户自填提示词生成一套新造型。 */}
                   {canRegenerate(user, asset) && (
                     <button className={styles.addLook} title={`新增${stylesLabel}`} onClick={() => openPrompt({ kind: 'addLook' })}>
