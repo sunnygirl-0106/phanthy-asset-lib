@@ -9,7 +9,17 @@
 import { useEffect, type ReactNode } from 'react'
 import styles from './Modal.module.css'
 
-export function Modal({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+export function Modal({
+  onClose,
+  children,
+  hideClose = false,
+  panelClassName,
+}: {
+  onClose: () => void
+  children: ReactNode
+  hideClose?: boolean // 自带头部（含关闭）的弹窗可关掉这个默认圆形 ×
+  panelClassName?: string // 追加到面板上的样式类（如收窄宽度）
+}) {
   // 监听 Esc 关闭；组件卸载时记得移除监听，避免内存泄漏
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -22,10 +32,12 @@ export function Modal({ onClose, children }: { onClose: () => void; children: Re
   return (
     <div className={styles.overlay} onClick={onClose}>
       {/* 阻止冒泡：点面板内部不应该触发遮罩的关闭 */}
-      <div className={styles.panel} onClick={(e) => e.stopPropagation()}>
-        <button className={styles.close} onClick={onClose} aria-label="关闭">
-          ×
-        </button>
+      <div className={`${styles.panel} ${panelClassName ?? ''}`} onClick={(e) => e.stopPropagation()}>
+        {!hideClose && (
+          <button className={styles.close} onClick={onClose} aria-label="关闭">
+            ×
+          </button>
+        )}
         {children}
       </div>
     </div>

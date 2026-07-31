@@ -45,4 +45,4 @@
   cursor: pointer;
 }
 .iconBtn:hover { background: var(--line-soft); color: var(--text-body); }
-.iconOn { background: rgba(0, 216, 220, 0.14); color: var(--accent); }
+.iconOn { background: rgba(var(--accent-rgb), 0.14); color: var(--accent); }

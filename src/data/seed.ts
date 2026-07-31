@@ -196,8 +196,23 @@ export function createSeedWorld(): World {
       looks: [asset({ id: 'a_neon_dancer_look', category: 'character', name: '霓虹舞者·定妆照', scope: 'project', scopeId: IDS.projNeon, cover: `${IMG}/proj-neon-tokyo/neon_dancer_role.png` })],
     }),
     asset({ id: 'a_mech_exo', category: 'costume', name: '机甲外骨骼', scope: 'project', scopeId: IDS.projNeon, cover: `${IMG}/proj-neon-tokyo/mech_exoskeleton_costume.png`, fields: { style: '科幻' } }),
-    asset({ id: 'a_neon_bar', category: 'scene', name: '霓虹酒吧', scope: 'project', scopeId: IDS.projNeon, cover: `${IMG}/proj-neon-tokyo/neon_bar_scene.png`, fields: { style: '赛博' } }),
-    asset({ id: 'a_mech_prosthetic', category: 'prop', name: '机械义肢', scope: 'project', scopeId: IDS.projNeon, cover: `${IMG}/proj-neon-tokyo/mech_prosthetic_prop.png`, fields: { style: '科幻' } }),
+    // 场景也能有「其他样式」（= 角色造型的同款能力，只是叫法不同）：同一场景的不同时段 / 视角。
+    asset({
+      id: 'a_neon_bar', category: 'scene', name: '霓虹酒吧', scope: 'project', scopeId: IDS.projNeon,
+      cover: `${IMG}/proj-neon-tokyo/neon_bar_scene.png`, fields: { style: '赛博' },
+      looks: [
+        asset({ id: 'a_neon_bar_look1', category: 'scene', name: '霓虹酒吧·街景', scope: 'project', scopeId: IDS.projNeon, cover: `${IMG}/plaza-shelf/cyber_street_scene.png` }),
+        asset({ id: 'a_neon_bar_look2', category: 'scene', name: '霓虹酒吧·全景', scope: 'project', scopeId: IDS.projNeon, cover: `${IMG}/project-covers/neon_tokyo_cover.png` }),
+      ],
+    }),
+    // 道具也能有「其他样式」：同一道具的不同版本 / 配色。
+    asset({
+      id: 'a_mech_prosthetic', category: 'prop', name: '机械义肢', scope: 'project', scopeId: IDS.projNeon,
+      cover: `${IMG}/proj-neon-tokyo/mech_prosthetic_prop.png`, fields: { style: '科幻' },
+      looks: [
+        asset({ id: 'a_mech_prosthetic_look1', category: 'prop', name: '机械义肢·全息版', scope: 'project', scopeId: IDS.projNeon, cover: `${IMG}/plaza-shelf/holographic_bracelet_prop.png` }),
+      ],
+    }),
 
     /* 【项目·山海志 3】（团队A）*/
     asset({

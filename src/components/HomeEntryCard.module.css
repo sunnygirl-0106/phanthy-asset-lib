@@ -15,7 +15,7 @@
 .card:hover {
   box-shadow: var(--shadow-float);
   transform: translateY(-2px);
-  border-color: rgba(0, 216, 220, 0.4);
+  border-color: rgba(var(--accent-rgb), 0.4);
 }
 
 .iconWrap {

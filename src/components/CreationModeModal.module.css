@@ -34,7 +34,7 @@
 }
 
 .item:hover {
-  border-color: rgba(0, 216, 220, 0.4);
+  border-color: rgba(var(--accent-rgb), 0.4);
   background: var(--panel);
 }
 

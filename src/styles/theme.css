@@ -28,8 +28,18 @@
   --text-faint: rgba(255, 255, 255, 0.6);
   --text-muted: rgba(255, 255, 255, 0.4);
 
-  /* 强调色 / 行动色 / 危险色 */
-  --accent: #00d8dc;
+  /* 强调色（青色）——全局单一真相：改这一处，全站的 accent 跟着变。
+     · --accent-rgb 是裸 RGB 通道，用来在任意透明度下派生：rgba(var(--accent-rgb), .12)
+     · --accent 是实心色；--accent-ink 是"实心 accent 底上的深色文字"。
+     组件里一律引用这些变量，不要再写死 #00d8dc / #28d6d6 / rgba(0,216,220,…)。 */
+  --accent-rgb: 0, 216, 220;
+  --accent: rgb(var(--accent-rgb));
+  --accent-ink: #04211b;
+  /* 常用派生（半透明填充 / 描边）——语义化，省得每处手写 rgba */
+  --accent-soft: rgba(var(--accent-rgb), 0.12);
+  --accent-soft-hover: rgba(var(--accent-rgb), 0.18);
+  --accent-line: rgba(var(--accent-rgb), 0.4);
+  --accent-line-strong: rgba(var(--accent-rgb), 0.6);
   --cta-top: #c2f2ff;
   --cta-bottom: #cef4ff;
   --danger: #ff8f8f;

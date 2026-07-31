@@ -98,8 +98,8 @@
 }
 
 .active {
-  background: rgba(0, 216, 220, 0.12);
-  border-color: rgba(0, 216, 220, 0.4);
+  background: rgba(var(--accent-rgb), 0.12);
+  border-color: rgba(var(--accent-rgb), 0.4);
 }
 
 .avatar {

@@ -5,7 +5,7 @@
  *  ① 空壳/生成中节点无"上传"入口、成品有
  *  ② 文本/视频节点无"上传"入口，图片/音频有
  *  ③ 图片上传选类目后进项目库为 done
- *  ④ 图片作素模→新建角色带 baseModel；作造型→挂到已有角色 looks
+ *  ④ 图片新建角色带 baseModel；关联已有→挂到已有资产 looks
  *  ⑤ 从团队库/广场拖来上传→项目副本且带 masterId；从项目库拖来→无"上传"入口
  *  ⑥ 拖到画布本身不新增 world.assets（只有上传才 +1）
  *  ⑦ 子账号画布上传项目库免审直接进，项目→团队沉淀才生成申请
@@ -65,7 +65,7 @@ describe('入口一 · 出现条件（canUploadToProject）', () => {
 
 describe('入口一 · 产出意图（saveCanvasNodeToProject 纯函数）', () => {
   it('③ 图片选类目（如场景）→ 产出 scope=project、status=done 的资产', () => {
-    const out = saveCanvasNodeToProject(node(), 'proj_neon', { category: 'scene', name: '新场景' })
+    const out = saveCanvasNodeToProject(node(), 'proj_neon', { category: 'scene', mode: 'new', name: '新场景' })
     expect(out.kind).toBe('add')
     if (out.kind !== 'add') throw new Error('unreachable')
     expect(out.asset.scope).toBe('project')
@@ -74,10 +74,10 @@ describe('入口一 · 产出意图（saveCanvasNodeToProject 纯函数）', () 
     expect(out.asset.category).toBe('scene')
   })
 
-  it('④ 图片作素模→新建角色带 baseModel；作造型→挂到已有角色', () => {
+  it('④ 图片新建角色带 baseModel；关联已有→挂到已有资产 looks', () => {
     const asBase = saveCanvasNodeToProject(node({ cover: '/mei.png' }), 'proj_neon', {
       category: 'character',
-      as: 'baseModel-new',
+      mode: 'new',
       name: '小美',
     })
     expect(asBase.kind).toBe('add')
@@ -85,34 +85,34 @@ describe('入口一 · 产出意图（saveCanvasNodeToProject 纯函数）', () 
     expect(asBase.asset.category).toBe('character')
     expect(asBase.asset.baseModel).toBe('/mei.png') // 素模带上了
 
-    const asLook = saveCanvasNodeToProject(node(), 'proj_neon', {
+    const linked = saveCanvasNodeToProject(node(), 'proj_neon', {
       category: 'character',
-      as: 'look',
-      targetCharId: 'a_ajie',
-      lookName: '阿杰·新造型',
+      mode: 'link',
+      targetId: 'a_ajie',
+      name: '阿杰·新造型',
     })
-    expect(asLook.kind).toBe('addLook')
-    if (asLook.kind !== 'addLook') throw new Error('unreachable')
-    expect(asLook.charId).toBe('a_ajie')
+    expect(linked.kind).toBe('link')
+    if (linked.kind !== 'link') throw new Error('unreachable')
+    expect(linked.parentId).toBe('a_ajie')
   })
 
   it('⑤ 从团队库拖来上传→副本带 masterId；新生成→原创无 masterId', () => {
     const fromTeam = saveCanvasNodeToProject(
       node({ source: { scope: 'team', assetId: 'a_suwan' } }),
       'proj_neon',
-      { category: 'scene', name: '拿来的场景' },
+      { category: 'scene', mode: 'new', name: '拿来的场景' },
     )
     if (fromTeam.kind !== 'add') throw new Error('unreachable')
     expect(fromTeam.asset.masterId).toBe('a_suwan') // 记血缘
 
-    const original = saveCanvasNodeToProject(node(), 'proj_neon', { category: 'scene', name: '原创场景' })
+    const original = saveCanvasNodeToProject(node(), 'proj_neon', { category: 'scene', mode: 'new', name: '原创场景' })
     if (original.kind !== 'add') throw new Error('unreachable')
     expect(original.asset.masterId).toBeUndefined() // 原创无血缘
   })
 
   it('文本/视频节点即使硬调用也被规则挡下', () => {
     expect(() =>
-      saveCanvasNodeToProject(node({ media: 'text' }), 'proj_neon', { category: 'scene', name: 'x' }),
+      saveCanvasNodeToProject(node({ media: 'text' }), 'proj_neon', { category: 'scene', mode: 'new', name: 'x' }),
     ).toThrow(AssetRuleError)
   })
 
@@ -153,22 +153,22 @@ const projectAssets = () =>
 describe('入口一 · store 提交（runSaveToProject）', () => {
   it('③ 上传图片进项目库 → 项目资产 +1 且为 done', () => {
     const before = projectAssets().length
-    const r = store.getState().runSaveToProject(node(), 'proj_neon', { category: 'scene', name: '雨巷' })
+    const r = store.getState().runSaveToProject(node(), 'proj_neon', { category: 'scene', mode: 'new', name: '雨巷' })
     expect(r.ok).toBe(true)
     const after = projectAssets()
     expect(after.length).toBe(before + 1)
     expect(after.at(-1).status).toBe('done')
   })
 
-  it('④ 作造型 → 挂到已有角色 looks，不新增顶层资产', () => {
+  it('④ 关联已有 → 挂到已有资产 looks，不新增顶层资产', () => {
     const ajieBefore = store.getState().world.assets.find((a: { id: string }) => a.id === 'a_ajie')
     const looksBefore = ajieBefore.looks?.length ?? 0
     const totalBefore = store.getState().world.assets.length
     const r = store.getState().runSaveToProject(node(), 'proj_neon', {
       category: 'character',
-      as: 'look',
-      targetCharId: 'a_ajie',
-      lookName: '阿杰·夜行造型',
+      mode: 'link',
+      targetId: 'a_ajie',
+      name: '阿杰·夜行造型',
     })
     expect(r.ok).toBe(true)
     const ajieAfter = store.getState().world.assets.find((a: { id: string }) => a.id === 'a_ajie')
@@ -182,14 +182,14 @@ describe('入口一 · store 提交（runSaveToProject）', () => {
     const dragged = node({ source: { scope: 'team', assetId: 'a_suwan' }, name: '苏晚' })
     expect(store.getState().world.assets.length).toBe(before) // 拖拽不 +1
     // 真正上传那一刻才 +1。
-    store.getState().runSaveToProject(dragged, 'proj_neon', { category: 'character', as: 'baseModel-new', name: '苏晚（画布版）' })
+    store.getState().runSaveToProject(dragged, 'proj_neon', { category: 'character', mode: 'new', name: '苏晚（画布版）' })
     expect(store.getState().world.assets.length).toBe(before + 1)
   })
 
   it('⑦ 子账号画布上传项目库免审直接进；项目→团队沉淀才生成申请', () => {
     store.getState().setCurrentUser('u_lin') // 小林：团队A 子账号，被分配霓虹东京
     const before = projectAssets().length
-    const r = store.getState().runSaveToProject(node(), 'proj_neon', { category: 'prop', name: '手电筒' })
+    const r = store.getState().runSaveToProject(node(), 'proj_neon', { category: 'prop', mode: 'new', name: '手电筒' })
     expect(r.ok).toBe(true)
     expect(projectAssets().length).toBe(before + 1) // 直接进项目库
     expect(store.getState().applications.length).toBe(0) // 免审，没有任何申请
@@ -203,28 +203,28 @@ describe('入口一 · store 提交（runSaveToProject）', () => {
 
   it('无权限项目挡下：小鹿（团队B）不能往霓虹东京上传', () => {
     store.getState().setCurrentUser('u_lu')
-    const r = store.getState().runSaveToProject(node(), 'proj_neon', { category: 'scene', name: 'x' })
+    const r = store.getState().runSaveToProject(node(), 'proj_neon', { category: 'scene', mode: 'new', name: 'x' })
     expect(r.ok).toBe(false)
   })
 
-  it('去重（v5）：新建顶层资产撞项目库同名 → 被挡；加造型（addLook）不受影响', () => {
+  it('去重（v5）：新建顶层资产撞项目库同名 → 被挡；关联已有（link）不受影响', () => {
     // 霓虹东京已有角色「阿杰」，再新建一个叫「阿杰」的角色 → 被挡
     const before = projectAssets().length
     const dup = store.getState().runSaveToProject(node(), 'proj_neon', {
       category: 'character',
-      as: 'baseModel-new',
+      mode: 'new',
       name: '阿杰',
     })
     expect(dup.ok).toBe(false)
     expect(dup.message).toContain('改名')
     expect(projectAssets().length).toBe(before) // 没落库
 
-    // 给已有角色加一个造型，即使造型名和别的顶层资产同名（如「霓虹舞者」）也不受去重影响
+    // 关联到已有角色，即使子资产名和别的顶层资产同名（如「霓虹舞者」）也不受去重影响
     const ok = store.getState().runSaveToProject(node(), 'proj_neon', {
       category: 'character',
-      as: 'look',
-      targetCharId: 'a_ajie',
-      lookName: '霓虹舞者',
+      mode: 'link',
+      targetId: 'a_ajie',
+      name: '霓虹舞者',
     })
     expect(ok.ok).toBe(true)
   })
@@ -235,7 +235,7 @@ describe('入口一→沉淀 · 去重（⑧）', () => {
     // Sunny(团队A 主账号) 画布上传一份名为"苏晚"的项目资产（团队库里已有母版"苏晚" a_suwan）
     const up = store.getState().runSaveToProject(node(), 'proj_neon', {
       category: 'character',
-      as: 'baseModel-new',
+      mode: 'new',
       name: '苏晚',
     })
     expect(up.ok).toBe(true)
@@ -249,7 +249,7 @@ describe('入口一→沉淀 · 去重（⑧）', () => {
   it('改个不冲突的名字就能沉淀成功', () => {
     store.getState().runSaveToProject(node(), 'proj_neon', {
       category: 'character',
-      as: 'baseModel-new',
+      mode: 'new',
       name: '苏晚·画布分身',
     })
     const uploaded = store.getState().world.assets.at(-1)
@@ -278,7 +278,7 @@ describe('演示动线：子账号画布上传 → 沉淀 → 主账号审批 �
     store.getState().setCurrentUser('u_lin')
     const up = store.getState().runSaveToProject(node({ cover: '/mei.png' }), 'proj_neon', {
       category: 'character',
-      as: 'baseModel-new',
+      mode: 'new',
       name: '小美',
     })
     expect(up.ok).toBe(true)

@@ -1,96 +1,239 @@
-.body { padding: 24px; }
+/* 保存到资产库弹窗 —— 对齐 Figma node 16-481 */
+
+.panel {
+  max-width: 560px;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── 头部：标题 + 关闭 + 分隔线 ── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--line-mid);
+}
 
 .title {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
   color: var(--text-main);
-  margin: 0 0 4px;
+  margin: 0;
 }
 
-.sub {
-  font-size: 13px;
-  color: var(--text-faint);
-  margin: 0 0 18px;
+.close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 6px;
 }
 
-.field { margin-bottom: 16px; }
+.close:hover { color: var(--text-body); background: var(--line-soft); }
+
+/* ── 主体 ── */
+.content { padding: 22px 24px 4px; }
+
+.field { margin-bottom: 22px; }
 
 .label {
   display: block;
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 12px;
 }
 
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.chip {
-  padding: 6px 14px;
-  border: 1px solid var(--line-mid);
-  border-radius: var(--radius-pill);
-  background: var(--panel-3);
-  color: var(--text-body);
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.chip:hover:not(.chipOn):not(:disabled) { background: var(--panel); }
-
-.chip:disabled { opacity: 0.6; cursor: default; }
-
-.chipOn {
-  background: var(--accent);
-  color: var(--bg);
-  border-color: var(--accent);
-}
+.req { color: var(--accent); }
 
 .input {
   width: 100%;
-  padding: 9px 12px;
+  padding: 14px 16px;
   border: 1px solid var(--line-mid);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--field);
   color: var(--text-body);
   font-size: 14px;
+  box-sizing: border-box;
 }
 
-.note {
+.input::placeholder { color: var(--text-muted); }
+.input:focus { outline: none; border-color: var(--accent-line); }
+
+/* ── 标签网格：两列大按钮 ── */
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.tileWrap { position: relative; }
+
+.tile {
+  width: 100%;
+  min-height: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--line-mid);
+  border-radius: 12px;
+  background: var(--panel-3);
+  color: var(--text-faint);
+  font-size: 15px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.tile:hover:not(:disabled):not(.tileOn) { border-color: var(--line-strong); }
+
+.tile:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.tileOn {
+  color: var(--text-main);
+  border-color: var(--accent);
+  background: linear-gradient(180deg, var(--accent-soft), rgba(0, 0, 0, 0.15));
+  box-shadow: 0 0 0 1px var(--accent-line), 0 0 20px var(--accent-soft);
+}
+
+.tileTop {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.caret { font-size: 11px; color: var(--accent); }
+
+.subPill {
+  padding: 3px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* ── 二级浮层（选择类型 / 匹配素模） ── */
+.pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 190px;
+  padding: 8px;
+  background: var(--panel-float);
+  border: 1px solid var(--line-mid);
+  border-radius: 12px;
+  box-shadow: var(--shadow-float);
+  z-index: 5;
+}
+
+.popMatch { min-width: 220px; max-height: 240px; overflow-y: auto; }
+
+.popTitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 4px 10px 8px;
+}
+
+.popItem {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-body);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.popItem:hover { background: var(--line-soft); }
+
+.popEmpty {
+  padding: 10px 12px;
   font-size: 13px;
   color: var(--text-muted);
-  padding: 4px 0;
 }
 
+.matchItem {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-body);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.matchItem:hover, .matchItemOn { background: var(--line-soft); }
+
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-3);
+  color: var(--text-faint);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.matchName { color: var(--text-main); }
+
+/* ── 底部动作 ── */
 .actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 22px;
+  gap: 12px;
+  padding: 8px 24px 24px;
 }
-
-.btn {
-  padding: 8px 18px;
-  border-radius: 9px;
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: var(--bg);
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btnGhost {
-  padding: 8px 18px;
-  border-radius: 9px;
-  border: 1px solid var(--line-mid);
-  background: var(--panel-3);
+  padding: 10px 26px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-strong);
+  background: transparent;
   color: var(--text-body);
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
 }
 
-.btnGhost:hover { border-color: var(--line-strong); }
+.btnGhost:hover { border-color: var(--text-muted); background: var(--line-soft); }
+
+.btn {
+  padding: 10px 28px;
+  border-radius: var(--radius-pill);
+  border: none;
+  background: linear-gradient(180deg, var(--cta-top), var(--cta-bottom));
+  color: var(--accent-ink);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.35);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}

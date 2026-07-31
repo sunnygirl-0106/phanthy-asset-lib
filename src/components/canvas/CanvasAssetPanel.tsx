@@ -16,7 +16,7 @@ import { canSee, canViewPrompt } from '../../services/permission'
 import { coverOf } from '../../services/assetService'
 import { AssetCard } from '../AssetCard'
 import { AssetDetail } from '../AssetDetail'
-import { CategoryTabs, type CategoryFilter } from '../CategoryTabs'
+import type { CategoryFilter } from '../CategoryTabs'
 import { assetUrl } from '../../utils/assets'
 import styles from './CanvasAssetPanel.module.css'
 
@@ -37,6 +37,21 @@ const SCOPES: { key: Scope; label: string }[] = [
   { key: 'project', label: '项目库' },
   { key: 'team', label: '团队库' },
   { key: 'plaza', label: '广场' },
+]
+
+// 有"造型/其他样式"能力的品类：一律点进详情选图再用（不走卡片直接使用），
+// 这样它们即使当前只有一张图，也能在详情里看到「造型/其他样式（0）」并放大/下载/新增。
+const STYLE_CATS = new Set(['character', 'scene', 'prop'])
+
+// 类目下划线 Tab（对齐 Figma 面板头部）；与资产库网格的 CategoryTabs 同一套类目，
+// 这里换成"青色下划线"观感，故在面板内本地渲染，不动共享组件。
+const CATEGORY_TABS: { value: CategoryFilter; label: string }[] = [
+  { value: 'all', label: '全部' },
+  { value: 'character', label: '角色' },
+  { value: 'costume', label: '服装' },
+  { value: 'scene', label: '场景' },
+  { value: 'prop', label: '道具' },
+  { value: 'audio', label: '音频' },
 ]
 
 function mediaOf(asset: Asset): Media {
@@ -142,46 +157,61 @@ export function CanvasAssetPanel({
 
   return (
     <div className={styles.panel}>
-      {/* 顶部：来源分段（左） + 搜索（右）同一行 */}
-      <div className={styles.head}>
-        <div className={`${styles.scopes} ${searching ? styles.scopesSearching : ''}`}>
-          {SCOPES.map((s) => (
-            <button
-              key={s.key}
-              className={`${styles.scopeBtn} ${scope === s.key ? styles.scopeOn : ''}`}
-              disabled={searching}
-              onClick={() => setScope(s.key)}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-        <div className={styles.search}>
-          <img className={styles.searchIcon} src={assetUrl('assets/icons/filter-search.svg')} alt="" aria-hidden />
-          <input
-            className={styles.searchInput}
-            placeholder="搜索全部资产"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
+      {/* 标题行：「资产」（左） + 小字说明（右上角）。小字放右上是为了让标题行高恒定，
+          切换 tab 时小字显隐不会把下面的分段/类目顶得上下跳。
+          项目库=当前项目名；团队库=当前团队库；广场/搜索不显示。 */}
+      <div className={styles.titleRow}>
+        <h2 className={styles.title}>资产</h2>
+        {!searching && scope !== 'plaza' && (
+          <p className={styles.subtitle}>
+            {scope === 'project' ? (
+              <>当前项目<span className={styles.subtitleChip}>{projectName}</span>的资产</>
+            ) : (
+              '当前团队库的资产'
+            )}
+          </p>
+        )}
       </div>
 
-      {/* 类目筛选（直接复用资产库同款 CategoryTabs） */}
-      <CategoryTabs value={category} onChange={setCategory} />
+      {/* 来源分段 项目库/团队库/广场（在标题下、类目上，左对齐独立一行） */}
+      <div className={`${styles.scopes} ${searching ? styles.scopesSearching : ''}`}>
+        {SCOPES.map((s) => (
+          <button
+            key={s.key}
+            className={`${styles.scopeBtn} ${scope === s.key ? styles.scopeOn : ''}`}
+            disabled={searching}
+            onClick={() => setScope(s.key)}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
 
-      {/* 一行来源说明 */}
-      <p className={styles.tip}>
-        {searching ? (
-          '搜索中 · 全部来源'
-        ) : scope === 'project' ? (
-          <>当前项目「<span className={styles.tipHi}>{projectName}</span>」的资产</>
-        ) : scope === 'team' ? (
-          '团队资产库 · 在详情中选择资产放到画布'
-        ) : (
-          '素材广场 · 官方货架，在详情中选择资产放到画布'
-        )}
-      </p>
+      {/* 类目筛选：青色下划线 Tab（对齐 Figma 头部） */}
+      <div className={styles.catTabs} role="tablist">
+        {CATEGORY_TABS.map((t) => (
+          <button
+            key={t.value}
+            role="tab"
+            aria-selected={category === t.value}
+            className={`${styles.catTab} ${category === t.value ? styles.catTabOn : ''}`}
+            onClick={() => setCategory(t.value)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* 搜索框：Figma 半透明 pill */}
+      <div className={styles.search}>
+        <img className={styles.searchIcon} src={assetUrl('assets/icons/search.svg')} alt="" aria-hidden />
+        <input
+          className={styles.searchInput}
+          placeholder="您可以在这里搜索资产名称"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </div>
 
       {/* 卡片网格：复用 AssetCard，所有类型统一进详情后使用。 */}
       {items.length === 0 ? (
@@ -193,7 +223,7 @@ export function CanvasAssetPanel({
               <h3 className={styles.groupTitle}>{group.label}</h3>
               <div className={styles.grid}>
                 {group.items.map((a) => {
-                  const singleImage = (a.looks?.length ?? 0) === 0
+                  const singleImage = (a.looks?.length ?? 0) === 0 && !STYLE_CATS.has(a.category)
                   return (
                     <AssetCard
                       key={a.id}
@@ -227,7 +257,7 @@ export function CanvasAssetPanel({
       ) : (
         <div className={styles.grid}>
           {items.map((a) => {
-            const singleImage = (a.looks?.length ?? 0) === 0
+            const singleImage = (a.looks?.length ?? 0) === 0 && !STYLE_CATS.has(a.category)
             return (
               <AssetCard
                 key={a.id}

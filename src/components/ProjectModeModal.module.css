@@ -92,7 +92,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 216, 220, 0.12);
+  background: rgba(var(--accent-rgb), 0.12);
   margin-bottom: 18px;
 }
 .icon { width: 26px; height: 26px; }

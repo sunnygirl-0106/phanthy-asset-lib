@@ -65,23 +65,27 @@ export function canUploadToProject(node: CanvasNode): boolean {
 }
 
 /**
- * 上传时用户填的规格：类目 + 名字；图片落"角色"时还要选素模/造型分叉（技术规划 §2.1）。
+ * 上传时用户填的规格：类目 + 名字 + 保存方式（v7）。
+ *
+ * v7 概念调整：任何类目都可能对应多张资产（一个场景可以有很多张图、一个角色可以有很多造型），
+ * 所以把老的「素模 / 造型」这一角色专属分叉，泛化成对所有类目通用的两个保存方式：
+ *   · mode='new' 新建：把这张图/这段音当成一份全新的顶层资产。
+ *   · mode='link' 关联已有：把它挂到某个已有同类资产下，作为它的一张子资产（变体/造型）。
+ * 角色新建时额外把这张图当素模（baseModel）；其它类目无此概念。
  */
 export type SaveSpec =
-  // 服装 / 场景 / 道具 / 音频：单份直接成一份资产
-  | { category: 'costume' | 'scene' | 'prop' | 'audio'; name: string }
-  // 图片落角色 · 作为素模：新建一个角色（这张作素模/定妆照）。v5：画布上传素模一律新建角色。
-  | { category: 'character'; as: 'baseModel-new'; name: string }
-  // 图片落角色 · 作为造型：追加为某个已有角色的一个造型
-  | { category: 'character'; as: 'look'; targetCharId: string; lookName: string }
+  // 新建：任意类目直接成一份新的顶层资产
+  | { category: Category; mode: 'new'; name: string }
+  // 关联已有：挂到某个已有同类资产（targetId）下，作为它的一张子资产
+  | { category: Category; mode: 'link'; targetId: string; name: string }
 
 /**
- * 上传的产出意图。角色的"作造型/替换素模"不是新增一份资产，
- * 而是改动一个已有角色，所以用可辨识联合区分，交给 store 各自不可变提交。
+ * 上传的产出意图。「关联已有」不是新增一份顶层资产，
+ * 而是往一个已有资产的 looks[] 里追加子资产，所以用可辨识联合区分，交给 store 各自不可变提交。
  */
 export type SaveOutcome =
-  | { kind: 'add'; asset: Asset } // 新增一份项目资产（服装/场景/道具/音频/角色·新建素模）
-  | { kind: 'addLook'; charId: string; look: Asset } // 给已有角色追加一个造型
+  | { kind: 'add'; asset: Asset } // 新建一份顶层项目资产（任意类目）
+  | { kind: 'link'; parentId: string; child: Asset } // 关联到已有资产：往其 looks[] 追加一张子资产
 
 let _seq = 1
 function makeId(prefix: string): string {
@@ -132,26 +136,16 @@ export function saveCanvasNodeToProject(
     throw new AssetRuleError(`媒介「${node.media}」不能落类目「${spec.category}」。`)
   }
 
-  // 非角色（服装/场景/道具/音频）：单份直接成一份资产。
-  if (spec.category !== 'character') {
-    return { kind: 'add', asset: buildProjectAsset(node, projectId, spec.category, spec.name) }
+  // 关联已有：把这张图/这段音挂到某个已有同类资产下，作为它的一张子资产（变体/造型）。
+  if (spec.mode === 'link') {
+    const child = buildProjectAsset(node, projectId, spec.category, spec.name)
+    return { kind: 'link', parentId: spec.targetId, child }
   }
 
-  // 图片落"角色"的两种分叉（技术规划 §2.1；v5：素模一律新建、取消替换）。
-  switch (spec.as) {
-    case 'baseModel-new': {
-      // 新建一个角色：这张图作素模 + 封面。
-      const asset = buildProjectAsset(node, projectId, 'character', spec.name, {
-        baseModel: node.cover ?? '',
-      })
-      return { kind: 'add', asset }
-    }
-    case 'look': {
-      // 追加为某个已有角色的一个造型子资产。
-      const look = buildProjectAsset(node, projectId, 'character', spec.lookName)
-      return { kind: 'addLook', charId: spec.targetCharId, look }
-    }
-  }
+  // 新建：成一份新的顶层资产。角色额外把这张图当素模 + 封面；其它类目无此概念。
+  const extra = spec.category === 'character' ? { baseModel: node.cover ?? '' } : {}
+  const asset = buildProjectAsset(node, projectId, spec.category, spec.name, extra)
+  return { kind: 'add', asset }
 }
 
 /**

@@ -58,6 +58,36 @@ function TrashIcon() {
   )
 }
 
+/** 放大查看图标（画布详情：封面 / 造型 右上角 hover 浮出）。 */
+function ZoomIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m21 21-4.3-4.3M11 8v6M8 11h6" />
+    </svg>
+  )
+}
+
+/** 下载图标（画布详情：封面 / 造型 右上角 hover 浮出）。 */
+function DownloadIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12 3v12M7 10l5 5 5-5" />
+      <path d="M5 21h14" />
+    </svg>
+  )
+}
+
+/** 存原图：同源静态资源用 <a download> 触发浏览器下载（本期占位图即可）。 */
+function downloadImage(src: string, name: string) {
+  const a = document.createElement('a')
+  a.href = src
+  a.download = `${name || 'image'}.png`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
 /** 极简话筒图标——音色入口共用（替代原来的 emoji）。 */
 function MicIcon() {
   return (
@@ -174,19 +204,21 @@ export function AssetDetail({
   const [regenDraft, setRegenDraft] = useState(openBasePromptOnMount ? asset?.prompt ?? '' : '') // 重新生成 / 新增造型的可编辑提示词草稿
   const [newLookName, setNewLookName] = useState('') // 新增造型的名字草稿（可空）
   const [copied, setCopied] = useState(false) // 「已复制」瞬时反馈
+  const [preview, setPreview] = useState<{ src: string; name: string } | null>(null) // 放大查看灯箱
 
   // Esc：先收子面板 / 改名，再关整扇弹窗（原来的 Esc 由通用 Modal 管，现在弹窗自管）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      if (promptTarget) setPromptTarget(null)
+      if (preview) setPreview(null)
+      else if (promptTarget) setPromptTarget(null)
       else if (picker) setPicker(null)
       else if (renaming) setRenaming(false)
       else onClose?.()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [promptTarget, picker, renaming, onClose])
+  }, [preview, promptTarget, picker, renaming, onClose])
 
   if (!asset) return null
 
@@ -205,6 +237,8 @@ export function AssetDetail({
 
   // 能不能改这份资产的音色：只有"角色"有音色；广场官方素材不可编辑；admin 只治理不创作。
   const isCharacter = asset.category === 'character'
+  // 多图变体的分区名：角色叫「造型」，场景/道具等其它品类叫「其他样式」（能力一致、只是叫法不同）。
+  const stylesLabel = isCharacter ? '造型' : '其他样式'
   const canEditVoice = isCharacter && asset.scope !== 'plaza' && !isAdmin(user)
   const canDeleteWhole =
     canDeleteLibraryAsset(user, asset) || canRemovePlazaAsset(user, asset)
@@ -269,10 +303,10 @@ export function AssetDetail({
     if (promptTarget.kind === 'addLook') {
       inner = (
         <>
-          <h4 className={styles.subH}>新增造型</h4>
-          <p className={styles.subD}>填写造型提示词（已预填人物模板，按需修改），生成一套新造型挂到该角色下。</p>
+          <h4 className={styles.subH}>新增{stylesLabel}</h4>
+          <p className={styles.subD}>填写{stylesLabel}提示词（已预填模板，按需修改），生成一套新{stylesLabel}挂到这份资产下。</p>
           <div className={styles.field}>
-            <label>造型名称（可选）</label>
+            <label>{stylesLabel}名称（可选）</label>
             <input placeholder="如：夜行造型" value={newLookName} onChange={(e) => setNewLookName(e.target.value)} />
           </div>
           <textarea className={styles.promptEdit} rows={6} value={regenDraft} onChange={(e) => setRegenDraft(e.target.value)} />
@@ -380,6 +414,25 @@ export function AssetDetail({
     const r = renameAsset(asset!.id, nameDraft)
     setRenameResult(r)
     if (r.ok) setRenaming(false)
+  }
+
+  // 放大查看灯箱：库页详情 / 画布详情共用同一段（大图 + 下载 + 关闭；点遮罩 / Esc 关）。
+  function renderLightbox() {
+    if (!preview) return null
+    return (
+      <div className={styles.lbRoot} onClick={() => setPreview(null)}>
+        <div className={styles.lbStage} onClick={(e) => e.stopPropagation()}>
+          <img className={styles.lbImg} src={preview.src} alt={preview.name} />
+          <div className={styles.lbBar}>
+            <span className={styles.lbName}>{preview.name}</span>
+            <button className={styles.lbDownload} onClick={() => downloadImage(preview.src, `${asset!.name}·${preview.name}`)}>
+              <DownloadIcon /> 下载原图
+            </button>
+          </div>
+        </div>
+        <button className={styles.lbClose} title="关闭" onClick={() => setPreview(null)}>✕</button>
+      </div>
+    )
   }
 
   // ── 头部流转动作按钮（跟原来的 scope + 权限判断一字不差，只是挪到了标题右侧）──
@@ -630,6 +683,10 @@ export function AssetDetail({
                 <div className={styles.sumo}>
                   <div className={styles.sumoPic}>
                     <img src={coverImg} alt={coverName} />
+                    <div className={styles.thumbIcons}>
+                      <button className={styles.thumbBtn} title="放大查看" onClick={() => setPreview({ src: coverImg, name: coverName })}><ZoomIcon /></button>
+                      <button className={styles.thumbBtn} title="下载原图" onClick={() => downloadImage(coverImg, `${asset.name}·${coverName}`)}><DownloadIcon /></button>
+                    </div>
                     <div className={styles.sumoOvC}>
                       <button className={styles.lookUse} onClick={() => onUse({ cover: coverImg, lookName: coverLook?.name })}>使用</button>
                       {canViewPrompt(asset) && (
@@ -694,7 +751,7 @@ export function AssetDetail({
             {/* 造型：挑一套用到画布 */}
             <>
                 <div className={styles.looksHead}>
-                  <div className={styles.looksHeadT}>造型（{asset.looks?.length ?? 0}）</div>
+                  <div className={styles.looksHeadT}>{stylesLabel}（{asset.looks?.length ?? 0}）</div>
                 </div>
                 {hasLooks && (
                 <div className={styles.looksGrid}>
@@ -702,6 +759,10 @@ export function AssetDetail({
                     <div key={look.id} className={styles.lookCard}>
                       <div className={styles.lookPic}>
                         <img src={look.cover} alt={look.name} loading="lazy" />
+                        <div className={styles.thumbIcons}>
+                          <button className={styles.thumbBtn} title="放大查看" onClick={() => setPreview({ src: look.cover, name: look.name })}><ZoomIcon /></button>
+                          <button className={styles.thumbBtn} title="下载原图" onClick={() => downloadImage(look.cover, `${asset.name}·${look.name}`)}><DownloadIcon /></button>
+                        </div>
                         <div className={styles.lookOvC}>
                           <button className={styles.lookUse} onClick={() => onUse({ cover: look.cover, lookName: look.name })}>使用</button>
                           {canViewPrompt(asset) && (
@@ -723,6 +784,8 @@ export function AssetDetail({
         {renderPicker()}
         {/* 提示词子面板（v6）：查看 / 复制 / 添加到画布（落文本节点）——画布里不放"重新生成" */}
         {renderCanvasPromptPanel()}
+        {/* 放大查看灯箱（库页 / 画布共用） */}
+        {renderLightbox()}
       </div>
     )
   }
@@ -787,6 +850,10 @@ export function AssetDetail({
               <div className={styles.baseLg}>
                 <img src={coverImg} alt={coverName} />
                 <span className={styles.cap}>{coverName}</span>
+                <div className={`${styles.thumbIcons} ${canDeleteWhole ? styles.thumbIconsShifted : ''}`}>
+                  <button className={styles.thumbBtn} title="放大查看" onClick={() => setPreview({ src: coverImg, name: coverName })}><ZoomIcon /></button>
+                  <button className={styles.thumbBtn} title="下载原图" onClick={() => downloadImage(coverImg, `${asset.name}·${coverName}`)}><DownloadIcon /></button>
+                </div>
                 {canDeleteWhole && (
                   <button
                     type="button"
@@ -845,8 +912,8 @@ export function AssetDetail({
 
           <div className={styles.mright}>
             <>
-                <p className={styles.secT}>造型 <span className={styles.cnt}>（{asset.looks?.length ?? 0}）</span></p>
-                {hasLooks && <p className={styles.secD}>为角色选一张封面</p>}
+                <p className={styles.secT}>{stylesLabel} <span className={styles.cnt}>（{asset.looks?.length ?? 0}）</span></p>
+                {hasLooks && <p className={styles.secD}>选一张作为封面</p>}
                 <div className={styles.looks}>
                   {/* 素模作为封面选项：canEditCover 时排在第一位，允许用户换回素模当封面 */}
                   {canEditCover && asset.baseModel && (
@@ -877,6 +944,10 @@ export function AssetDetail({
                       <div key={look.id} className={`${styles.look} ${isCover ? styles.lookOn : ''}`}>
                         <img src={look.cover} alt={look.name} loading="lazy" />
                         {isCover && <span className={styles.coverBadge}>封面</span>}
+                        <div className={`${styles.thumbIcons} ${canDeleteLibraryAsset(user, asset) ? styles.thumbIconsShifted : ''}`}>
+                          <button className={styles.thumbBtn} title="放大查看" onClick={() => setPreview({ src: look.cover, name: look.name })}><ZoomIcon /></button>
+                          <button className={styles.thumbBtn} title="下载原图" onClick={() => downloadImage(look.cover, `${asset.name}·${look.name}`)}><DownloadIcon /></button>
+                        </div>
                         {canDeleteLibraryAsset(user, asset) && (
                           <button
                             type="button"
@@ -907,9 +978,9 @@ export function AssetDetail({
                   })}
                   {/* ＋新增造型（v6）：有权限（canRegenerate）才显示，用户自填提示词生成一套新造型。 */}
                   {canRegenerate(user, asset) && (
-                    <button className={styles.addLook} title="新增造型" onClick={() => openPrompt({ kind: 'addLook' })}>
+                    <button className={styles.addLook} title={`新增${stylesLabel}`} onClick={() => openPrompt({ kind: 'addLook' })}>
                       <span style={{ fontSize: 22 }}>＋</span>
-                      <span>新增造型</span>
+                      <span>新增{stylesLabel}</span>
                     </button>
                   )}
                 </div>
@@ -934,6 +1005,8 @@ export function AssetDetail({
         {/* 提示词子面板（v6）：查看 / 复制 / 重新生成 / 新增造型 */}
         {renderPromptPanel()}
       </div>
+      {/* 放大查看灯箱：盖在整扇弹窗之上（挂在 .modal 外，避开其 overflow:hidden） */}
+      {renderLightbox()}
     </div>
   )
 }

@@ -86,9 +86,9 @@ export function CanvasShell({
     )
   }
 
-  // 本项目已有角色（供上传弹窗"替换素模/追加造型"选择）。
-  const projectCharacters = world.assets.filter(
-    (a) => a.scope === 'project' && a.scopeId === pid && a.category === 'character',
+  // 本项目已有资产（供上传弹窗「关联已有」按类目挑关联目标）。
+  const projectAssets = world.assets.filter(
+    (a) => a.scope === 'project' && a.scopeId === pid,
   )
 
   function nextId(prefix: string): string {
@@ -270,7 +270,7 @@ export function CanvasShell({
       {uploadNode && (
         <UploadToLibraryModal
           node={uploadNode}
-          projectCharacters={projectCharacters}
+          projectAssets={projectAssets}
           onConfirm={confirmUpload}
           onClose={() => setUploadNode(null)}
         />

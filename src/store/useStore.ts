@@ -282,7 +282,7 @@ export const useStore = create<StoreState>()(
         try {
           const outcome = saveCanvasNodeToProject(node, projectId, spec)
           // 去重（v5：库内顶层资产名唯一）：新建一份顶层资产（角色/服装/场景/道具/音频）才查；
-          // 给已有角色加造型（addLook）不查——造型是子资产、天然豁免。
+          // 关联到已有资产（link）不查——挂上去的是子资产、天然豁免。
           if (outcome.kind === 'add' && libraryHasSameName(world.assets, 'project', projectId, outcome.asset.name)) {
             return fail(`该项目已有同名「${outcome.asset.name}」，请改名后再上传`)
           }
@@ -664,16 +664,16 @@ function findAsset(world: World, id: string): Asset | undefined {
 function addAsset(world: World, asset: Asset): World {
   return { ...world, assets: [...world.assets, asset] }
 }
-/** 入口一：把画布上传的产出意图不可变地提交进 world（新增 / 追加造型）。 */
+/** 入口一：把画布上传的产出意图不可变地提交进 world（新建顶层 / 关联到已有资产）。 */
 function applySaveOutcome(world: World, outcome: SaveOutcome): World {
   switch (outcome.kind) {
     case 'add':
       return addAsset(world, outcome.asset)
-    case 'addLook':
+    case 'link':
       return {
         ...world,
         assets: world.assets.map((a) =>
-          a.id === outcome.charId ? { ...a, looks: [...(a.looks ?? []), outcome.look] } : a,
+          a.id === outcome.parentId ? { ...a, looks: [...(a.looks ?? []), outcome.child] } : a,
         ),
       }
   }
@@ -683,8 +683,8 @@ function saveMessage(outcome: SaveOutcome): string {
   switch (outcome.kind) {
     case 'add':
       return `已上传「${outcome.asset.name}」到项目资产库`
-    case 'addLook':
-      return `已把「${outcome.look.name}」追加为该角色的一个造型`
+    case 'link':
+      return `已把「${outcome.child.name}」关联到已有资产`
   }
 }
 /** 新增造型（v6）的占位图：Demo 无生图后端，新造型先用本地占位图，接模型后换真图。 */
