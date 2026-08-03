@@ -53,16 +53,34 @@ const CATEGORY_TABS: { value: CategoryFilter; label: string }[] = [
   { value: 'scene', label: '场景' },
   { value: 'prop', label: '道具' },
   { value: 'audio', label: '音频' },
+  { value: 'other', label: '其他' },
 ]
 
+/** 资产 → 画布节点媒介。「其他」类目读 fields.media（图/视频/文本/音频），让存下的留存物按原媒介拖回画布。 */
 function mediaOf(asset: Asset): Media {
-  return asset.category === 'audio' ? 'audio' : 'image'
+  if (asset.category === 'audio') return 'audio'
+  // 「其他」只承载图片 / 视频 / 文本三种媒介：音频有自己的类目，永远不会落到「其他」，
+  // 所以这里不留 audio 分支（判断依据是"这个媒介有没有自己的类目"，见 PRD 全局规则）。
+  if (asset.category === 'other') {
+    const m = asset.fields.media
+    return m === 'video' ? 'video' : m === 'text' ? 'text' : 'image'
+  }
+  return 'image'
+}
+
+/** 是否走音频条状列表（AudioList）：音频类目，或「其他·音频」。其余走卡片网格。 */
+function isAudioAsset(asset: Asset): boolean {
+  return asset.category === 'audio' || (asset.category === 'other' && asset.fields.media === 'audio')
 }
 
 /** 单图资产从卡片直接使用时的默认载荷。 */
 function defaultPayload(asset: Asset): DragPayload {
   if (asset.category === 'character') {
     return { scope: asset.scope, assetId: asset.id, media: 'image', name: asset.name, cover: asset.baseModel ?? asset.cover }
+  }
+  // 「其他」文本：落文本节点（content 取 fields.text，无封面）；图片/视频：带封面落对应节点。
+  if (asset.category === 'other' && mediaOf(asset) === 'text') {
+    return { scope: asset.scope, assetId: asset.id, media: 'text', name: asset.name, content: (asset.fields.text as string) ?? '' }
   }
   return { scope: asset.scope, assetId: asset.id, media: mediaOf(asset), name: asset.name, cover: coverOf(asset) }
 }
@@ -100,9 +118,9 @@ export function CanvasAssetPanel({
     .filter((a) => !searching || a.name.toLowerCase().includes(q))
 
   const groupedItems = SCOPES.map((s) => ({ ...s, items: items.filter((a) => a.scope === s.key) }))
-  // 「全部」类目分区展示用：图片类走网格、音频类走条状列表。
-  const imageItems = items.filter((a) => a.category !== 'audio')
-  const audioItems = items.filter((a) => a.category === 'audio')
+  // 「全部」类目分区展示用：图片类走网格、音频类（含「其他·音频」）走条状列表。
+  const imageItems = items.filter((a) => !isAudioAsset(a))
+  const audioItems = items.filter((a) => isAudioAsset(a))
 
   function startDrag(e: React.DragEvent, payload: DragPayload) {
     e.dataTransfer.setData(DRAG_MIME, JSON.stringify(payload))
@@ -140,7 +158,8 @@ export function CanvasAssetPanel({
             <button className={`${styles.actBtn} ${styles.actPrimary}`} onClick={(e) => { e.stopPropagation(); onUse(defaultPayload(a)) }}>
               使用
             </button>
-            {canViewPrompt(a) && (
+            {/* 「其他」是存进来的成品、无提示词，不给提示词入口 */}
+            {a.category !== 'other' && canViewPrompt(a) && (
               <button className={`${styles.actBtn} ${styles.actGhost}`} onClick={(e) => { e.stopPropagation(); setOpenPromptDirectly(true); setDetailAssetId(a.id) }}>
                 提示词
               </button>
@@ -284,8 +303,8 @@ export function CanvasAssetPanel({
         <div className={styles.searchGroups}>
           {groupedItems.map((group) => {
             if (group.items.length === 0) return null
-            const imgs = group.items.filter((a) => a.category !== 'audio')
-            const auds = group.items.filter((a) => a.category === 'audio')
+            const imgs = group.items.filter((a) => !isAudioAsset(a))
+            const auds = group.items.filter((a) => isAudioAsset(a))
             return (
               <section key={group.key} className={styles.searchGroup}>
                 <h3 className={styles.groupTitle}>{group.label}</h3>
@@ -312,7 +331,29 @@ export function CanvasAssetPanel({
             </>
           )}
         </>
+      ) : category === 'other' ? (
+        // 「其他」按媒介分区（与项目资产库一致）：图片 → 视频 → 文本 → 音频，从上到下。
+        <>
+          {[
+            { key: 'image', label: '图片', items: items.filter((a) => (a.fields.media ?? 'image') === 'image') },
+            { key: 'video', label: '视频', items: items.filter((a) => a.fields.media === 'video') },
+            { key: 'text', label: '文本', items: items.filter((a) => a.fields.media === 'text') },
+            { key: 'audio', label: '音频', items: items.filter((a) => a.fields.media === 'audio') },
+          ]
+            .filter((g) => g.items.length > 0)
+            .map((g, i) => (
+              <div key={g.key}>
+                {sectionHead(g.label, g.items.length, i > 0)}
+                {g.key === 'audio' ? (
+                  renderAudioList(g.items)
+                ) : (
+                  <div className={styles.grid}>{g.items.map(renderCard)}</div>
+                )}
+              </div>
+            ))}
+        </>
       ) : (
+        // 前五类单类目：无音频，直接卡片网格。
         <div className={styles.grid}>{items.map(renderCard)}</div>
       )}
 

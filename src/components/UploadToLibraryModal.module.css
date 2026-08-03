@@ -77,6 +77,20 @@
 
 .tileWrap { position: relative; }
 
+/* 「其他」瓷砖：满幅一行，上方用分隔线 + 间距与前四类拉开层级（暗示"另一层东西"）。 */
+.tileWrapOther {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line-mid);
+}
+.otherHint {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
 .tile {
   width: 100%;
   min-height: 64px;

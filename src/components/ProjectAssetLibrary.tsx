@@ -11,7 +11,7 @@
  */
 
 import { useMemo, useState } from 'react'
-import type { Category } from '../data/types'
+import type { Category, Asset } from '../data/types'
 import { useStore } from '../store/useStore'
 import { AssetCard } from './AssetCard'
 import { AssetDetail } from './AssetDetail'
@@ -19,7 +19,7 @@ import { AudioList } from './AudioList'
 import { assetUrl } from '../utils/assets'
 import styles from './ProjectAssetLibrary.module.css'
 
-/** 顶部类目 Tab：顺序对齐团队库与截图。 */
+/** 顶部类目 Tab：顺序对齐团队库与截图。末尾「其他」是另一层东西，单独隔出（见 tabOther）。 */
 const CATEGORIES: { key: Category; label: string; icon: string }[] = [
   { key: 'character', label: '角色', icon: assetUrl('assets/icons/cat-character.svg') },
   { key: 'costume', label: '服装', icon: assetUrl('assets/icons/cat-costume.svg') },
@@ -27,6 +27,8 @@ const CATEGORIES: { key: Category; label: string; icon: string }[] = [
   { key: 'prop', label: '道具', icon: assetUrl('assets/icons/cat-prop.svg') },
   // TODO: 替换音频 icon（产品后续提供正式链接，先用占位音符图标）
   { key: 'audio', label: '音频', icon: assetUrl('assets/icons/cat-audio.svg') },
+  // TODO: 替换「其他」icon（先用占位九宫格图标）；「其他」= 创作留存物，仅项目库有，不沉淀。
+  { key: 'other', label: '其他', icon: assetUrl('assets/icons/grid.svg') },
 ]
 
 export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
@@ -49,7 +51,7 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
 
   // 每个类目的真实数量（Tab 角标）。
   const counts = useMemo(() => {
-    const m: Record<Category, number> = { character: 0, costume: 0, scene: 0, prop: 0, audio: 0 }
+    const m: Record<Category, number> = { character: 0, costume: 0, scene: 0, prop: 0, audio: 0, other: 0 }
     for (const a of projectAssets) m[a.category]++
     return m
   }, [projectAssets])
@@ -76,22 +78,68 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
     setSelected(new Set())
   }
 
+  // AudioList 库模式（改名 / 删除）——音频类目 &「其他·音频」共用。
+  const audioLibMode = {
+    kind: 'library' as const,
+    onRename: (a: Asset, name: string) => renameAsset(a.id, name),
+    onDelete: (a: Asset) => runDeleteAsset(a.id),
+  }
+
+  /** 卡片网格（支持批量勾选）——普通类目 &「其他」的图片/视频/文本子分区共用。 */
+  function renderGrid(items: Asset[]) {
+    return (
+      <div className={styles.grid}>
+        {items.map((a) => (
+          <div
+            key={a.id}
+            className={`${styles.cell} ${batch && selected.has(a.id) ? styles.cellSelected : ''}`}
+          >
+            <AssetCard
+              asset={a}
+              onClick={batch ? () => toggleSelect(a.id) : () => setDetailAssetId(a.id)}
+            />
+            {batch && (
+              <span className={`${styles.check} ${selected.has(a.id) ? styles.checkOn : ''}`}>
+                {selected.has(a.id) ? '✓' : ''}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  /** 分区小标题（复用画布资产面板设计）：灰字标签 + 数字角标 + 横线。 */
+  function sectionHead(label: string, count: number, spaced = false) {
+    return (
+      <div className={`${styles.sectionHead} ${spaced ? styles.sectionHeadSpaced : ''}`}>
+        <span className={styles.sectionLabel}>{label}</span>
+        <span className={styles.sectionCount}>{count}</span>
+        <span className={styles.sectionRule} aria-hidden />
+      </div>
+    )
+  }
+
+  // 「其他」按媒介分区（复用画布资产面板「图片资产 / 音频」的分区设计）：图片 → 视频 → 文本 → 音频。
+  const otherGroups = [
+    { key: 'image', label: '图片', items: visible.filter((a) => (a.fields.media ?? 'image') === 'image') },
+    { key: 'video', label: '视频', items: visible.filter((a) => a.fields.media === 'video') },
+    { key: 'text', label: '文本', items: visible.filter((a) => a.fields.media === 'text') },
+    { key: 'audio', label: '音频', items: visible.filter((a) => a.fields.media === 'audio') },
+  ].filter((g) => g.items.length > 0)
+
   return (
     <div className={styles.wrap}>
-      <h1 className={styles.title}>项目资产库</h1>
-
       {/* ── 类目 Tab（顶部横排）+ 工具条 同一行 ── */}
       <div className={styles.bar}>
         <nav className={styles.tabs}>
           {CATEGORIES.map((c) => (
             <button
               key={c.key}
-              className={`${styles.tab} ${category === c.key ? styles.tabActive : ''}`}
+              className={`${styles.tab} ${category === c.key ? styles.tabActive : ''} ${c.key === 'other' ? styles.tabOther : ''}`}
               onClick={() => setCategory(c.key)}
             >
-              {category === c.key && (
-                <img className={styles.tabIcon} src={c.icon} alt="" aria-hidden />
-              )}
+              <img className={styles.tabIcon} src={c.icon} alt="" aria-hidden />
               <span>{c.label}（{counts[c.key]}）</span>
             </button>
           ))}
@@ -142,33 +190,23 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
         </div>
       ) : category === 'audio' ? (
         // 音频为一等展示类目（R3）：条状行列表，仅支持改名 / 删除，不进详情、不参与批量。
-        <AudioList
-          items={visible}
-          mode={{
-            kind: 'library',
-            onRename: (a, name) => renameAsset(a.id, name),
-            onDelete: (a) => runDeleteAsset(a.id),
-          }}
-        />
-      ) : (
-        <div className={styles.grid}>
-          {visible.map((a) => (
-            <div
-              key={a.id}
-              className={`${styles.cell} ${batch && selected.has(a.id) ? styles.cellSelected : ''}`}
-            >
-              <AssetCard
-                asset={a}
-                onClick={batch ? () => toggleSelect(a.id) : () => setDetailAssetId(a.id)}
-              />
-              {batch && (
-                <span className={`${styles.check} ${selected.has(a.id) ? styles.checkOn : ''}`}>
-                  {selected.has(a.id) ? '✓' : ''}
-                </span>
+        <AudioList items={visible} mode={audioLibMode} />
+      ) : category === 'other' ? (
+        // 「其他」按媒介分区（复用画布资产面板设计）：图片 → 视频 → 文本 → 音频，从上到下。
+        <div className={styles.otherSections}>
+          {otherGroups.map((g, i) => (
+            <section key={g.key}>
+              {sectionHead(g.label, g.items.length, i > 0)}
+              {g.key === 'audio' ? (
+                <AudioList items={g.items} mode={audioLibMode} />
+              ) : (
+                renderGrid(g.items)
               )}
-            </div>
+            </section>
           ))}
         </div>
+      ) : (
+        renderGrid(visible)
       )}
 
       {/* 资产详情弹窗（自带外壳；沉淀到团队库等操作都在里面，本次不改） */}

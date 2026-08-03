@@ -105,6 +105,20 @@ function assertDone(source: Asset, action: string): void {
 }
 
 /**
+ * 类目能力校验：「其他」类目仅存在于项目资产库，不参与任何向上流转（技术规划 §五）。
+ * 在服务层挡死，而不是只靠界面隐藏按钮——沉淀 / 收藏入团队库 / 贡献到广场都先过这一关。
+ */
+function assertNotOther(source: Asset, target: '团队库' | '素材广场'): void {
+  if (source.category === 'other') {
+    throw new AssetRuleError(
+      target === '素材广场'
+        ? '「其他」类目不能贡献到素材广场。'
+        : '「其他」类目仅存在于项目资产库，不能沉淀到团队库。',
+    )
+  }
+}
+
+/**
  * 「用一个角色时要带哪些造型」的公共小工具。
  * 录音口径：用/复用一个角色时，素模（本体）一定带上，穿衣服的造型是"选"出来的。
  *
@@ -216,6 +230,7 @@ export type DepositResult = { kind: 'asset'; asset: Asset } | DepositApplication
 
 export function deposit(source: Asset, targetTeamId: string, actor: User, includeLookIds?: string[]): DepositResult {
   assertDone(source, '沉淀')
+  assertNotOther(source, '团队库')
   const mode = depositMode(actor)
 
   if (mode === 'none') {
@@ -250,6 +265,7 @@ export function deposit(source: Asset, targetTeamId: string, actor: User, includ
  */
 export function materializeDeposit(source: Asset, targetTeamId: string, includeLookIds?: string[]): Asset {
   assertDone(source, '沉淀入库')
+  assertNotOther(source, '团队库')
   const { looks, cover } = pickLooks(source, includeLookIds) // 素模必带、造型按勾选、封面重挑一张带上来的图
   return cloneForCopy(source, {
     scope: 'team',
@@ -301,6 +317,7 @@ export function contributeToPlaza(
   includeLookIds: string[] = [],
 ): PlazaSubmission {
   assertDone(source, '贡献到广场')
+  assertNotOther(source, '素材广场')
   if (source.scope !== 'team' && source.scope !== 'project') {
     throw new AssetRuleError('只有团队库 / 项目里的资产能投稿到素材广场。')
   }

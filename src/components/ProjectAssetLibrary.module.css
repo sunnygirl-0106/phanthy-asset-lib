@@ -5,13 +5,6 @@
   min-width: 0;
 }
 
-.title {
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--text-main);
-  margin: 0 0 20px;
-}
-
 /* ── 类目 Tab（左）+ 工具条（右）同一行 ── */
 .bar {
   display: flex;
@@ -43,23 +36,21 @@
 
 .tab:hover { color: var(--text-body); }
 
+/* 「其他」Tab：与前五类之间加一条竖分隔 + 额外间距，暗示"这不是同一层的东西"。 */
+.tabOther {
+  margin-left: 8px;
+  padding-left: 28px;
+  border-left: 1px solid var(--line-mid, rgba(255, 255, 255, 0.14));
+}
+
+/* 每个类目都常显自己的小图标：统一成白色，未选中时压暗、选中时点亮。无动效。 */
 .tabIcon {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
-  /* 原图里服装 / 场景 / 道具自带 40% 透明度；同色零偏移阴影叠加后与角色图标亮度一致。 */
-  filter:
-    brightness(0) saturate(100%) invert(74%) sepia(91%) saturate(1327%) hue-rotate(128deg) brightness(94%) contrast(101%)
-    drop-shadow(0 0 0 var(--accent))
-    drop-shadow(0 0 0 var(--accent))
-    drop-shadow(0 0 0 var(--accent))
-    drop-shadow(0 0 0 var(--accent));
-  animation: tabIconIn 0.18s ease-out;
-}
-
-@keyframes tabIconIn {
-  from { opacity: 0; transform: scale(0.72) translateX(-3px); }
-  to { opacity: 1; transform: scale(1) translateX(0); }
+  /* 各图标原本明度/透明度不一（服装/场景/道具自带 40% 透明度），统一 brightness(0) invert(1) 变纯白 */
+  filter: brightness(0) invert(1);
+  opacity: 0.5;
 }
 
 .tabActive {
@@ -67,7 +58,9 @@
   font-weight: 600;
 }
 
-/* 选中态青色下划线 */
+.tabActive .tabIcon { opacity: 1; }
+
+/* 选中态青色下划线（静态标识，非动效） */
 .tabActive::after {
   content: '';
   position: absolute;
@@ -167,6 +160,45 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(224px, 1fr));
   gap: 16px;
+}
+
+/* ── 「其他」按媒介分区（复用画布资产面板「图片资产 / 音频」设计） ── */
+.otherSections { display: flex; flex-direction: column; }
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+/* 与上方分区拉开距离 */
+.sectionHeadSpaced { margin-top: 24px; }
+
+.sectionLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.sectionCount {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.sectionRule {
+  flex: 1;
+  height: 1px;
+  margin-left: 4px;
+  background: var(--line-soft);
 }
 
 .cell {

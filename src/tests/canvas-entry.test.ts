@@ -21,7 +21,8 @@ import {
   type CanvasNode,
   type Media,
 } from '../services/canvasService'
-import { AssetRuleError } from '../services/assetService'
+import { AssetRuleError, deposit, contributeToPlaza } from '../services/assetService'
+import type { Asset, User } from '../data/types'
 
 /* ── 造一个画布节点的小工具 ── */
 function node(over: Partial<CanvasNode> = {}): CanvasNode {
@@ -37,20 +38,21 @@ describe('入口一 · 出现条件（canUploadToProject）', () => {
     expect(canUploadToProject(node({ status: 'done' }))).toBe(true)
   })
 
-  it('② 文本/视频节点无上传入口，图片/音频有', () => {
+  it('② 四种媒介都可上传（文本/视频进「其他」类目）', () => {
+    // 「其他」类目上线后，成品的文本/视频节点也能右键保存（只能落「其他」）。
     const cases: [Media, boolean][] = [
-      ['text', false],
-      ['video', false],
+      ['text', true],
+      ['video', true],
       ['image', true],
       ['audio', true],
     ]
     for (const [media, expected] of cases) {
       expect(canUploadToProject(node({ media }))).toBe(expected)
     }
-    // 类目映射也对齐：文本/视频落不了任何类目。
-    expect(categoriesForMedia('text')).toHaveLength(0)
-    expect(categoriesForMedia('video')).toHaveLength(0)
-    expect(categoriesForMedia('image')).toEqual(['character', 'costume', 'scene', 'prop'])
+    // 类目映射：图片可落四视觉类目 + 其他；视频/文本只能落其他；音频只落音频。
+    expect(categoriesForMedia('image')).toEqual(['character', 'costume', 'scene', 'prop', 'other'])
+    expect(categoriesForMedia('video')).toEqual(['other'])
+    expect(categoriesForMedia('text')).toEqual(['other'])
     expect(categoriesForMedia('audio')).toEqual(['audio'])
   })
 
@@ -110,9 +112,40 @@ describe('入口一 · 产出意图（saveCanvasNodeToProject 纯函数）', () 
     expect(original.asset.masterId).toBeUndefined() // 原创无血缘
   })
 
-  it('文本/视频节点即使硬调用也被规则挡下', () => {
+  it('文本/视频落非「其他」类目仍被规则挡下（媒介↔类目不相容）', () => {
     expect(() =>
       saveCanvasNodeToProject(node({ media: 'text' }), 'proj_neon', { category: 'scene', mode: 'new', name: 'x' }),
+    ).toThrow(AssetRuleError)
+    expect(() =>
+      saveCanvasNodeToProject(node({ media: 'video' }), 'proj_neon', { category: 'character', mode: 'new', name: 'x' }),
+    ).toThrow(AssetRuleError)
+  })
+
+  it('「其他」：文本落「其他」→ fields 带 media/text；视频 → media/videoUrl；且不支持关联已有', () => {
+    const text = saveCanvasNodeToProject(
+      node({ media: 'text', content: '第一幕台词…', cover: undefined }),
+      'proj_neon',
+      { category: 'other', mode: 'new', name: '台词', extraFields: { media: 'text', text: '第一幕台词…' } },
+    )
+    if (text.kind !== 'add') throw new Error('unreachable')
+    expect(text.asset.category).toBe('other')
+    expect(text.asset.fields.media).toBe('text')
+    expect(text.asset.fields.text).toBe('第一幕台词…')
+
+    const video = saveCanvasNodeToProject(
+      node({ media: 'video', cover: '/poster.png' }),
+      'proj_neon',
+      { category: 'other', mode: 'new', name: '片段', extraFields: { media: 'video', videoUrl: '' } },
+    )
+    if (video.kind !== 'add') throw new Error('unreachable')
+    expect(video.asset.fields.media).toBe('video')
+    expect(video.asset.cover).toBe('/poster.png')
+
+    // 「其他」不支持关联已有（没有子资产概念）。
+    expect(() =>
+      saveCanvasNodeToProject(node({ media: 'image' }), 'proj_neon', {
+        category: 'other', mode: 'link', targetId: 'whatever', name: 'x',
+      }),
     ).toThrow(AssetRuleError)
   })
 
@@ -141,6 +174,26 @@ describe('入口一 · 产出意图（saveCanvasNodeToProject 纯函数）', () 
     expect(teamHasSameName(assets, 'team_a', '苏晚')).toBe(true)
     expect(teamHasSameName(assets, 'team_a', '别的名字')).toBe(false)
     expect(teamHasSameName(assets, 'team_b', '苏晚')).toBe(false) // 别的团队不算
+  })
+})
+
+/* ═══ 「其他」类目流转守卫（服务层挡死，不只靠界面隐藏按钮 · 技术规划 §五）═══ */
+
+describe('「其他」类目不参与向上流转（assetService 守卫）', () => {
+  const owner: User = { id: 'u_owner', name: '主账号', avatar: '', role: 'owner', teamId: 'team_a' }
+  const otherAsset: Asset = {
+    id: 'a_other', category: 'other', name: '分镜图', scope: 'project', scopeId: 'proj_neon',
+    status: 'done', cover: '/board.png', fields: { media: 'image' }, tags: [], createdAt: 0,
+  }
+
+  it('deposit（→ 团队库）对「其他」抛业务错误', () => {
+    expect(() => deposit(otherAsset, 'team_a', owner)).toThrow(AssetRuleError)
+    expect(() => deposit(otherAsset, 'team_a', owner)).toThrow(/团队库/)
+  })
+
+  it('contributeToPlaza（→ 素材广场）对「其他」抛业务错误', () => {
+    expect(() => contributeToPlaza(otherAsset, owner)).toThrow(AssetRuleError)
+    expect(() => contributeToPlaza(otherAsset, owner)).toThrow(/素材广场/)
   })
 })
 

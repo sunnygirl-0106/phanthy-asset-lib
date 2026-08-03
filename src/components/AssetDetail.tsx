@@ -29,9 +29,11 @@ import { PROMPT_CHARACTER } from '../data/seed'
 import styles from './AssetDetail.module.css'
 
 const CATEGORY_LABEL: Record<Category, string> = {
-  character: '角色', costume: '服装', scene: '场景', prop: '道具', audio: '音频',
+  character: '角色', costume: '服装', scene: '场景', prop: '道具', audio: '音频', other: '其他',
 }
 const SCOPE_LABEL = { plaza: '素材广场', team: '团队资产库', project: '项目资产库' }
+/** 「其他」媒介文案（详情大图 cap / 徽章共用）。 */
+const OTHER_MEDIA_LABEL: Record<'image' | 'video' | 'text', string> = { image: '图片', video: '视频', text: '文本' }
 
 // 弹出的"目标选择"面板处于哪种模式
 type PickerMode = 'directReuse' | 'reuse' | 'favorite' | 'contribute' | 'deposit' | 'voice' | null
@@ -65,6 +67,16 @@ function PlaceholderIcon() {
       <rect x="3" y="3" width="18" height="18" rx="2" />
       <circle cx="8.5" cy="8.5" r="1.5" />
       <path d="m21 15-5-5L5 21" />
+    </svg>
+  )
+}
+
+/** 重新生成图标（清空图片确认弹窗用）——一圈带箭头的循环。 */
+function RegenIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+      <path d="M21 3v5h-5" />
     </svg>
   )
 }
@@ -195,6 +207,8 @@ export function AssetDetail({
   const asset = world.assets.find((a) => a.id === assetId)
 
   const [picker, setPicker] = useState<PickerMode>(null)
+  // 删最后一张图的样式化确认弹窗：'whole'=删整份资产（团队/广场），'clear'=清空图片保留提示词（项目）
+  const [confirmKind, setConfirmKind] = useState<'whole' | 'clear' | null>(null)
   const [result, setResult] = useState<ActionResult | null>(null)
   const [renameResult, setRenameResult] = useState<ActionResult | null>(null)
   const [renaming, setRenaming] = useState(false)
@@ -246,6 +260,11 @@ export function AssetDetail({
   const canEditCover = hasLooks && asset.scope !== 'plaza' && !isAdmin(user)
   // 素模是否正在作为封面：cover 为空（回落到 baseModel）或显式等于 baseModel 时成立
   const isBaseModelCover = !asset.cover || asset.cover === (asset.baseModel ?? '')
+
+  // 「其他」类目（创作留存物）走精简模式：无素模/造型/音色/提示词、不向上流转、删除即直删。
+  // 用它把下面一堆区块条件渲染掉，不新写组件。媒介（图/视频/文本）由 fields.media 决定怎么渲染。
+  const isOther = asset.category === 'other'
+  const otherMedia = isOther ? ((asset.fields.media as 'image' | 'video' | 'text' | undefined) ?? 'image') : null
 
   // 能不能改这份资产的音色：只有"角色"有音色；广场官方素材不可编辑；admin 只治理不创作。
   const isCharacter = asset.category === 'character'
@@ -310,25 +329,60 @@ export function AssetDetail({
 
   // 封面大图垃圾桶的统一入口（R1/R2）：按当前态分流。
   function deleteCoverImage() {
-    // 空壳整删 / 广场下架 / 删投稿 —— 维持现状。
-    if (isEmpty || canRemovePlaza) return deleteWholeAsset()
+    // 空壳整删：没有图可删，直接删掉空壳，无需确认。
+    if (isEmpty) return deleteWholeAsset()
+    // 「其他」类目（§3.4）：没有提示词、不能重新生成，删除就是删除——直接从项目库移除，不留空壳。
+    if (isOther) return setConfirmKind('whole')
+    // 广场下架：删封面即下架整份资产 → 弹危险确认（连同提示词一并删除）。
+    if (canRemovePlaza) return setConfirmKind('whole')
     // 大图正显示某套造型（它恰好被设为封面）：删这张造型，removeLook 会自动把封面回落到剩余图或素模。
     if (imageCount > 1 && coverLook) return setResult(runDeleteLook(asset!.id, coverLook.id))
-    // 大图是「最后一张图」→ 归零分流。
-    deleteLastImage()
+    // 大图是「最后一张图」→ 归零分流：团队删整份资产，项目仅清空图片。
+    if (asset!.scope === 'team') setConfirmKind('whole')
+    else if (asset!.scope === 'project') setConfirmKind('clear')
   }
 
-  // 归零分流（R1）：删掉最后一张图时按层走不同后果。demo 用 window.confirm 即可，不做样式化弹窗。
-  function deleteLastImage() {
-    if (asset!.scope === 'team') {
-      if (!window.confirm('这是该资产的最后一张图片，继续将删除整个资产，提示词会一并删除。')) return
-      const r = runDeleteAsset(asset!.id)
-      setResult(r)
-      if (r.ok) onClose?.()
-    } else if (asset!.scope === 'project') {
-      if (!window.confirm('图片将清空，提示词会保留，你可以随时重新生成。')) return
-      setResult(clearAssetImages(asset!.id))
-    }
+  // 归零确认弹窗点「确定」后的真正落库动作（R1）。
+  function runConfirmedDelete() {
+    if (confirmKind === 'whole') deleteWholeAsset()
+    else if (confirmKind === 'clear') setResult(clearAssetImages(asset!.id))
+    setConfirmKind(null)
+  }
+
+  /**
+   * 删最后一张图的样式化确认弹窗（替代原生 window.confirm）。
+   * 两种后果各配一套图标 / 文案 / 主按钮配色，视觉沿用 msubroot 居中浮层。
+   */
+  function renderDeleteConfirm() {
+    if (!confirmKind) return null
+    const isWhole = confirmKind === 'whole'
+    return (
+      <div className={styles.msubroot}>
+        <div className={styles.sscrim} onClick={() => setConfirmKind(null)} />
+        <div className={styles.confirmCard}>
+          <div className={`${styles.confirmIcon} ${isWhole ? styles.confirmIconDanger : styles.confirmIconAccent}`}>
+            {isWhole ? <TrashIcon /> : <RegenIcon />}
+          </div>
+          <h4 className={styles.confirmTitle}>{isWhole ? '删除整个资产？' : '清空全部图片？'}</h4>
+          <p className={styles.confirmBody}>
+            {isOther
+              ? '「其他」是存进来的创作留存物，删除后将直接从项目库移除，无法恢复。'
+              : isWhole
+                ? '这是最后一张图片，删除后整份资产将被移除，关联的提示词也会一并删除，且无法恢复。'
+                : '图片会被全部清空，但提示词会保留，你可以随时用它重新生成。'}
+          </p>
+          <div className={styles.confirmActions}>
+            <button className={styles.btnGhost} onClick={() => setConfirmKind(null)}>取消</button>
+            <button
+              className={`${styles.btn} ${isWhole ? styles.btnDanger : styles.btnPri}`}
+              onClick={runConfirmedDelete}
+            >
+              {isWhole ? '删除资产' : '清空图片'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   function openPicker(mode: Exclude<PickerMode, null>) {
@@ -510,8 +564,9 @@ export function AssetDetail({
           <button className={`${styles.btn} ${styles.btnLead}`} onClick={() => openPicker('reuse')}>复用到项目</button>
         )}
         {/* 存入团队库：角色要先勾选带哪些造型（素模必带、默认全勾）；非角色直接存入。
-            同名先挡（v5 改动1/2）：团队库已有同名时不进造型勾选面板，直接提示改名。*/}
-        {asset!.scope === 'project' && (
+            同名先挡（v5 改动1/2）：团队库已有同名时不进造型勾选面板，直接提示改名。
+            「其他」类目不参与向上流转，隐藏此按钮（服务层也已挡死）。*/}
+        {asset!.scope === 'project' && !isOther && (
           <button
             className={`${styles.btn} ${styles.btnLead}`}
             onClick={() => {
@@ -528,8 +583,9 @@ export function AssetDetail({
           </button>
         )}
         {/* 贡献到广场（v6 scope-aware）：主账号团队库/项目库都能投；子账号仅项目库——
-            团队库详情页对子账号不出现此按钮。审核方是 admin。角色要先勾选带哪些造型（素模必带）。*/}
-        {(asset!.scope === 'team' || asset!.scope === 'project') && canContributeToPlaza(user, asset!) && (
+            团队库详情页对子账号不出现此按钮。审核方是 admin。角色要先勾选带哪些造型（素模必带）。
+            「其他」类目不参与向上流转，隐藏此按钮（服务层也已挡死）。*/}
+        {(asset!.scope === 'team' || asset!.scope === 'project') && !isOther && canContributeToPlaza(user, asset!) && (
           <button
             className={styles.btn}
             onClick={() => {
@@ -912,27 +968,51 @@ export function AssetDetail({
                     <PlaceholderIcon />
                     <span>待生成 · 点提示词可重新生成</span>
                   </div>
+                ) : isOther && otherMedia === 'text' ? (
+                  // 「其他」文本：左栏不放图，直接铺正文全文（可滚动）。
+                  <div className={styles.otherTextBig}>{(asset.fields.text as string) || '（暂无正文）'}</div>
                 ) : (
-                  <img src={coverImg} alt={coverName} />
+                  // 图片 / 视频（含「其他」视频）：大图；视频叠一个「播放器占位」的中央播放三角。
+                  <div className={styles.bigMediaWrap}>
+                    <img src={coverImg} alt={coverName} />
+                    {isOther && otherMedia === 'video' && (
+                      <div className={styles.videoPlayBig} title="视频播放器占位（本期不接真实播放）" aria-hidden>▶</div>
+                    )}
+                  </div>
                 )}
-                <span className={styles.cap}>{isEmpty ? '空壳' : coverName}</span>
-                {!isEmpty && (
+                <span className={styles.cap}>{isEmpty ? '空壳' : isOther ? OTHER_MEDIA_LABEL[otherMedia!] : coverName}</span>
+                {!isEmpty && (isOther && otherMedia === 'text' ? (
+                  // 文本类只留「复制全文」（无图可放大 / 下载）。
+                  <div className={`${styles.thumbIcons} ${showCoverTrash ? styles.thumbIconsShifted : ''}`}>
+                    <button
+                      className={styles.thumbBtn}
+                      title="复制全文"
+                      onClick={() => {
+                        navigator.clipboard?.writeText((asset.fields.text as string) || '')
+                        setResult({ ok: true, message: '已复制全文到剪贴板' })
+                      }}
+                    >
+                      <PromptIcon />
+                    </button>
+                  </div>
+                ) : (
                   <div className={`${styles.thumbIcons} ${showCoverTrash ? styles.thumbIconsShifted : ''}`}>
                     <button className={styles.thumbBtn} title="放大查看" onClick={() => setPreview({ src: coverImg, name: coverName })}><ZoomIcon /></button>
                     <button className={styles.thumbBtn} title="下载原图" onClick={() => downloadImage(coverImg, `${asset.name}·${coverName}`)}><DownloadIcon /></button>
                   </div>
-                )}
+                ))}
                 {showCoverTrash && (
                   <button
                     type="button"
                     className={styles.cardDelete}
-                    title={coverTrashTitle}
+                    title={isOther ? '删除该留存物' : coverTrashTitle}
                     onClick={deleteCoverImage}
                   >
                     <TrashIcon />
                   </button>
                 )}
-                {canViewPrompt(asset) && (
+                {/* 「其他」是存进来的成品、不由提示词生成，隐藏提示词入口 */}
+                {canViewPrompt(asset) && !isOther && (
                   <button className={styles.promptBadge} title="查看提示词" onClick={() => openPrompt(coverPromptTarget)}>
                     <PromptIcon />
                   </button>
@@ -979,6 +1059,8 @@ export function AssetDetail({
           </div>
 
           <div className={styles.mright}>
+            {/* 「其他」类目不套用素模/造型结构，整块「其他造型/样式」网格隐藏。 */}
+            {!isOther && (
             <>
                 <p className={styles.secT}>{stylesLabel} <span className={styles.cnt}>（{asset.looks?.length ?? 0}）</span></p>
                 {hasLooks && <p className={styles.secD}>选一张作为封面</p>}
@@ -1039,6 +1121,15 @@ export function AssetDetail({
                   )}
                 </div>
               </>
+            )}
+
+            {/* 「其他」右栏：一句说明，替代造型网格，讲清它是另一层东西 */}
+            {isOther && (
+              <p className={styles.secD}>
+                「其他」是创作过程的留存物（分镜 / 视频片段 / 台词），仅存在于本项目、随时拖回画布，
+                不沉淀到团队库、不贡献到广场，也没有素模 / 造型 / 音色。
+              </p>
+            )}
 
             {/* 说明 / 治理 / 结果：随场景出现，逻辑与原来一致 */}
             <div className={styles.mfoot}>
@@ -1058,6 +1149,8 @@ export function AssetDetail({
         {renderPicker()}
         {/* 提示词子面板（v6）：查看 / 复制 / 重新生成 / 新增造型 */}
         {renderPromptPanel()}
+        {/* 删最后一张图的样式化确认弹窗（团队/广场删整份 · 项目清空图片） */}
+        {renderDeleteConfirm()}
       </div>
       {/* 放大查看灯箱：盖在整扇弹窗之上（挂在 .modal 外，避开其 overflow:hidden） */}
       {renderLightbox()}

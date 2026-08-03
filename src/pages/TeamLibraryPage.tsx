@@ -51,7 +51,8 @@ export function TeamLibraryPage() {
 
   // 每个类目的真实数量（边栏角标）。
   const counts = useMemo(() => {
-    const m: Record<Category, number> = { character: 0, costume: 0, scene: 0, prop: 0, audio: 0 }
+    // 团队库不含「其他」类目（other 仅存在于项目库），但 Record 需覆盖全部 Category 键。
+    const m: Record<Category, number> = { character: 0, costume: 0, scene: 0, prop: 0, audio: 0, other: 0 }
     for (const a of teamAssets) m[a.category]++
     return m
   }, [teamAssets])

@@ -37,9 +37,14 @@ export type Role = 'admin' | 'owner' | 'sub'
  */
 export type Scope = 'plaza' | 'team' | 'project'
 
-/** 资产类目：用户可见的 5 类。三层库的类目和字段完全一致。 */
-export type Category = 'character' | 'costume' | 'scene' | 'prop' | 'audio'
-//                      角色         服装         场景       道具     音频
+/**
+ * 资产类目：前 5 类是可复用的「生产要素」，三层库的类目和字段完全一致。
+ * 第 6 类 'other'（其他）是另一层东西——创作过程的留存物（分镜图 / 视频片段 / 剧本文本），
+ * 只存在于项目资产库，不参与向上流转（不能沉淀到团队库、不能贡献到广场），
+ * 也不套用前五类的素模 / 造型 / 音色结构。详见 canvasService / assetService 的守卫。
+ */
+export type Category = 'character' | 'costume' | 'scene' | 'prop' | 'audio' | 'other'
+//                      角色         服装         场景       道具     音频      其他
 
 /** 音色来源：预置库挑的，还是用户复刻的。 */
 export type VoiceType = 'preset' | 'cloned'
@@ -144,6 +149,17 @@ export interface AssetFields {
   gender?: string
   age?: string
   style?: string
+  /**
+   * 「其他」类目（category==='other'）专用，标记这一份到底是图 / 视频 / 文本 / 音频，决定卡片与详情怎么渲染：
+   *   · media==='image'：cover 存图片地址（与前五类一致）。
+   *   · media==='video'：cover 存视频首帧/海报图，videoUrl 存可播放视频源（demo 可空串占位）。
+   *   · media==='text' ：cover 留空，text 存正文；卡片渲染文字预览块，不出现裂图。
+   *   · media==='audio'：cover 留空，audioUrl/duration 存音源与时长；走音频条状列表（AudioList），不进网格。
+   * 沿用音频把 audioUrl/duration 塞进 fields 的做法，不动 Asset 顶层结构。
+   */
+  media?: 'image' | 'video' | 'text' | 'audio'
+  videoUrl?: string
+  text?: string
   [key: string]: unknown
 }
 

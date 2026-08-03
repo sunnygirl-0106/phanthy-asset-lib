@@ -110,22 +110,26 @@ export function CanvasShell({
   }
 
   /* ── 加一个新节点 ──
-   * 图片 / 音频节点直接给占位内容、置为"成品"，右键第一栏即可「保存到资产库」（对齐演示动线：
-   *   图片走保存弹窗、音频走 R4 的「音频素材 / 角色音色」二选一弹窗）；
-   * 文本 / 视频仍是"生成中"，需右键"标记为成品"后才可上传（沿用原规则，不擅自改动）。 */
+   * 四种媒介都直接给占位内容、置为"成品"，右键第一栏即可「保存到资产库」：
+   *   · 图片 → 保存弹窗（角色/服装/场景/道具/其他）
+   *   · 音频 → R4 的「音频素材 / 角色音色」二选一弹窗
+   *   · 视频 / 文本 → 保存弹窗，只能落「其他」类目（分镜片段 / 剧本台词）。
+   * 视频给一张占位海报当封面（videoUrl 本期留空占位），文本给一段占位正文。 */
   function addNode(media: Media) {
     const isImage = media === 'image'
     const isAudio = media === 'audio'
+    const isVideo = media === 'video'
     const n: Node = {
       id: nextId('node'),
       media,
-      status: isImage || isAudio ? 'done' : 'generating',
+      status: 'done',
       x: 60 + (nodes.length % 5) * 40,
       y: 60 + (nodes.length % 5) * 40,
       name: `新${media === 'text' ? '文本' : media === 'image' ? '图片' : media === 'video' ? '视频' : '音频'}`,
-      cover: isImage ? PLACEHOLDER_POOL[nodes.length % PLACEHOLDER_POOL.length] : undefined,
-      // 音频节点带上可试听的占位音源（存库 / 设音色都靠它）；文本节点给一段占位文字。
-      content: media === 'text' ? '在这里写提示词 / 描述…' : isAudio ? AUDIO_PLACEHOLDER_SRC : undefined,
+      // 图片 / 视频都要封面：图片用人像占位，视频用一张占位海报（首帧）。
+      cover: isImage || isVideo ? PLACEHOLDER_POOL[nodes.length % PLACEHOLDER_POOL.length] : undefined,
+      // 音频节点带可试听音源；文本节点给占位正文；视频节点 content 作视频源、本期留空占位。
+      content: media === 'text' ? '在这里写提示词 / 描述…' : isAudio ? AUDIO_PLACEHOLDER_SRC : isVideo ? '' : undefined,
     }
     setNodes((prev) => [...prev, n])
     setSelectedId(n.id)
@@ -205,6 +209,19 @@ export function CanvasShell({
     setAudioNode(null)
   }
 
+  /**
+   * 入口一的统一分流（R4）：音频节点走「音频素材 / 角色音色」二选一弹窗；
+   * 其它媒介（图片 / 视频 / 文本）走「保存到资产库」弹窗。
+   *
+   * 右键菜单与节点上的「上传」按钮共用这一个口子——此前上传按钮直接开
+   * UploadToLibraryModal，音频节点进去后五个类目瓷砖全是灰的（音频不在瓷砖里、
+   * 也不允许落「其他」），是一个死路。分流收在一处后两个入口行为一致。
+   */
+  function openSaveFor(node: Node) {
+    if (node.media === 'audio') setAudioNode(node)
+    else setUploadNode(node)
+  }
+
   function toggleFlyout(which: Exclude<Flyout, null>) {
     setFlyout((v) => (v === which ? null : which))
   }
@@ -242,7 +259,7 @@ export function CanvasShell({
             setFlyout(null)
           }}
           onNodeMove={moveNode}
-          onNodeUpload={(node) => setUploadNode(node)}
+          onNodeUpload={openSaveFor}
           onNodePreview={(node) => setPreviewNode(node)}
           onNodeContextMenu={(node, x, y) => setMenu({ node, x, y })}
           onDropAsset={onDropAsset}
@@ -292,9 +309,7 @@ export function CanvasShell({
           x={menu.x}
           y={menu.y}
           onSave={() => {
-            // 音频节点走用途二选一弹窗（R4）；图片等其它媒介仍走原「保存到资产库」弹窗。
-            if (menu.node.media === 'audio') setAudioNode(menu.node)
-            else setUploadNode(menu.node)
+            openSaveFor(menu.node)
             setMenu(null)
           }}
           onDelete={() => deleteNode(menu.node.id)}

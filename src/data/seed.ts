@@ -35,6 +35,7 @@ const PROMPT_BY_CATEGORY: Record<Category, string> = {
   scene: PROMPT_SCENE,
   prop: PROMPT_PROP,
   audio: '',
+  other: '', // 「其他」是存进来的成品留存物，不由提示词生成，给空串。
 }
 
 /* ─── 账号 / 团队 / 项目 id 常量（集中定义，避免裸字符串写错）─── */
@@ -92,6 +93,43 @@ function audioAsset(
     fields: { duration, audioUrl: AUDIO_SRC[srcIdx % AUDIO_SRC.length] },
   })
 }
+
+/* ─── 「其他」类目小助手（仅项目库）─────────────────────────────────────────
+ * 创作过程的留存物（分镜图 / 视频片段 / 剧本文本 / 音频片段），媒介写进 fields.media：
+ *   · image：coverOrSrc 是图片地址；
+ *   · video：coverOrSrc 是首帧/海报图（videoUrl 本期留空占位）；
+ *   · text ：coverOrSrc 是正文（无封面，卡片渲染文字预览）；
+ *   · audio：coverOrSrc 是音源地址（无封面，走 AudioList 条状列表）。 */
+function otherAsset(
+  id: string, name: string, scopeId: string,
+  media: 'image' | 'video' | 'text' | 'audio', coverOrSrc: string, duration?: string,
+): Asset {
+  const noCover = media === 'text' || media === 'audio'
+  const dur = duration ? { duration } : {}
+  return asset({
+    id, category: 'other', name, scope: 'project', scopeId,
+    cover: noCover ? '' : coverOrSrc,
+    fields:
+      media === 'text'
+        ? { media, text: coverOrSrc }
+        : media === 'video'
+          ? { media, videoUrl: '', ...dur }
+          : media === 'audio'
+            ? { media, audioUrl: coverOrSrc, ...dur }
+            : { media },
+  })
+}
+
+/** 演示用剧本正文（约 200 字），给「第一幕剧本·雨夜追踪」这份文本类「其他」资产。 */
+const SCRIPT_RAINY_CHASE = `【第一幕 · 雨夜追踪】
+
+雨点砸在霓虹招牌上，碎成一片猩红。阿杰压低帽檐，贴着湿冷的墙根疾行，身后的脚步声始终不远不近。
+
+他猛地拐进一条死巷，back 抵住铁皮门，屏住呼吸。水顺着发梢往下淌，视网膜投影里，目标的信号正一点点逼近。
+
+"你躲不掉的。" 追踪者的声音混在雨声里，冷得像刀。
+
+阿杰的手指扣上腰间的全息手环——只剩最后一次机会。他数到三，翻身撞开生锈的卷帘门，冲进了更深的黑暗。`
 
 export function createSeedWorld(): World {
   /* ── 用户（头像用真实图）── */
@@ -231,6 +269,14 @@ export function createSeedWorld(): World {
         asset({ id: 'a_mech_prosthetic_look1', category: 'prop', name: '机械义肢·全息版', scope: 'project', scopeId: IDS.projNeon, cover: `${IMG}/plaza-shelf/holographic_bracelet_prop.png` }),
       ],
     }),
+    // 【项目·霓虹东京 · 其他】创作留存物：图片 / 视频 / 文本 / 音频四种媒介都覆盖，仅存本项目、不沉淀。
+    otherAsset('a_other_mission', '任务线·九宫格分镜', IDS.projNeon, 'image', `${IMG}/proj-neon-tokyo/mission_storyboard_other.png`),
+    otherAsset('a_other_plot', '完整情节故事板', IDS.projNeon, 'image', `${IMG}/proj-neon-tokyo/full_plot_board_other.png`),
+    otherAsset('a_other_rainy', '雨夜街头·分镜片段', IDS.projNeon, 'video', `${IMG}/proj-neon-tokyo/rainy_street_storyboard_other.png`, '0:12'),
+    otherAsset('a_other_script', '第一幕剧本·雨夜追踪', IDS.projNeon, 'text', SCRIPT_RAINY_CHASE),
+    // 音频示意两条（复用预置音源占位，可真的点开试听）。
+    otherAsset('a_other_bgm1', '雨夜追逐·配乐草稿', IDS.projNeon, 'audio', AUDIO_SRC[1], '0:48'),
+    otherAsset('a_other_vo1', '第一幕·旁白录音', IDS.projNeon, 'audio', AUDIO_SRC[0], '0:36'),
 
     /* 【项目·山海志 3】（团队A）*/
     asset({

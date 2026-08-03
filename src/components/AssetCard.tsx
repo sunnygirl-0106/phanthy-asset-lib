@@ -21,6 +21,14 @@ const CATEGORY_LABEL: Record<Category, string> = {
   scene: '场景',
   prop: '道具',
   audio: '音频',
+  other: '其他',
+}
+
+/** 「其他」类目媒介 → 卡片左上角的媒介小徽章文案。 */
+const MEDIA_LABEL: Record<'image' | 'video' | 'text', string> = {
+  image: '图片',
+  video: '视频',
+  text: '文本',
 }
 
 export function AssetCard({
@@ -51,6 +59,12 @@ export function AssetCard({
   const lookCount = asset.category === 'character' ? (asset.looks?.length ?? 0) + 1 : 0
   const multiLook = lookCount >= 2
 
+  // 「其他」类目：按 fields.media 分三种渲染（图片 / 视频 / 文本），并在左上角打一个媒介徽章。
+  const otherMedia = asset.category === 'other' ? (asset.fields.media as 'image' | 'video' | 'text' | undefined) ?? 'image' : null
+  const isText = otherMedia === 'text'
+  const isVideo = otherMedia === 'video'
+  const duration = asset.fields.duration as string | undefined
+
   const cursor = draggable ? 'grab' : onClick ? 'pointer' : undefined
 
   return (
@@ -71,13 +85,27 @@ export function AssetCard({
           <EmptyGlyph />
           <span>待生成</span>
         </div>
+      ) : isText ? (
+        // 「其他」文本：不放图，卡面渲染深色底 + 正文预览（多行截断），避免裂图。
+        <div className={styles.textCard}>
+          <p className={styles.textPreview}>{(asset.fields.text as string) || '（暂无正文）'}</p>
+        </div>
       ) : (
         <img className={styles.cover} src={coverOf(asset)} alt={asset.name} loading="lazy" />
       )}
 
-      {/* 左上角徽章：副本血缘 / 非成品状态 */}
-      {(asset.masterId || asset.status !== 'done') && (
+      {/* 「其他」视频：中央半透明播放三角 + 右下角时长（若有） */}
+      {isVideo && asset.status !== 'empty' && (
+        <>
+          <div className={styles.playGlyph} aria-hidden>▶</div>
+          {duration && <span className={styles.videoDur}>{duration}</span>}
+        </>
+      )}
+
+      {/* 左上角徽章：媒介（其他）/ 副本血缘 / 非成品状态 */}
+      {(otherMedia || asset.masterId || asset.status !== 'done') && (
         <div className={styles.badges}>
+          {otherMedia && <span className={`${styles.badge} ${styles.badgeMedia}`}>{MEDIA_LABEL[otherMedia]}</span>}
           {asset.masterId && <span className={`${styles.badge} ${styles.badgeCopy}`}>副本</span>}
           {asset.status !== 'done' && <span className={styles.badge}>{statusLabel(asset.status)}</span>}
         </div>

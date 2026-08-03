@@ -18,7 +18,7 @@
  *   · 从本项目库拖上来的节点 → 已经是项目资产，不再给"上传"入口。
  * ─────────────────────────────────────────────────────────────────────── */
 
-import type { Asset, Category } from '../data/types'
+import type { Asset, AssetFields, Category } from '../data/types'
 import { AssetRuleError } from './assetService'
 
 /** 媒介 = 画布节点类型（与类目正交）。 */
@@ -46,11 +46,18 @@ export interface CanvasNode {
   source?: NodeSource // 有 = 从库里拖来的；无 = 新生成
 }
 
-/** 一个媒介能上传成哪些类目（技术规划 §2.1）。文本/视频不入库 → 空数组。 */
+/**
+ * 一个媒介能上传成哪些类目（技术规划 §2.1 + 「其他」类目）。
+ *   · 图片：前五类里的四个视觉类目，外加「其他」（分镜图等留存物）。
+ *   · 音频：只落音频。
+ *   · 视频 / 文本：不套用前五类结构，只能落「其他」（分镜片段 / 剧本台词）。
+ */
 export function categoriesForMedia(media: Media): Category[] {
-  if (media === 'image') return ['character', 'costume', 'scene', 'prop']
+  if (media === 'image') return ['character', 'costume', 'scene', 'prop', 'other']
   if (media === 'audio') return ['audio']
-  return [] // 文本 / 视频不入库
+  if (media === 'video') return ['other']
+  if (media === 'text') return ['other']
+  return []
 }
 
 /**
@@ -75,9 +82,12 @@ export function canUploadToProject(node: CanvasNode): boolean {
  */
 export type SaveSpec =
   // 新建：任意类目直接成一份新的顶层资产
-  | { category: Category; mode: 'new'; name: string }
+  | { category: Category; mode: 'new'; name: string; extraFields?: AssetFields }
   // 关联已有：挂到某个已有同类资产（targetId）下，作为它的一张子资产
-  | { category: Category; mode: 'link'; targetId: string; name: string }
+  | { category: Category; mode: 'link'; targetId: string; name: string; extraFields?: AssetFields }
+
+// extraFields（可选透传）：「其他」类目落库时把媒介信息（media / videoUrl / text）
+// 直接写进产出资产的 fields，避免落库后再补一次更新（技术规划 §4.2）。
 
 /**
  * 上传的产出意图。「关联已有」不是新增一份顶层资产，
@@ -141,9 +151,14 @@ export function saveCanvasNodeToProject(
     throw new AssetRuleError('音频不支持「关联已有」，请作为音频素材新建。')
   }
 
+  // 「其他」是存进来的成品留存物、没有子资产概念（§4.3）：只支持「新建」，不支持「关联已有」。
+  if (spec.category === 'other' && spec.mode === 'link') {
+    throw new AssetRuleError('「其他」类目不支持关联到已有资产。')
+  }
+
   // 关联已有：把这张图/这段音挂到某个已有同类资产下，作为它的一张子资产（变体/造型）。
   if (spec.mode === 'link') {
-    const child = buildProjectAsset(node, projectId, spec.category, spec.name)
+    const child = buildProjectAsset(node, projectId, spec.category, spec.name, mergeExtraFields(spec))
     return { kind: 'link', parentId: spec.targetId, child }
   }
 
@@ -151,8 +166,16 @@ export function saveCanvasNodeToProject(
   const extra: Partial<Asset> = spec.category === 'character' ? { baseModel: node.cover ?? '' } : {}
   // 音频资产：把节点音源存进 fields.audioUrl，库里的音频行才能试听（AudioList 读的就是它）。
   if (node.media === 'audio') extra.fields = { ...extra.fields, audioUrl: node.content ?? '' }
-  const asset = buildProjectAsset(node, projectId, spec.category, spec.name, extra)
+  // 「其他」及任意带 extraFields 的规格：把媒介信息（media / videoUrl / text）合并进 fields。
+  const withExtra = mergeExtraFields(spec, extra)
+  const asset = buildProjectAsset(node, projectId, spec.category, spec.name, withExtra)
   return { kind: 'add', asset }
+}
+
+/** 把 spec.extraFields 合并进 extra.fields（不覆盖已由媒介逻辑写入的键，如音频 audioUrl）。 */
+function mergeExtraFields(spec: SaveSpec, extra: Partial<Asset> = {}): Partial<Asset> {
+  if (!spec.extraFields) return extra
+  return { ...extra, fields: { ...spec.extraFields, ...extra.fields } }
 }
 
 /**
