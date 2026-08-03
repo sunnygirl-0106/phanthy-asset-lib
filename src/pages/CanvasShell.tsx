@@ -7,22 +7,20 @@
  *
  * 画布 = 草稿台（技术规划 §2、红线 3）：拖到画布不入库、不产副本；右键成品节点才上传。
  * 两入口不变：
- *   · 入口一：右键成品图片/音频节点 →「上传到项目资产库」→ UploadToLibraryModal → runSaveToProject
+ *   · 入口一：右键成品节点 →「保存到资产库」→ SaveToLibraryModal（统一弹窗）→ runSaveToProject / setVoice
  *   · 入口二：资产面板三层可拖 → 拖到 CanvasStage → 造一个带来源的节点
  */
 
 import { useRef, useState } from 'react'
 import type { Route } from '../hooks/useHashRoute'
-import type { Media, CanvasNode as Node, SaveSpec } from '../services/canvasService'
-import type { Voice } from '../data/types'
+import type { Media, CanvasNode as Node } from '../services/canvasService'
 import { useStore, useCurrentUser } from '../store/useStore'
 import { getProject, getTeam, canSeeProjectAssets } from '../services/permission'
 import { CanvasStage } from '../components/canvas/CanvasStage'
 import { CanvasSidebar } from '../components/canvas/CanvasSidebar'
 import { CanvasAssetPanel, type DragPayload } from '../components/canvas/CanvasAssetPanel'
 import { NodeContextMenu } from '../components/canvas/NodeContextMenu'
-import { UploadToLibraryModal } from '../components/UploadToLibraryModal'
-import { SaveAudioModal } from '../components/SaveAudioModal'
+import { SaveToLibraryModal, type SaveIntent } from '../components/SaveToLibraryModal'
 import { assetUrl } from '../utils/assets'
 import styles from './CanvasShell.module.css'
 
@@ -75,8 +73,8 @@ export function CanvasShell({
   const [nodes, setNodes] = useState<Node[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [menu, setMenu] = useState<{ node: Node; x: number; y: number } | null>(null)
-  const [uploadNode, setUploadNode] = useState<Node | null>(null)
-  const [audioNode, setAudioNode] = useState<Node | null>(null)
+  // 统一保存弹窗（方案二）：不再按媒介分流成 uploadNode / audioNode 两个 state。
+  const [saveNode, setSaveNode] = useState<Node | null>(null)
   const [previewNode, setPreviewNode] = useState<Node | null>(null)
   const [flyout, setFlyout] = useState<Flyout>(null)
   const [zoom, setZoom] = useState(100)
@@ -171,55 +169,44 @@ export function CanvasShell({
     setMenu(null)
   }
 
-  /* ── 入口一：确认上传 → 调 store.runSaveToProject ── */
-  function confirmUpload(spec: SaveSpec) {
-    if (!uploadNode) return
-    const r = runSaveToProject(uploadNode, pid, spec)
+  /**
+   * 入口一（统一保存弹窗，方案二）：按 intent.kind 分派——
+   *   · asset → runSaveToProject（图片/视频/文本/音频素材落项目库，成功后展开资产库面板）
+   *   · voice → setVoice（角色音色挂到角色身上，不产生 audio 资产）
+   * 两条老路径（confirmUpload / confirmSaveAudioAsset / confirmSetVoice）的行为原样合并到这里。
+   */
+  function confirmSave(intent: SaveIntent) {
+    if (!saveNode) return
+
+    // 角色音色：setVoice 落到该角色，不产生资产（原样保留 confirmSetVoice 的行为，不展开面板）。
+    if (intent.kind === 'voice') {
+      setVoice(intent.roleId, intent.voice)
+      const role = projectCharacters.find((c) => c.id === intent.roleId)
+      showToast(true, `已设为「${role?.name ?? '角色'}」的音色，复刻将在接入语音模型后生效`)
+      setSaveNode(null)
+      return
+    }
+
+    // 资产：落项目库。
+    const r = runSaveToProject(saveNode, pid, intent.spec)
     showToast(r.ok, r.message)
     if (r.ok) {
       // 上传成功后，这个节点已经是项目资产了 → 标记来源为 project，右键不再给"上传"入口。
       setNodes((prev) =>
-        prev.map((n) => (n.id === uploadNode.id ? { ...n, source: { scope: 'project', assetId: 'uploaded' } } : n)),
+        prev.map((n) => (n.id === saveNode.id ? { ...n, source: { scope: 'project', assetId: 'uploaded' } } : n)),
       )
       // 展开左侧资产库面板（默认落在"项目库"）→ 让刚上传的资产当场出现在库里（演示流转）。
       setFlyout('folder')
     }
-    setUploadNode(null)
-  }
-
-  /* ── 入口一 · 音频（R4 ①）：存为音频素材 → 落项目库 audio 类目（可选带 roleId）── */
-  function confirmSaveAudioAsset(spec: SaveSpec) {
-    if (!audioNode) return
-    const r = runSaveToProject(audioNode, pid, spec)
-    showToast(r.ok, r.message)
-    if (r.ok) {
-      setNodes((prev) =>
-        prev.map((n) => (n.id === audioNode.id ? { ...n, source: { scope: 'project', assetId: 'uploaded' } } : n)),
-      )
-      setFlyout('folder') // 展开资产库面板，让刚存的音频当场出现在库里
-    }
-    setAudioNode(null)
-  }
-
-  /* ── 入口一 · 音频（R4 ②）：设为角色音色 → setVoice 落到该角色，不产生 audio 资产 ── */
-  function confirmSetVoice(roleId: string, voice: Voice) {
-    setVoice(roleId, voice)
-    const role = projectCharacters.find((c) => c.id === roleId)
-    showToast(true, `已设为「${role?.name ?? '角色'}」的音色，复刻将在接入语音模型后生效`)
-    setAudioNode(null)
+    setSaveNode(null)
   }
 
   /**
-   * 入口一的统一分流（R4）：音频节点走「音频素材 / 角色音色」二选一弹窗；
-   * 其它媒介（图片 / 视频 / 文本）走「保存到资产库」弹窗。
-   *
-   * 右键菜单与节点上的「上传」按钮共用这一个口子——此前上传按钮直接开
-   * UploadToLibraryModal，音频节点进去后五个类目瓷砖全是灰的（音频不在瓷砖里、
-   * 也不允许落「其他」），是一个死路。分流收在一处后两个入口行为一致。
+   * 入口一的统一入口（方案二）：不再按媒介分流——右键菜单与节点上的「上传」按钮
+   * 共用这一个口子，四种媒介都进同一个 SaveToLibraryModal。
    */
   function openSaveFor(node: Node) {
-    if (node.media === 'audio') setAudioNode(node)
-    else setUploadNode(node)
+    setSaveNode(node)
   }
 
   function toggleFlyout(which: Exclude<Flyout, null>) {
@@ -317,24 +304,14 @@ export function CanvasShell({
         />
       )}
 
-      {/* 上传弹窗（入口一 · 图片等） */}
-      {uploadNode && (
-        <UploadToLibraryModal
-          node={uploadNode}
+      {/* 统一保存弹窗（入口一 · 方案二）：四种媒介共用，名称 + 去处瓷砖 + 挂载目标 */}
+      {saveNode && (
+        <SaveToLibraryModal
+          node={saveNode}
           projectAssets={projectAssets}
-          onConfirm={confirmUpload}
-          onClose={() => setUploadNode(null)}
-        />
-      )}
-
-      {/* 音频保存弹窗（入口一 · 音频 · R4：音频素材 / 角色音色 二选一） */}
-      {audioNode && (
-        <SaveAudioModal
-          node={audioNode}
           characters={projectCharacters}
-          onSaveAsset={confirmSaveAudioAsset}
-          onSetVoice={confirmSetVoice}
-          onClose={() => setAudioNode(null)}
+          onConfirm={confirmSave}
+          onClose={() => setSaveNode(null)}
         />
       )}
 

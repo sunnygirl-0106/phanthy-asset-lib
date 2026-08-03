@@ -16,6 +16,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import {
   canUploadToProject,
   categoriesForMedia,
+  destinationsForMedia,
   saveCanvasNodeToProject,
   teamHasSameName,
   type CanvasNode,
@@ -54,6 +55,19 @@ describe('入口一 · 出现条件（canUploadToProject）', () => {
     expect(categoriesForMedia('video')).toEqual(['other'])
     expect(categoriesForMedia('text')).toEqual(['other'])
     expect(categoriesForMedia('audio')).toEqual(['audio'])
+  })
+
+  it('去处映射（destinationsForMedia · 统一保存弹窗）：四种媒介的返回值', () => {
+    // 「存到哪里」瓷砖的唯一真相：类目 + 特殊项 'voice'。
+    expect(destinationsForMedia('image')).toEqual(['character', 'prop', 'costume', 'scene', 'other'])
+    expect(destinationsForMedia('audio')).toEqual(['audio', 'voice'])
+    expect(destinationsForMedia('video')).toEqual(['other'])
+    expect(destinationsForMedia('text')).toEqual(['other'])
+  })
+
+  it('音频的去处里不含 「其他」（音频有自己的类目，永不进「其他」）', () => {
+    expect(destinationsForMedia('audio')).not.toContain('other')
+    expect(destinationsForMedia('audio')).toContain('voice')
   })
 
   it('⑤ 从本项目库拖上来的节点无上传入口（已经是项目资产）', () => {

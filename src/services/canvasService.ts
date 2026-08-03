@@ -61,6 +61,28 @@ export function categoriesForMedia(media: Media): Category[] {
 }
 
 /**
+ * 去处 = 类目 + 一个特殊项 'voice'（角色音色，不产生资产、只挂到角色身上）。
+ * 这是统一保存弹窗「存到哪里」瓷砖的唯一真相，与 categoriesForMedia 并列——
+ * 服务层的校验仍走 categoriesForMedia（'voice' 不是类目、走 setVoice，不进 saveCanvasNodeToProject）。
+ */
+export type Destination = Category | 'voice'
+
+/**
+ * 一个媒介能存到哪些去处（统一保存弹窗用）。
+ * 判断依据：一个媒介能去哪儿，看它有没有属于自己的类目——
+ *   · 音频有「音频」类目，所以永远不进「其他」，另给一个「角色音色」特殊去处；
+ *   · 视频 / 文本没有自己的视觉类目，所以只能进「其他」（分镜片段 / 剧本台词）；
+ *   · 图片落四个视觉类目 + 「其他」。
+ */
+export function destinationsForMedia(media: Media): Destination[] {
+  if (media === 'image') return ['character', 'prop', 'costume', 'scene', 'other']
+  if (media === 'audio') return ['audio', 'voice']
+  if (media === 'video') return ['other']
+  if (media === 'text') return ['other']
+  return []
+}
+
+/**
  * 入口一的出现条件（技术规划 §2.1，稳定性检查 ①②⑤）：
  * 「上传到项目资产库」只对"成品 + 可入库媒介 + 尚未是项目资产"的节点显示。
  */

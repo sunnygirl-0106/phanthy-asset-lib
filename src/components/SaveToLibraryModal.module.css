@@ -1,0 +1,257 @@
+/* 统一保存弹窗（方案二）—— 名称 + 去处瓷砖 + 挂载目标浮层。
+ * 视觉与 UploadToLibraryModal 同一套 token，另起一份 CSS 便于 A/B 独立调整、互不影响。 */
+
+.panel {
+  max-width: 560px;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── 头部：标题 + 关闭 + 分隔线 ── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--line-mid);
+}
+
+.title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0;
+}
+
+.close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.close:hover { color: var(--text-body); background: var(--line-soft); }
+
+/* ── 主体 ── */
+.content { padding: 22px 24px 4px; }
+
+.field { margin-bottom: 22px; }
+
+.label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 12px;
+}
+
+.req { color: var(--accent); }
+
+.input {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--line-mid);
+  border-radius: 10px;
+  background: var(--field);
+  color: var(--text-body);
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.input::placeholder { color: var(--text-muted); }
+.input:focus { outline: none; border-color: var(--accent-line); }
+
+/* 角色音色的替换 / 防呆提示（沿用 SaveAudioModal 的 .warn） */
+.warn { margin: 8px 0 0; font-size: 12.5px; color: var(--accent); line-height: 1.5; }
+
+/* ── 去处网格：两列大按钮 ── */
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.tileWrap { position: relative; }
+
+/* 「其他」/「角色音色」瓷砖：满幅一行，上方用分隔线 + 间距与前面的项拉开层级（暗示"另一层东西"）。 */
+.tileWrapOther {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line-mid);
+}
+.otherHint {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.tile {
+  width: 100%;
+  min-height: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--line-mid);
+  border-radius: 12px;
+  background: var(--panel-3);
+  color: var(--text-faint);
+  font-size: 15px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.tile:hover:not(:disabled):not(.tileOn) { border-color: var(--line-strong); }
+
+.tile:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.tileOn {
+  color: var(--text-main);
+  border-color: var(--accent);
+  background: linear-gradient(180deg, var(--accent-soft), rgba(0, 0, 0, 0.15));
+  box-shadow: 0 0 0 1px var(--accent-line), 0 0 20px var(--accent-soft);
+}
+
+.tileTop {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.caret { font-size: 11px; color: var(--accent); }
+
+.subPill {
+  padding: 3px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* ── 二级浮层（保存方式 / 挑挂载目标） ── */
+.pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 190px;
+  padding: 8px;
+  background: var(--panel-float);
+  border: 1px solid var(--line-mid);
+  border-radius: 12px;
+  box-shadow: var(--shadow-float);
+  z-index: 5;
+}
+
+.popMatch { min-width: 220px; max-height: 240px; overflow-y: auto; }
+
+.popTitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 4px 10px 8px;
+}
+
+.popItem {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-body);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.popItem:hover { background: var(--line-soft); }
+
+.popEmpty {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.matchItem {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-body);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.matchItem:hover, .matchItemOn { background: var(--line-soft); }
+
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-3);
+  color: var(--text-faint);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.matchName { color: var(--text-main); }
+
+/* ── 底部动作 ── */
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 8px 24px 24px;
+}
+
+.btnGhost {
+  padding: 10px 26px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--text-body);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btnGhost:hover { border-color: var(--text-muted); background: var(--line-soft); }
+
+.btn {
+  padding: 10px 28px;
+  border-radius: var(--radius-pill);
+  border: none;
+  background: linear-gradient(180deg, var(--cta-top), var(--cta-bottom));
+  color: var(--accent-ink);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.35);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
