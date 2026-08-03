@@ -14,6 +14,7 @@
 import { useRef, useState } from 'react'
 import type { Route } from '../hooks/useHashRoute'
 import type { Media, CanvasNode as Node, SaveSpec } from '../services/canvasService'
+import type { Voice } from '../data/types'
 import { useStore, useCurrentUser } from '../store/useStore'
 import { getProject, getTeam, canSeeProjectAssets } from '../services/permission'
 import { CanvasStage } from '../components/canvas/CanvasStage'
@@ -21,6 +22,7 @@ import { CanvasSidebar } from '../components/canvas/CanvasSidebar'
 import { CanvasAssetPanel, type DragPayload } from '../components/canvas/CanvasAssetPanel'
 import { NodeContextMenu } from '../components/canvas/NodeContextMenu'
 import { UploadToLibraryModal } from '../components/UploadToLibraryModal'
+import { SaveAudioModal } from '../components/SaveAudioModal'
 import { assetUrl } from '../utils/assets'
 import styles from './CanvasShell.module.css'
 
@@ -45,6 +47,9 @@ const PLACEHOLDER_POOL = [
   assetUrl('assets/canvas/portraits/portrait-6.jpg'),
 ]
 
+/** 新建音频节点的占位音源：Demo 无真实录音，复用预置音色 mp3，能真的点开试听、也能存进库/设为音色。 */
+const AUDIO_PLACEHOLDER_SRC = assetUrl('assets/voices/preset_voice_female.mp3')
+
 /** 左侧悬浮工具条上唯一“开着”的浮层：加节点菜单 / 资产面板 / 都关。 */
 type Flyout = 'add' | 'folder' | null
 
@@ -60,6 +65,7 @@ export function CanvasShell({
   const world = useStore((s) => s.world)
   const user = useCurrentUser()
   const runSaveToProject = useStore((s) => s.runSaveToProject)
+  const setVoice = useStore((s) => s.setVoice)
 
   const project = getProject(world, pid)
   const team = project ? getTeam(world, project.teamId) : undefined
@@ -70,6 +76,7 @@ export function CanvasShell({
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [menu, setMenu] = useState<{ node: Node; x: number; y: number } | null>(null)
   const [uploadNode, setUploadNode] = useState<Node | null>(null)
+  const [audioNode, setAudioNode] = useState<Node | null>(null)
   const [previewNode, setPreviewNode] = useState<Node | null>(null)
   const [flyout, setFlyout] = useState<Flyout>(null)
   const [zoom, setZoom] = useState(100)
@@ -90,6 +97,8 @@ export function CanvasShell({
   const projectAssets = world.assets.filter(
     (a) => a.scope === 'project' && a.scopeId === pid,
   )
+  // 本项目角色（供音频弹窗「关联角色」/「设为音色」下拉）。
+  const projectCharacters = projectAssets.filter((a) => a.category === 'character')
 
   function nextId(prefix: string): string {
     return `${prefix}_${seq.current++}`
@@ -101,19 +110,22 @@ export function CanvasShell({
   }
 
   /* ── 加一个新节点 ──
-   * 图片节点直接给占位图、置为"成品"，右键第一栏即可「上传到资产库」（对齐演示动线）；
-   * 其余媒介仍是"生成中"，需右键"标记为成品"后才可上传（沿用原规则，不擅自改动）。 */
+   * 图片 / 音频节点直接给占位内容、置为"成品"，右键第一栏即可「保存到资产库」（对齐演示动线：
+   *   图片走保存弹窗、音频走 R4 的「音频素材 / 角色音色」二选一弹窗）；
+   * 文本 / 视频仍是"生成中"，需右键"标记为成品"后才可上传（沿用原规则，不擅自改动）。 */
   function addNode(media: Media) {
     const isImage = media === 'image'
+    const isAudio = media === 'audio'
     const n: Node = {
       id: nextId('node'),
       media,
-      status: isImage ? 'done' : 'generating',
+      status: isImage || isAudio ? 'done' : 'generating',
       x: 60 + (nodes.length % 5) * 40,
       y: 60 + (nodes.length % 5) * 40,
       name: `新${media === 'text' ? '文本' : media === 'image' ? '图片' : media === 'video' ? '视频' : '音频'}`,
       cover: isImage ? PLACEHOLDER_POOL[nodes.length % PLACEHOLDER_POOL.length] : undefined,
-      content: media === 'text' ? '在这里写提示词 / 描述…' : undefined,
+      // 音频节点带上可试听的占位音源（存库 / 设音色都靠它）；文本节点给一段占位文字。
+      content: media === 'text' ? '在这里写提示词 / 描述…' : isAudio ? AUDIO_PLACEHOLDER_SRC : undefined,
     }
     setNodes((prev) => [...prev, n])
     setSelectedId(n.id)
@@ -169,6 +181,28 @@ export function CanvasShell({
       setFlyout('folder')
     }
     setUploadNode(null)
+  }
+
+  /* ── 入口一 · 音频（R4 ①）：存为音频素材 → 落项目库 audio 类目（可选带 roleId）── */
+  function confirmSaveAudioAsset(spec: SaveSpec) {
+    if (!audioNode) return
+    const r = runSaveToProject(audioNode, pid, spec)
+    showToast(r.ok, r.message)
+    if (r.ok) {
+      setNodes((prev) =>
+        prev.map((n) => (n.id === audioNode.id ? { ...n, source: { scope: 'project', assetId: 'uploaded' } } : n)),
+      )
+      setFlyout('folder') // 展开资产库面板，让刚存的音频当场出现在库里
+    }
+    setAudioNode(null)
+  }
+
+  /* ── 入口一 · 音频（R4 ②）：设为角色音色 → setVoice 落到该角色，不产生 audio 资产 ── */
+  function confirmSetVoice(roleId: string, voice: Voice) {
+    setVoice(roleId, voice)
+    const role = projectCharacters.find((c) => c.id === roleId)
+    showToast(true, `已设为「${role?.name ?? '角色'}」的音色，复刻将在接入语音模型后生效`)
+    setAudioNode(null)
   }
 
   function toggleFlyout(which: Exclude<Flyout, null>) {
@@ -258,7 +292,9 @@ export function CanvasShell({
           x={menu.x}
           y={menu.y}
           onSave={() => {
-            setUploadNode(menu.node)
+            // 音频节点走用途二选一弹窗（R4）；图片等其它媒介仍走原「保存到资产库」弹窗。
+            if (menu.node.media === 'audio') setAudioNode(menu.node)
+            else setUploadNode(menu.node)
             setMenu(null)
           }}
           onDelete={() => deleteNode(menu.node.id)}
@@ -266,13 +302,24 @@ export function CanvasShell({
         />
       )}
 
-      {/* 上传弹窗（入口一） */}
+      {/* 上传弹窗（入口一 · 图片等） */}
       {uploadNode && (
         <UploadToLibraryModal
           node={uploadNode}
           projectAssets={projectAssets}
           onConfirm={confirmUpload}
           onClose={() => setUploadNode(null)}
+        />
+      )}
+
+      {/* 音频保存弹窗（入口一 · 音频 · R4：音频素材 / 角色音色 二选一） */}
+      {audioNode && (
+        <SaveAudioModal
+          node={audioNode}
+          characters={projectCharacters}
+          onSaveAsset={confirmSaveAudioAsset}
+          onSetVoice={confirmSetVoice}
+          onClose={() => setAudioNode(null)}
         />
       )}
 

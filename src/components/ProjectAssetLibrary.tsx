@@ -15,19 +15,24 @@ import type { Category } from '../data/types'
 import { useStore } from '../store/useStore'
 import { AssetCard } from './AssetCard'
 import { AssetDetail } from './AssetDetail'
+import { AudioList } from './AudioList'
 import { assetUrl } from '../utils/assets'
 import styles from './ProjectAssetLibrary.module.css'
 
-/** 顶部类目 Tab：顺序对齐团队库与截图（项目资产暂无音频，故不陈列）。 */
+/** 顶部类目 Tab：顺序对齐团队库与截图。 */
 const CATEGORIES: { key: Category; label: string; icon: string }[] = [
   { key: 'character', label: '角色', icon: assetUrl('assets/icons/cat-character.svg') },
   { key: 'costume', label: '服装', icon: assetUrl('assets/icons/cat-costume.svg') },
   { key: 'scene', label: '场景', icon: assetUrl('assets/icons/cat-scene.svg') },
   { key: 'prop', label: '道具', icon: assetUrl('assets/icons/cat-prop.svg') },
+  // TODO: 替换音频 icon（产品后续提供正式链接，先用占位音符图标）
+  { key: 'audio', label: '音频', icon: assetUrl('assets/icons/cat-audio.svg') },
 ]
 
 export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
   const world = useStore((s) => s.world)
+  const renameAsset = useStore((s) => s.renameAsset)
+  const runDeleteAsset = useStore((s) => s.runDeleteAsset)
 
   const [category, setCategory] = useState<Category>('character')
   const [query, setQuery] = useState('')
@@ -135,6 +140,16 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
           <br />
           试试切换上方类目、清空搜索。
         </div>
+      ) : category === 'audio' ? (
+        // 音频为一等展示类目（R3）：条状行列表，仅支持改名 / 删除，不进详情、不参与批量。
+        <AudioList
+          items={visible}
+          mode={{
+            kind: 'library',
+            onRename: (a, name) => renameAsset(a.id, name),
+            onDelete: (a) => runDeleteAsset(a.id),
+          }}
+        />
       ) : (
         <div className={styles.grid}>
           {visible.map((a) => (

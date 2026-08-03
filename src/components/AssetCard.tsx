@@ -65,7 +65,15 @@ export function AssetCard({
       onDragStart={onDragStart}
       style={cursor ? { cursor } : undefined}
     >
-      <img className={styles.cover} src={coverOf(asset)} alt={asset.name} loading="lazy" />
+      {asset.status === 'empty' ? (
+        // 空壳（R1）：图片被清空，只留提示词/名字。封面区渲染虚线占位，标「待生成」。
+        <div className={styles.emptyCover}>
+          <EmptyGlyph />
+          <span>待生成</span>
+        </div>
+      ) : (
+        <img className={styles.cover} src={coverOf(asset)} alt={asset.name} loading="lazy" />
+      )}
 
       {/* 左上角徽章：副本血缘 / 非成品状态 */}
       {(asset.masterId || asset.status !== 'done') && (
@@ -94,6 +102,17 @@ export function AssetCard({
         )}
       </div>
     </div>
+  )
+}
+
+/** 空壳占位图标：一张「图片」轮廓（虚线感由外层 CSS 提供）。 */
+function EmptyGlyph() {
+  return (
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <path d="m21 15-5-5L5 21" />
+    </svg>
   )
 }
 

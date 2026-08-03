@@ -13,7 +13,7 @@
  * createSeedWorld() 每次返回一份全新的 World，测试之间互不污染。
  * ─────────────────────────────────────────────────────────────────────── */
 
-import type { World, User, Team, Project, Canvas, Asset, Category } from './types'
+import type { World, User, Team, Project, Canvas, Asset, Category, Scope } from './types'
 import { PRESET_VOICES } from './presetVoices'
 import { assetUrl } from '../utils/assets'
 
@@ -73,6 +73,24 @@ function asset(
     createdAt: 0,
     ...partial,
   }
+}
+
+/* ─── 音频资产小助手（占位）─────────────────────────────────────────────
+ * 音频没有封面图 → cover 留空；可播放音源与时长塞进 fields（audioUrl / duration）。
+ * 本期没有真实 BGM 素材，音源先复用两段预置音色 mp3 占位（能真的点开试听）。 */
+const AUDIO_SRC = [
+  `${IMG}/voices/preset_voice_female.mp3`,
+  `${IMG}/voices/preset_voice_male.mp3`,
+]
+// 音频没有真实封面：统一给一张波形占位图，保证资产库网格（AssetCard）不出现裂图。
+const AUDIO_COVER = `${IMG}/canvas/audio-placeholder.svg`
+function audioAsset(
+  id: string, name: string, scope: Scope, scopeId: string | undefined, duration: string, srcIdx: number,
+): Asset {
+  return asset({
+    id, category: 'audio', name, scope, scopeId, cover: AUDIO_COVER,
+    fields: { duration, audioUrl: AUDIO_SRC[srcIdx % AUDIO_SRC.length] },
+  })
 }
 
 export function createSeedWorld(): World {
@@ -250,6 +268,20 @@ export function createSeedWorld(): World {
       baseModel: `${IMG}/character-base/indie_lead_base.png`,
       looks: [asset({ id: 'a_indie_lead_look', category: 'character', name: '孤舟主角·定妆照', scope: 'project', scopeId: IDS.projBoat, cover: `${IMG}/proj-lone-boat/indie_lead_role.png` })],
     }),
+
+    /* 【音频 · 占位】三层各铺几段，让画布资产面板的「音频」类目有内容可展示 */
+    // 广场·官方 BGM 货架
+    audioAsset('a_bgm_guofeng', '古风悠扬', 'plaza', undefined, '2:34', 0),
+    audioAsset('a_bgm_moonwine', '月下独酌', 'plaza', undefined, '4:01', 1),
+    audioAsset('a_bgm_birdsong', '空山鸟语', 'plaza', undefined, '3:12', 0),
+    // 团队A·团队库
+    audioAsset('a_bgm_rainalley', '雨巷回声', 'team', IDS.teamA, '2:58', 1),
+    audioAsset('a_bgm_dawn', '晨曦微光', 'team', IDS.teamA, '3:40', 0),
+    // 项目·霓虹东京（赛博）
+    audioAsset('a_bgm_neonpulse', '霓虹脉冲', 'project', IDS.projNeon, '3:05', 1),
+    audioAsset('a_bgm_cyberrain', '赛博夜雨', 'project', IDS.projNeon, '2:47', 0),
+    // 项目·山海志（国风）
+    audioAsset('a_bgm_bamboo', '竹林清音', 'project', IDS.projShanhai, '3:20', 0),
   ]
 
   return { users, teams, projects, canvases, assets }

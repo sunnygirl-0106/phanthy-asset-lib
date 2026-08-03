@@ -29,8 +29,9 @@ const CAT_LABEL: Record<Category, string> = {
   audio: '音频',
 }
 
-// 标签网格的固定展示顺序（对齐设计稿）：角色 / 道具 / 服装 / 场景 / 音频
-const TILE_ORDER: Category[] = ['character', 'prop', 'costume', 'scene', 'audio']
+// 标签网格的固定展示顺序（对齐设计稿）：角色 / 道具 / 服装 / 场景。
+// 音频不再走本弹窗（R4：音频右键保存改走 SaveAudioModal 二选一），故这里移除音频瓷砖。
+const TILE_ORDER: Category[] = ['character', 'prop', 'costume', 'scene']
 
 type SaveMode = 'new' | 'link'
 type OpenMenu = 'mode' | 'pick' | null

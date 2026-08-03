@@ -440,3 +440,54 @@ describe('广场投稿 · 可选造型（素模必带，穿衣服的可选）', 
     expect(r.ok).toBe(false)
   })
 })
+
+describe('删除分层（R1：项目库归零 → 空壳；团队库归零 → 整删）', () => {
+  const find = (id: string) => store.getState().world.assets.find((a: { id: string }) => a.id === id)
+
+  it('clearAssetImages：清空图片、降级空壳，但保留 name / prompt / voice', () => {
+    // 给阿杰（项目·霓虹东京）设一个音色，记下提示词与名字
+    store.getState().setVoice('a_ajie', { id: 'v_test', type: 'preset', name: '测试音色', previewUrl: 'x' })
+    const before = find('a_ajie')
+    const { prompt, name } = before
+    const r = store.getState().clearAssetImages('a_ajie')
+    expect(r.ok).toBe(true)
+    const after = find('a_ajie')
+    expect(after.status).toBe('empty')
+    expect(after.cover).toBe('')
+    expect(after.baseModel).toBeUndefined()
+    expect(after.looks).toBeUndefined()
+    expect(after.name).toBe(name) // 名字保留
+    expect(after.prompt).toBe(prompt) // 提示词保留
+    expect(after.voice?.name).toBe('测试音色') // 音色保留
+  })
+
+  it('空壳不可流转：沉淀 / 贡献被 assertDone 红线挡下', () => {
+    store.getState().clearAssetImages('a_ajie')
+    expect(store.getState().runDeposit('a_ajie').ok).toBe(false)
+    expect(store.getState().runContribute('a_ajie').ok).toBe(false)
+  })
+
+  it('空壳重新生成 → 恢复成品：status done + 落占位图 + 角色补回素模', () => {
+    store.getState().clearAssetImages('a_ajie')
+    const r = store.getState().regenerateBaseModel('a_ajie', '新的素模提示词')
+    expect(r.ok).toBe(true)
+    const after = find('a_ajie')
+    expect(after.status).toBe('done')
+    expect(after.cover).not.toBe('') // 落了占位图
+    expect(after.baseModel).toBeTruthy() // 角色补回素模
+    expect(after.prompt).toBe('新的素模提示词')
+  })
+
+  it('团队库归零 = 整份删除：runDeleteAsset 把团队母版从 world 拿掉', () => {
+    const before = store.getState().world.assets.length
+    const r = store.getState().runDeleteAsset('a_suwan') // 苏晚在团队A库，主账号 Sunny 可删
+    expect(r.ok).toBe(true)
+    expect(find('a_suwan')).toBeUndefined()
+    expect(store.getState().world.assets.length).toBe(before - 1)
+  })
+
+  it('权限：admin 不能清空项目资产（canDeleteLibraryAsset 挡）', () => {
+    store.getState().setCurrentUser('u_admin')
+    expect(store.getState().clearAssetImages('a_ajie').ok).toBe(false)
+  })
+})

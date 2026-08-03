@@ -113,6 +113,14 @@
 /* 左栏大图 */
 .baseLg { position: relative; width: 100%; border-radius: 9px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.14); }
 .baseLg img { display: block; width: 100%; aspect-ratio: 3 / 4; object-fit: cover; }
+/* 空壳（R1）大图占位：与封面同尺寸的虚线框 + 图标 + 一行说明 */
+.emptyBig {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  width: 100%; aspect-ratio: 3 / 4;
+  border: 1.5px dashed rgba(255, 255, 255, 0.2); border-radius: inherit;
+  background: rgba(255, 255, 255, 0.03); color: var(--text-muted);
+  font-size: 12.5px; text-align: center; padding: 0 16px;
+}
 .baseLg .cap {
   position: absolute; top: 10px; left: 10px; font-size: 11.5px;
   background: rgba(0, 0, 0, 0.6); padding: 3px 10px; border-radius: 20px;

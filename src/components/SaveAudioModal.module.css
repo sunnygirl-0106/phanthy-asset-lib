@@ -1,0 +1,108 @@
+/* 音频保存弹窗（R4：二选一 —— 音频素材 / 角色音色）。视觉与 UploadToLibraryModal 同一套 token。 */
+
+.panel { max-width: 520px; }
+
+.body { display: flex; flex-direction: column; }
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--line-mid);
+}
+
+.title { font-size: 17px; font-weight: 700; color: var(--text-main); margin: 0; }
+
+.close {
+  width: 28px; height: 28px; border: none; background: transparent;
+  color: var(--text-muted); font-size: 22px; line-height: 1; cursor: pointer; border-radius: 6px;
+}
+.close:hover { color: var(--text-body); background: var(--line-soft); }
+
+.content { padding: 22px 24px 4px; }
+
+/* 两张大选项卡 */
+.choices { display: flex; flex-direction: column; gap: 12px; margin-bottom: 22px; }
+
+.choice {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  padding: 16px 18px;
+  border: 1px solid var(--line-mid);
+  border-radius: 12px;
+  background: var(--field);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.choice:hover { border-color: var(--line-strong); }
+
+.choiceOn {
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.08);
+}
+
+.choiceHead { font-size: 15px; font-weight: 700; color: var(--text-main); }
+.choiceDesc { font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
+
+/* 选中后的表单 */
+.form { border-top: 1px solid var(--line-soft); padding-top: 20px; }
+
+.field { margin-bottom: 18px; }
+
+.label {
+  display: block; font-size: 14px; font-weight: 600; color: var(--text-main); margin-bottom: 10px;
+}
+.req { color: var(--accent); }
+
+.input,
+.select {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line-mid);
+  border-radius: 10px;
+  background: var(--field);
+  color: var(--text-body);
+  font-size: 14px;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+.input::placeholder { color: var(--text-muted); }
+.input:focus, .select:focus { outline: none; border-color: var(--accent-line); }
+
+.hint { margin: 8px 0 0; font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+.warn { margin: 8px 0 0; font-size: 12.5px; color: var(--accent); line-height: 1.5; }
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 8px 24px 24px;
+}
+
+.btnGhost {
+  padding: 10px 26px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--text-body);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btnGhost:hover { border-color: var(--text-muted); background: var(--line-soft); }
+
+.btn {
+  padding: 10px 28px;
+  border-radius: var(--radius-pill);
+  border: none;
+  background: linear-gradient(180deg, var(--cta-top), var(--cta-bottom));
+  color: var(--accent-ink);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.35);
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }

@@ -136,6 +136,11 @@ export function saveCanvasNodeToProject(
     throw new AssetRuleError(`媒介「${node.media}」不能落类目「${spec.category}」。`)
   }
 
+  // 音频不再提供「关联已有」（R3/R4）：挂到另一段音频的 looks 下无处展示，语义废弃。
+  if (node.media === 'audio' && spec.mode === 'link') {
+    throw new AssetRuleError('音频不支持「关联已有」，请作为音频素材新建。')
+  }
+
   // 关联已有：把这张图/这段音挂到某个已有同类资产下，作为它的一张子资产（变体/造型）。
   if (spec.mode === 'link') {
     const child = buildProjectAsset(node, projectId, spec.category, spec.name)
@@ -143,7 +148,9 @@ export function saveCanvasNodeToProject(
   }
 
   // 新建：成一份新的顶层资产。角色额外把这张图当素模 + 封面；其它类目无此概念。
-  const extra = spec.category === 'character' ? { baseModel: node.cover ?? '' } : {}
+  const extra: Partial<Asset> = spec.category === 'character' ? { baseModel: node.cover ?? '' } : {}
+  // 音频资产：把节点音源存进 fields.audioUrl，库里的音频行才能试听（AudioList 读的就是它）。
+  if (node.media === 'audio') extra.fields = { ...extra.fields, audioUrl: node.content ?? '' }
   const asset = buildProjectAsset(node, projectId, spec.category, spec.name, extra)
   return { kind: 'add', asset }
 }

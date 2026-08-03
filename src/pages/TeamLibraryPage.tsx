@@ -16,20 +16,25 @@ import { useStore, useCurrentUser } from '../store/useStore'
 import { canSee } from '../services/permission'
 import { AssetCard } from '../components/AssetCard'
 import { AssetDetail } from '../components/AssetDetail'
+import { AudioList } from '../components/AudioList'
 import { assetUrl } from '../utils/assets'
 import styles from './TeamLibraryPage.module.css'
 
-/** 边栏类目：顺序与图标对齐设计稿（音频本期团队库无内容，暂不陈列）。 */
+/** 边栏类目：顺序与图标对齐设计稿。 */
 const CATEGORIES: { key: Category; label: string; icon: string }[] = [
   { key: 'character', label: '角色', icon: assetUrl('assets/icons/cat-character.svg') },
   { key: 'costume', label: '服装', icon: assetUrl('assets/icons/cat-costume.svg') },
   { key: 'scene', label: '场景', icon: assetUrl('assets/icons/cat-scene.svg') },
   { key: 'prop', label: '道具', icon: assetUrl('assets/icons/cat-prop.svg') },
+  // TODO: 替换音频 icon（产品后续提供正式链接，先用占位音符图标）
+  { key: 'audio', label: '音频', icon: assetUrl('assets/icons/cat-audio.svg') },
 ]
 
 export function TeamLibraryPage() {
   const world = useStore((s) => s.world)
   const user = useCurrentUser()
+  const renameAsset = useStore((s) => s.renameAsset)
+  const runDeleteAsset = useStore((s) => s.runDeleteAsset)
 
   const [category, setCategory] = useState<Category>('character')
   const [query, setQuery] = useState('')
@@ -137,6 +142,16 @@ export function TeamLibraryPage() {
             <br />
             试试切换左侧类目、清空搜索，或用右下角切换到别的账号。
           </div>
+        ) : category === 'audio' ? (
+          // 音频为一等展示类目（R3）：条状行列表，仅支持改名 / 删除，不进详情、不参与批量。
+          <AudioList
+            items={visible}
+            mode={{
+              kind: 'library',
+              onRename: (a, name) => renameAsset(a.id, name),
+              onDelete: (a) => runDeleteAsset(a.id),
+            }}
+          />
         ) : (
           <div className={styles.grid}>
             {visible.map((a) => (

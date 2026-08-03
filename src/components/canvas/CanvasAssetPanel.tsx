@@ -16,6 +16,7 @@ import { canSee, canViewPrompt } from '../../services/permission'
 import { coverOf } from '../../services/assetService'
 import { AssetCard } from '../AssetCard'
 import { AssetDetail } from '../AssetDetail'
+import { AudioList, audioSrcOf } from '../AudioList'
 import type { CategoryFilter } from '../CategoryTabs'
 import { assetUrl } from '../../utils/assets'
 import styles from './CanvasAssetPanel.module.css'
@@ -99,10 +100,73 @@ export function CanvasAssetPanel({
     .filter((a) => !searching || a.name.toLowerCase().includes(q))
 
   const groupedItems = SCOPES.map((s) => ({ ...s, items: items.filter((a) => a.scope === s.key) }))
+  // 「全部」类目分区展示用：图片类走网格、音频类走条状列表。
+  const imageItems = items.filter((a) => a.category !== 'audio')
+  const audioItems = items.filter((a) => a.category === 'audio')
 
   function startDrag(e: React.DragEvent, payload: DragPayload) {
     e.dataTransfer.setData(DRAG_MIME, JSON.stringify(payload))
     e.dataTransfer.effectAllowed = 'copy'
+  }
+
+  /** 音频资产 → 音频节点的载荷：带上可播放音源（content）。 */
+  function audioPayload(a: Asset): DragPayload {
+    return { scope: a.scope, assetId: a.id, media: 'audio', name: a.name, content: audioSrcOf(a) }
+  }
+
+  /** 分区小标题（对齐 Figma）：灰字标签 + 数字角标。spaced=与上方内容拉开距离。 */
+  function sectionHead(label: string, count: number, spaced = false) {
+    return (
+      <div className={`${styles.sectionHead} ${spaced ? styles.sectionHeadSpaced : ''}`}>
+        <span className={styles.sectionLabel}>{label}</span>
+        <span className={styles.sectionCount}>{count}</span>
+        <span className={styles.sectionRule} aria-hidden />
+      </div>
+    )
+  }
+
+  /** 图片类资产卡（照旧）；音频类不进网格，走 renderAudioList 的条状列表。 */
+  function renderCard(a: Asset) {
+    const singleImage = (a.looks?.length ?? 0) === 0 && !STYLE_CATS.has(a.category)
+    return (
+      <AssetCard
+        key={a.id}
+        asset={a}
+        hideSub
+        compact
+        onClick={singleImage ? undefined : () => { setOpenPromptDirectly(false); setDetailAssetId(a.id) }}
+        hoverActions={singleImage ? (
+          <>
+            <button className={`${styles.actBtn} ${styles.actPrimary}`} onClick={(e) => { e.stopPropagation(); onUse(defaultPayload(a)) }}>
+              使用
+            </button>
+            {canViewPrompt(a) && (
+              <button className={`${styles.actBtn} ${styles.actGhost}`} onClick={(e) => { e.stopPropagation(); setOpenPromptDirectly(true); setDetailAssetId(a.id) }}>
+                提示词
+              </button>
+            )}
+          </>
+        ) : (
+          <button className={`${styles.actBtn} ${styles.actGhost}`} onClick={(e) => { e.stopPropagation(); setOpenPromptDirectly(false); setDetailAssetId(a.id) }}>
+            查看并使用
+          </button>
+        )}
+      />
+    )
+  }
+
+  /** 音频列表（对齐 Figma）：整行=试听按钮 + 名称 + 波形占位 + 时长 + 使用；整行可拖到画布。 */
+  function renderAudioList(list: Asset[]) {
+    return (
+      <AudioList
+        items={list}
+        mode={{
+          kind: 'canvas',
+          onUse: (a) => onUse(audioPayload(a)),
+          onDragStart: (e, a) => startDrag(e, audioPayload(a)),
+        }}
+      />
+    )
   }
 
   // 「查看」= 就地进二级页：详情直接铺满浮层（替换列表），‹ 返回列表、✕ 关整扇浮层。
@@ -213,78 +277,43 @@ export function CanvasAssetPanel({
         />
       </div>
 
-      {/* 卡片网格：复用 AssetCard，所有类型统一进详情后使用。 */}
+      {/* 图片走卡片网格（照旧），音频走条状列表；「全部」类目下按「图片资产 N / 音频 N」分区（对齐 Figma）。 */}
       {items.length === 0 ? (
         <div className={styles.empty}>{searching ? '没有匹配的资产' : '这一层暂无可见资产'}</div>
       ) : searching ? (
         <div className={styles.searchGroups}>
-          {groupedItems.map((group) => group.items.length > 0 && (
-            <section key={group.key} className={styles.searchGroup}>
-              <h3 className={styles.groupTitle}>{group.label}</h3>
-              <div className={styles.grid}>
-                {group.items.map((a) => {
-                  const singleImage = (a.looks?.length ?? 0) === 0 && !STYLE_CATS.has(a.category)
-                  return (
-                    <AssetCard
-                      key={a.id}
-                      asset={a}
-                      hideSub
-                      compact
-                      onClick={singleImage ? undefined : () => { setOpenPromptDirectly(false); setDetailAssetId(a.id) }}
-                      hoverActions={singleImage ? (
-                        <>
-                          <button className={`${styles.actBtn} ${styles.actPrimary}`} onClick={(e) => { e.stopPropagation(); onUse(defaultPayload(a)) }}>
-                            使用
-                          </button>
-                          {canViewPrompt(a) && (
-                            <button className={`${styles.actBtn} ${styles.actGhost}`} onClick={(e) => { e.stopPropagation(); setOpenPromptDirectly(true); setDetailAssetId(a.id) }}>
-                              提示词
-                            </button>
-                          )}
-                        </>
-                      ) : (
-                        <button className={`${styles.actBtn} ${styles.actGhost}`} onClick={(e) => { e.stopPropagation(); setOpenPromptDirectly(false); setDetailAssetId(a.id) }}>
-                          查看并使用
-                        </button>
-                      )}
-                    />
-                  )
-                })}
-              </div>
-            </section>
-          ))}
-        </div>
-      ) : (
-        <div className={styles.grid}>
-          {items.map((a) => {
-            const singleImage = (a.looks?.length ?? 0) === 0 && !STYLE_CATS.has(a.category)
+          {groupedItems.map((group) => {
+            if (group.items.length === 0) return null
+            const imgs = group.items.filter((a) => a.category !== 'audio')
+            const auds = group.items.filter((a) => a.category === 'audio')
             return (
-              <AssetCard
-                key={a.id}
-                asset={a}
-                hideSub
-                compact
-                onClick={singleImage ? undefined : () => { setOpenPromptDirectly(false); setDetailAssetId(a.id) }}
-                hoverActions={singleImage ? (
-                  <>
-                    <button className={`${styles.actBtn} ${styles.actPrimary}`} onClick={(e) => { e.stopPropagation(); onUse(defaultPayload(a)) }}>
-                      使用
-                    </button>
-                    {canViewPrompt(a) && (
-                      <button className={`${styles.actBtn} ${styles.actGhost}`} onClick={(e) => { e.stopPropagation(); setOpenPromptDirectly(true); setDetailAssetId(a.id) }}>
-                        提示词
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <button className={`${styles.actBtn} ${styles.actGhost}`} onClick={(e) => { e.stopPropagation(); setOpenPromptDirectly(false); setDetailAssetId(a.id) }}>
-                    查看并使用
-                  </button>
-                )}
-              />
+              <section key={group.key} className={styles.searchGroup}>
+                <h3 className={styles.groupTitle}>{group.label}</h3>
+                {imgs.length > 0 && <div className={styles.grid}>{imgs.map(renderCard)}</div>}
+                {auds.length > 0 && renderAudioList(auds)}
+              </section>
             )
           })}
         </div>
+      ) : category === 'audio' ? (
+        renderAudioList(items)
+      ) : category === 'all' ? (
+        <>
+          {imageItems.length > 0 && (
+            <>
+              {sectionHead('图片资产', imageItems.length)}
+              <div className={styles.grid}>{imageItems.map(renderCard)}</div>
+            </>
+          )}
+          {audioItems.length > 0 && (
+            <>
+              {sectionHead('音频', audioItems.length, imageItems.length > 0)}
+              {renderAudioList(audioItems)}
+            </>
+          )}
+        </>
+      ) : (
+        <div className={styles.grid}>{items.map(renderCard)}</div>
       )}
 
     </div>

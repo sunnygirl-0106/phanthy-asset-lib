@@ -120,6 +120,12 @@ interface StoreState {
   runDeleteAsset: (assetId: string) => ActionResult
   /** 删除角色下的一套造型；若它是当前封面则自动回落。 */
   runDeleteLook: (assetId: string, lookId: string) => ActionResult
+  /**
+   * 项目库归零（R1）：删掉资产的最后一张图片时，不删整份，而是清空图片、保留空壳。
+   * 资产降级为 status:'empty'，清掉 cover / baseModel / looks；name / prompt / voice / masterId / fields / tags 全部保留。
+   * 用户之后可到提示词面板点「重新生成」把空壳恢复成成品。
+   */
+  clearAssetImages: (assetId: string) => ActionResult
 
   /** 把某个账号的通知都标为已读（点开通知面板时调用）。 */
   markNotificationsRead: (userId: string) => void
@@ -461,6 +467,26 @@ export const useStore = create<StoreState>()(
         }
       },
 
+      clearAssetImages: (assetId) => {
+        const { world, currentUserId } = get()
+        const user = findUser(world, currentUserId)
+        const asset = findAsset(world, assetId)
+        if (!user || !asset) return fail('数据不存在')
+        if (!canDeleteLibraryAsset(user, asset)) return fail('你没有权限清空这份资产')
+        // 不可变降级为空壳：只清图片相关字段（cover / baseModel / looks），其余（name/prompt/voice/masterId/fields/tags）原样保留。
+        set((s) => ({
+          world: {
+            ...s.world,
+            assets: s.world.assets.map((a) =>
+              a.id === assetId
+                ? { ...a, status: 'empty' as const, cover: '', baseModel: undefined, looks: undefined }
+                : a,
+            ),
+          },
+        }))
+        return ok('已清空图片，提示词已保留，可随时重新生成')
+      },
+
       markNotificationsRead: (userId) => {
         set((s) => ({
           notifications: s.notifications.map((n) =>
@@ -565,12 +591,19 @@ export const useStore = create<StoreState>()(
         if (!user || !asset) return fail('数据不存在')
         if (!canRegenerate(user, asset)) return fail('你没有权限对这份资产重新生成')
         // 只改素模那份的 prompt（传了才改）；status 直接落 done（Demo 里不做生成中态）。不动 looks。
+        // 空壳（R1）重新生成：补一张占位图恢复成品——cover 落占位图，角色顺带补回素模；已有图的资产不受影响（cover 非空则原样保留）。
         set((s) => ({
           world: {
             ...s.world,
             assets: s.world.assets.map((a) =>
               a.id === assetId
-                ? { ...a, prompt: newPrompt !== undefined ? newPrompt : a.prompt, status: 'done' as const }
+                ? {
+                    ...a,
+                    prompt: newPrompt !== undefined ? newPrompt : a.prompt,
+                    status: 'done' as const,
+                    cover: a.cover || LOOK_PLACEHOLDER,
+                    ...(a.category === 'character' && !a.baseModel ? { baseModel: LOOK_PLACEHOLDER } : {}),
+                  }
                 : a,
             ),
           },

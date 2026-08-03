@@ -116,6 +116,23 @@ describe('入口一 · 产出意图（saveCanvasNodeToProject 纯函数）', () 
     ).toThrow(AssetRuleError)
   })
 
+  it('音频（R4）：走「关联已有」被 service 层拒绝（语义废弃）', () => {
+    expect(() =>
+      saveCanvasNodeToProject(node({ media: 'audio' }), 'proj_neon', {
+        category: 'audio', mode: 'link', targetId: 'whatever', name: 'x',
+      }),
+    ).toThrow(AssetRuleError)
+  })
+
+  it('音频（R4 ①）：新建音频素材 → 落 audio 资产、节点音源写进 fields.audioUrl（库里可试听）', () => {
+    const out = saveCanvasNodeToProject(node({ media: 'audio', content: '/a.mp3' }), 'proj_neon', {
+      category: 'audio', mode: 'new', name: '主角独白',
+    })
+    if (out.kind !== 'add') throw new Error('unreachable')
+    expect(out.asset.category).toBe('audio')
+    expect(out.asset.fields.audioUrl).toBe('/a.mp3')
+  })
+
   it('teamHasSameName：团队库同名检测', () => {
     const assets = [
       { id: 'a', scope: 'team', scopeId: 'team_a', name: '苏晚' },
@@ -174,6 +191,18 @@ describe('入口一 · store 提交（runSaveToProject）', () => {
     const ajieAfter = store.getState().world.assets.find((a: { id: string }) => a.id === 'a_ajie')
     expect(ajieAfter.looks.length).toBe(looksBefore + 1) // 挂上去了
     expect(store.getState().world.assets.length).toBe(totalBefore) // 顶层资产数不变（造型是子资产）
+  })
+
+  it('R4 ①：音频存为素材 → 项目库 audio +1，音源写进 fields.audioUrl', () => {
+    const before = projectAssets().length
+    const r = store.getState().runSaveToProject(node({ media: 'audio', content: '/a.mp3', cover: undefined }), 'proj_neon', {
+      category: 'audio', mode: 'new', name: '主角独白',
+    })
+    expect(r.ok).toBe(true)
+    const added = projectAssets().at(-1)
+    expect(projectAssets().length).toBe(before + 1)
+    expect(added.category).toBe('audio')
+    expect(added.fields.audioUrl).toBe('/a.mp3')
   })
 
   it('⑥ 拖到画布本身不新增 world.assets，只有上传才 +1', () => {

@@ -58,6 +58,17 @@ function TrashIcon() {
   )
 }
 
+/** 空壳占位大图图标（R1：图片被清空后详情左栏大图显示）。 */
+function PlaceholderIcon() {
+  return (
+    <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <path d="m21 15-5-5L5 21" />
+    </svg>
+  )
+}
+
 /** 放大查看图标（画布详情：封面 / 造型 右上角 hover 浮出）。 */
 function ZoomIcon() {
   return (
@@ -171,6 +182,7 @@ export function AssetDetail({
   const runRemovePlaza = useStore((s) => s.runRemovePlaza)
   const runDeleteAsset = useStore((s) => s.runDeleteAsset)
   const runDeleteLook = useStore((s) => s.runDeleteLook)
+  const clearAssetImages = useStore((s) => s.clearAssetImages)
   const renameAsset = useStore((s) => s.renameAsset)
   const setCover = useStore((s) => s.setCover)
   const setVoice = useStore((s) => s.setVoice)
@@ -242,8 +254,6 @@ export function AssetDetail({
   // 都用「其他…」口径，没有时统一显示（0），和场景/道具闭环。
   const stylesLabel = isCharacter ? '其他造型' : '其他样式'
   const canEditVoice = isCharacter && asset.scope !== 'plaza' && !isAdmin(user)
-  const canDeleteWhole =
-    canDeleteLibraryAsset(user, asset) || canRemovePlazaAsset(user, asset)
 
   // 口径展示：素模（+ 音色，若有）作为角色锚点，流转时一定随角色带上（逻辑已在 cloneForCopy 自动带走）。
   const anchorLabel = asset.voice ? '素模 + 音色一定会带上' : '素模（角色本体）一定会带上'
@@ -259,6 +269,29 @@ export function AssetDetail({
   const coverPromptTarget: NonNullable<typeof promptTarget> =
     isBaseModelCover || !coverLook ? { kind: 'base' } : { kind: 'look', lookId: coverLook.id }
 
+  // ── 删除分层（R1/R2）───────────────────────────────────────────────
+  // 一份资产的「图片集合」大小：角色 = 素模(1) + 造型；其它类目 = 本体图(1) + 其它样式。
+  const isEmpty = asset.status === 'empty'
+  const bodyImage = isCharacter ? (asset.baseModel ? 1 : 0) : (coverImg ? 1 : 0)
+  const imageCount = bodyImage + (asset.looks?.length ?? 0)
+  const canRemovePlaza = canRemovePlazaAsset(user, asset) // 广场：admin 下架 / 作者删自己投稿（维持现状）
+  const canDeleteLib = canDeleteLibraryAsset(user, asset) // 团队 / 项目库：非 admin 可删
+  // 封面大图上的垃圾桶（R2：正常浏览态不出现，删除下沉到图片卡）：只在这几种情况出现——
+  //   · 空壳 → 删掉整份空壳（提示词一并删）；
+  //   · 广场 → 下架 / 删投稿（维持现状）；
+  //   · 团队 / 项目成品：大图恰好是「最后一张图」（删了就归零），或大图正显示某套造型（删这张造型）。
+  const showCoverTrash =
+    isEmpty || canRemovePlaza || (canDeleteLib && (imageCount <= 1 || !!coverLook))
+  const coverTrashTitle = isEmpty
+    ? '删除该资产（提示词将一并删除）'
+    : canRemovePlaza && asset.scope === 'plaza' && isAdmin(user)
+      ? '下架该素材'
+      : canRemovePlaza
+        ? '删除该素材'
+        : imageCount <= 1
+          ? '删除这张图片'
+          : '删除这套造型'
+
   const master = asset.masterId ? world.assets.find((a) => a.id === asset.masterId) : undefined
 
   // 执行一个动作后：记录结果、收起选择面板
@@ -273,6 +306,29 @@ export function AssetDetail({
       : runDeleteAsset(asset!.id)
     setResult(r)
     if (r.ok) onClose?.()
+  }
+
+  // 封面大图垃圾桶的统一入口（R1/R2）：按当前态分流。
+  function deleteCoverImage() {
+    // 空壳整删 / 广场下架 / 删投稿 —— 维持现状。
+    if (isEmpty || canRemovePlaza) return deleteWholeAsset()
+    // 大图正显示某套造型（它恰好被设为封面）：删这张造型，removeLook 会自动把封面回落到剩余图或素模。
+    if (imageCount > 1 && coverLook) return setResult(runDeleteLook(asset!.id, coverLook.id))
+    // 大图是「最后一张图」→ 归零分流。
+    deleteLastImage()
+  }
+
+  // 归零分流（R1）：删掉最后一张图时按层走不同后果。demo 用 window.confirm 即可，不做样式化弹窗。
+  function deleteLastImage() {
+    if (asset!.scope === 'team') {
+      if (!window.confirm('这是该资产的最后一张图片，继续将删除整个资产，提示词会一并删除。')) return
+      const r = runDeleteAsset(asset!.id)
+      setResult(r)
+      if (r.ok) onClose?.()
+    } else if (asset!.scope === 'project') {
+      if (!window.confirm('图片将清空，提示词会保留，你可以随时重新生成。')) return
+      setResult(clearAssetImages(asset!.id))
+    }
   }
 
   function openPicker(mode: Exclude<PickerMode, null>) {
@@ -545,7 +601,7 @@ export function AssetDetail({
           <p className={styles.subD}>收藏 = 拷一份独立副本进团队库：</p>
           <div className={styles.inlActions}>
             <button className={`${styles.btn} ${styles.btnPri}`} onClick={() => done(runFavorite(asset!.id, hasLooks ? pickedLooks : undefined))}>
-              确认收藏{hasLooks ? (pickedLooks.length ? `（素模 + ${pickedLooks.length} 套造型）` : '（仅素模）') : ''}
+              确认收藏（{hasLooks ? pickedLooks.length + 1 : 1}）张
             </button>
             <button className={styles.btnGhost} onClick={() => setPicker(null)}>取消</button>
           </div>
@@ -562,7 +618,7 @@ export function AssetDetail({
           )}
           <div className={styles.inlActions}>
             <button className={`${styles.btn} ${styles.btnPri}`} onClick={() => done(runDeposit(asset!.id, pickedLooks))}>
-              确认存入{pickedLooks.length ? `（素模 + ${pickedLooks.length} 套造型）` : '（仅素模）'}
+              确认存入（{pickedLooks.length + 1}）张
             </button>
             <button className={styles.btnGhost} onClick={() => setPicker(null)}>取消</button>
           </div>
@@ -578,7 +634,7 @@ export function AssetDetail({
           )}
           <div className={styles.inlActions}>
             <button className={`${styles.btn} ${styles.btnPri}`} onClick={() => done(runContribute(asset!.id, pickedLooks))}>
-              确认贡献{pickedLooks.length ? `（素模 + ${pickedLooks.length} 套造型）` : '（仅素模）'}
+              确认贡献（{pickedLooks.length + 1}）张
             </button>
             <button className={styles.btnGhost} onClick={() => setPicker(null)}>取消</button>
           </div>
@@ -850,18 +906,28 @@ export function AssetDetail({
           <div className={styles.mleft}>
             <div>
               <div className={styles.baseLg}>
-                <img src={coverImg} alt={coverName} />
-                <span className={styles.cap}>{coverName}</span>
-                <div className={`${styles.thumbIcons} ${canDeleteWhole ? styles.thumbIconsShifted : ''}`}>
-                  <button className={styles.thumbBtn} title="放大查看" onClick={() => setPreview({ src: coverImg, name: coverName })}><ZoomIcon /></button>
-                  <button className={styles.thumbBtn} title="下载原图" onClick={() => downloadImage(coverImg, `${asset.name}·${coverName}`)}><DownloadIcon /></button>
-                </div>
-                {canDeleteWhole && (
+                {isEmpty ? (
+                  // 空壳（R1）：图片已清空，大图显示占位符；点提示词图标可编辑提示词并「重新生成」恢复成品。
+                  <div className={styles.emptyBig}>
+                    <PlaceholderIcon />
+                    <span>待生成 · 点提示词可重新生成</span>
+                  </div>
+                ) : (
+                  <img src={coverImg} alt={coverName} />
+                )}
+                <span className={styles.cap}>{isEmpty ? '空壳' : coverName}</span>
+                {!isEmpty && (
+                  <div className={`${styles.thumbIcons} ${showCoverTrash ? styles.thumbIconsShifted : ''}`}>
+                    <button className={styles.thumbBtn} title="放大查看" onClick={() => setPreview({ src: coverImg, name: coverName })}><ZoomIcon /></button>
+                    <button className={styles.thumbBtn} title="下载原图" onClick={() => downloadImage(coverImg, `${asset.name}·${coverName}`)}><DownloadIcon /></button>
+                  </div>
+                )}
+                {showCoverTrash && (
                   <button
                     type="button"
                     className={styles.cardDelete}
-                    title={asset.scope === 'plaza' && isAdmin(user) ? '下架该素材' : '删除该资产'}
-                    onClick={deleteWholeAsset}
+                    title={coverTrashTitle}
+                    onClick={deleteCoverImage}
                   >
                     <TrashIcon />
                   </button>
@@ -920,18 +986,9 @@ export function AssetDetail({
                   {/* 当前封面只在左栏大图显示，右侧网格一律不重复它——所以卡片数恒等于「其他造型」计数。
                       素模作为可换回封面的选项：只在它「不是当前封面」时才排进来（可编辑封面时）。 */}
                   {canEditCover && asset.baseModel && !isBaseModelCover && (
-                    <div className={styles.look}>
+                    // 素模是角色本体：不逐张删（R1/点 2 最小口径），删掉其他造型后随资产一并处理。
+                    <div className={styles.look} title="素模为角色本体，删除其他图片后可随资产一并处理">
                       <img src={asset.baseModel} alt="素模" loading="lazy" />
-                      {canDeleteWhole && (
-                        <button
-                          type="button"
-                          className={styles.cardDelete}
-                          title="删除该资产"
-                          onClick={deleteWholeAsset}
-                        >
-                          <TrashIcon />
-                        </button>
-                      )}
                       <div className={styles.lkNm}>素模</div>
                       <div className={styles.lookOv}>
                         <button className={styles.tbtn} onClick={() => setCover(asset.id, '')}>设为封面</button>

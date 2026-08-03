@@ -3,7 +3,9 @@
   width: 100%;
   flex: 1;
   min-height: 0; /* 关键：配合浮层的 max-height，让内容超高时在面板内部滚动而不是被浮层裁掉 */
-  background: transparent;
+  /* 面板底色用实心 --panel(#181a1c)：对齐设计稿，也让下面各处「白色半透明」token
+     （--line-soft/--text-muted/搜索框等）叠加后正好落到设计稿采样的实色值上。 */
+  background: var(--panel);
   padding: 16px 16px 18px;
   overflow-y: auto;
 }
@@ -81,11 +83,10 @@
   color: var(--accent);
 }
 
-/* 类目下划线 Tab（对齐 Figma 面板头部：青色下划线激活） */
+/* 类目下划线 Tab（对齐 Figma 面板头部：只保留激活项的青色下划线，不要整条灰色分隔线） */
 .catTabs {
   display: flex;
   gap: 16px;
-  border-bottom: 1px solid var(--line-mid);
   margin-bottom: 12px;
 }
 
@@ -121,7 +122,7 @@
   margin-bottom: 12px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.07); /* 对齐设计稿 #282A2C */
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
@@ -148,7 +149,7 @@
   font-family: inherit;
 }
 
-.searchInput::placeholder { color: var(--text-muted); }
+.searchInput::placeholder { color: rgba(255, 255, 255, 0.33); } /* 对齐设计稿 #646567 */
 
 /* 卡片网格：多列自适应，卡片比库页收小一档（对齐 canvas-asset-drawer 参考稿的紧凑网格） */
 .grid {
@@ -171,6 +172,49 @@
   color: var(--text-muted);
   padding: 40px 0;
   text-align: center;
+}
+
+/* 音频行列表本身的样式已抽到共享的 AudioList.module.css；这里只留「全部」类目下的分区小标题。 */
+
+/* 分区小标题（对齐 Figma：灰字标签 + 数字角标） */
+.sectionHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+/* 音频分区与上方图片网格拉开距离 */
+.sectionHeadSpaced { margin-top: 18px; }
+
+/* 标签 图片资产/音频：对齐设计稿 #747677 = --text-muted（白 40%） */
+.sectionLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* 数字角标：底 #262729（白 6%），数字 #676769（白 34%） */
+.sectionCount {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 计数角标之后一道淡淡的横线，铺满右侧剩余宽度：#242628 = --line-soft（白 5%） */
+.sectionRule {
+  flex: 1;
+  height: 1px;
+  margin-left: 4px;
+  background: var(--line-soft);
 }
 
 /* hover 行动按钮：统一走描边 ghost。 */

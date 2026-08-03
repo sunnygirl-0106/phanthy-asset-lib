@@ -38,6 +38,22 @@
   display: block;
 }
 
+/* 空壳（R1）封面占位：虚线框 + 图标 + 「待生成」字样。 */
+.emptyCover {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1.5px dashed var(--line-mid);
+  border-radius: inherit;
+  background: var(--panel-3);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 /* 左上角徽章 */
 .badges {
   position: absolute;
