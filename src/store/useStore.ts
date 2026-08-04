@@ -21,7 +21,6 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { World, User, Asset, Canvas, Notification, Voice } from '../data/types'
 import { createSeedWorld, IDS } from '../data/seed'
-import { assetUrl } from '../utils/assets'
 import {
   directReuse,
   favorite,
@@ -30,7 +29,9 @@ import {
   materializeDeposit,
   contributeToPlaza,
   materializePlaza,
-  removeLook,
+  removeCandidate,
+  setFinal,
+  makeCandidate,
   AssetRuleError,
   type DepositApplication,
   type PlazaSubmission,
@@ -79,10 +80,10 @@ interface StoreState {
   resetDemo: () => void
 
   // ── 流转动作（点按钮时调用）──
-  runDirectReuse: (sourceId: string, targetProjectId: string, includeLookIds?: string[], includeVoice?: boolean) => ActionResult
-  runFavorite: (sourceId: string, includeLookIds?: string[]) => ActionResult
-  runReuse: (sourceId: string, targetProjectId: string, includeLookIds?: string[]) => ActionResult
-  runDeposit: (sourceId: string, includeLookIds?: string[]) => ActionResult
+  runDirectReuse: (sourceId: string, targetProjectId: string, includeVoice?: boolean) => ActionResult
+  runFavorite: (sourceId: string) => ActionResult
+  runReuse: (sourceId: string, targetProjectId: string) => ActionResult
+  runDeposit: (sourceId: string) => ActionResult
 
   /**
    * 【入口一 · 本期内核唯一实质扩展】把一个画布成品节点存进项目资产库（技术规划 §2.1）。
@@ -98,11 +99,8 @@ interface StoreState {
   rejectApplication: (applicationId: string) => ActionResult
 
   // ── 广场投稿（发起：主账号/子账号；审核：admin）──
-  /**
-   * 发起广场投稿：把自己团队库/项目里的成品资产提交到 admin 审核队列。
-   * includeLookIds：贡献角色时想一起带上的造型 id（素模始终带上、不用选；空=只贡献素模）。
-   */
-  runContribute: (sourceId: string, includeLookIds?: string[]) => ActionResult
+  /** 发起广场投稿：把自己团队库/项目里的成品资产提交到 admin 审核队列（只带定稿图）。 */
+  runContribute: (sourceId: string) => ActionResult
   /** admin 通过广场投稿：把资产上架成广场官方母版、标记 approved、给投稿人发通知。 */
   approvePlazaSubmission: (submissionId: string) => ActionResult
   /** admin 驳回广场投稿：标记 rejected、给投稿人发通知。广场不动。 */
@@ -118,12 +116,36 @@ interface StoreState {
    * 只把这一份从 world 里拿掉；已被复用/沉淀出去的独立副本 id 不同、不受影响。
    */
   runDeleteAsset: (assetId: string) => ActionResult
-  /** 删除角色下的一套造型；若它是当前封面则自动回落。 */
-  runDeleteLook: (assetId: string, lookId: string) => ActionResult
+  /**
+   * 从候选池删一张候选图（详情右栏「已保留」区的删除）。
+   * 删非定稿 → 直接移除；删定稿且池中还有别的 → 顶一张上来当定稿。
+   * （删定稿且池空的归零判定由详情页按层分流到 clearAssetImages / runDeleteAsset。）
+   */
+  runRemoveCandidate: (assetId: string, candidateId: string) => ActionResult
+  /** 把候选池里的某张设为定稿。 */
+  runSetFinal: (assetId: string, candidateId: string) => ActionResult
+  /**
+   * 保留候选图（详情右栏「本次生成 → 保留选中」）：把这些图并入候选池。
+   * 若资产原本是空壳，保留后 status → 'done' 且第一张成为定稿。
+   */
+  appendCandidates: (assetId: string, urls: string[]) => ActionResult
+  /** 编辑提示词（左栏 textarea 失焦 / 生成时提交）。只改这一份的 prompt。 */
+  setPrompt: (assetId: string, prompt: string) => ActionResult
+  /**
+   * 删一张参考图（详情左栏参考图区的 ✕）。本版参考图只做展示 + 删除，
+   * 只改这一份资产的 referenceImages（按下标移除），别的都不动。
+   */
+  removeReferenceImage: (assetId: string, index: number) => ActionResult
+  /**
+   * 批量生成（阶段三）：对选中的一批空壳资产各落一张占位图、status → 'done'、设为定稿。
+   * 已经是成品的选项跳过；返回的 message 说明生成了几份、跳过了几份。
+   * placeholderUrl 由页面传入（demo 无生图后端，统一用占位图）。
+   */
+  batchGenerate: (assetIds: string[], placeholderUrl: string) => ActionResult
   /**
    * 项目库归零（R1）：删掉资产的最后一张图片时，不删整份，而是清空图片、保留空壳。
-   * 资产降级为 status:'empty'，清掉 cover / baseModel / looks；name / prompt / voice / masterId / fields / tags 全部保留。
-   * 用户之后可到提示词面板点「重新生成」把空壳恢复成成品。
+   * 资产降级为 status:'empty'，清掉 cover / candidates；name / prompt / referenceImages / voice / masterId / fields / tags 全部保留。
+   * 用户之后可到左栏点「生成」把空壳恢复成成品。
    */
   clearAssetImages: (assetId: string) => ActionResult
 
@@ -144,9 +166,8 @@ interface StoreState {
    */
   renameAsset: (assetId: string, newName: string) => ActionResult
   /**
-   * 设封面：把某个角色的封面换成它某个造型的图（用户自选封面）。
-   * v4 口径：素模是幕后锚点、不当封面；封面由用户从造型里挑一张（或上传，占位）。
-   * 只改这一份资产的 cover 字段，别的都不动。
+   * 设封面（0803）：把某个资产的定稿图换成候选池里的某张图。
+   * 只改这一份资产的 cover 字段，别的都不动。（等价于 runSetFinal 的裸操作，供画布等场景直接用。）
    */
   setCover: (assetId: string, coverUrl: string) => void
 
@@ -157,14 +178,6 @@ interface StoreState {
   setVoice: (assetId: string, voice: Voice) => void
   /** 清除音色：把某个角色的音色置空（回到"未设置"态）。 */
   clearVoice: (assetId: string) => void
-
-  // ── 重新生成 / 新增造型（v6，占位式：Demo 无生图后端，只改提示词 + 给反馈）──
-  /** 重新生成素模（v6）：只改这份角色的素模提示词/图，不碰任何造型。占位：更新 prompt。 */
-  regenerateBaseModel: (assetId: string, newPrompt?: string) => ActionResult
-  /** 重新生成某个造型（v6）：只改该 look 的提示词/图，不碰素模、不碰别的造型。占位：更新 look.prompt。 */
-  regenerateLook: (charId: string, lookId: string, newPrompt?: string) => ActionResult
-  /** 新增造型（v6，＋号）：用户自填提示词，挂一个新 look 到该角色下（占位图 + 提示词）。 */
-  addLook: (charId: string, prompt: string, name?: string) => ActionResult
 }
 
 export const useStore = create<StoreState>()(
@@ -190,7 +203,7 @@ export const useStore = create<StoreState>()(
        *    ① 找到人和资产 → ② 权限守卫 → ③ 调纯函数算结果（可能抛业务错）
        *    → ④ 不可变提交进 world → ⑤ 返回一句话给界面显示。 */
 
-      runDirectReuse: (sourceId, targetProjectId, includeLookIds, includeVoice) => {
+      runDirectReuse: (sourceId, targetProjectId, includeVoice) => {
         const { world, currentUserId } = get()
         const user = findUser(world, currentUserId)
         const source = findAsset(world, sourceId)
@@ -202,15 +215,15 @@ export const useStore = create<StoreState>()(
           return fail(`该项目已有同名「${source.name}」，请改名后再复用`)
         }
         try {
-          const copy = directReuse(source, targetProjectId, includeLookIds, includeVoice)
+          const copy = directReuse(source, targetProjectId, includeVoice)
           set((s) => ({ world: addAsset(s.world, copy) }))
-          return ok(`已把「${source.name}」直接复用进「${project.name}」${lookNote(source, includeLookIds)}`)
+          return ok(`已把「${source.name}」直接复用进「${project.name}」（独立副本）`)
         } catch (e) {
           return fromError(e)
         }
       },
 
-      runFavorite: (sourceId, includeLookIds) => {
+      runFavorite: (sourceId) => {
         const { world, currentUserId } = get()
         const user = findUser(world, currentUserId)
         const source = findAsset(world, sourceId)
@@ -223,15 +236,15 @@ export const useStore = create<StoreState>()(
           return fail(`团队库已有同名「${source.name}」，请改名后再收藏进团队库`)
         }
         try {
-          const copy = favorite(source, user.teamId, includeLookIds)
+          const copy = favorite(source, user.teamId)
           set((s) => ({ world: addAsset(s.world, copy) }))
-          return ok(`已收藏「${source.name}」进团队库${lookNote(source, includeLookIds)}`)
+          return ok(`已收藏「${source.name}」进团队库（独立副本）`)
         } catch (e) {
           return fromError(e)
         }
       },
 
-      runReuse: (sourceId, targetProjectId, includeLookIds) => {
+      runReuse: (sourceId, targetProjectId) => {
         const { world, currentUserId } = get()
         const user = findUser(world, currentUserId)
         const source = findAsset(world, sourceId)
@@ -243,15 +256,15 @@ export const useStore = create<StoreState>()(
           return fail(`该项目已有同名「${source.name}」，请改名后再复用`)
         }
         try {
-          const copy = reuse(source, targetProjectId, includeLookIds)
+          const copy = reuse(source, targetProjectId)
           set((s) => ({ world: addAsset(s.world, copy) }))
-          return ok(`已把「${source.name}」复用进「${project.name}」${lookNote(source, includeLookIds)}`)
+          return ok(`已把「${source.name}」复用进「${project.name}」（独立副本）`)
         } catch (e) {
           return fromError(e)
         }
       },
 
-      runDeposit: (sourceId, includeLookIds) => {
+      runDeposit: (sourceId) => {
         const { world, currentUserId } = get()
         const user = findUser(world, currentUserId)
         const source = findAsset(world, sourceId)
@@ -263,7 +276,7 @@ export const useStore = create<StoreState>()(
           return fail(`团队库已有同名「${source.name}」，请改名后再沉淀回团队库`)
         }
         try {
-          const res = deposit(source, user.teamId, user, includeLookIds)
+          const res = deposit(source, user.teamId, user)
           if (res.kind === 'asset') {
             set((s) => ({ world: addAsset(s.world, res.asset) }))
             return ok(`已把「${source.name}」沉淀为团队母版`)
@@ -311,8 +324,8 @@ export const useStore = create<StoreState>()(
         const source = findAsset(world, appl.assetId)
         if (!source) return fail('原资产已不存在，无法入库')
         try {
-          // 复用同一处"入库"实现，保证审批通过和主账号直接沉淀行为一致；按申请里存的勾选落库
-          const master = materializeDeposit(source, appl.toTeamId, appl.includeLookIds)
+          // 复用同一处"入库"实现，保证审批通过和主账号直接沉淀行为一致
+          const master = materializeDeposit(source, appl.toTeamId)
           set((s) => ({
             world: addAsset(s.world, master),
             applications: s.applications.map((a) =>
@@ -350,17 +363,16 @@ export const useStore = create<StoreState>()(
         return ok(`已驳回「${appl.assetName}」的沉淀申请`)
       },
 
-      runContribute: (sourceId, includeLookIds = []) => {
+      runContribute: (sourceId) => {
         const { world, currentUserId } = get()
         const user = findUser(world, currentUserId)
         const source = findAsset(world, sourceId)
         if (!user || !source) return fail('数据不存在')
         if (!canContributeToPlaza(user, source)) return fail('你没有权限在这一层向广场投稿')
         try {
-          const submission = contributeToPlaza(source, user, includeLookIds)
+          const submission = contributeToPlaza(source, user)
           set((s) => ({ plazaSubmissions: [...s.plazaSubmissions, submission] }))
-          const extra = includeLookIds.length ? `（含 ${includeLookIds.length} 套造型）` : '（仅素模）'
-          return ok(`已提交「${source.name}」的广场投稿${source.looks?.length ? extra : ''}，待 admin 审核`)
+          return ok(`已提交「${source.name}」的广场投稿，待 admin 审核`)
         } catch (e) {
           return fromError(e)
         }
@@ -376,7 +388,7 @@ export const useStore = create<StoreState>()(
         const source = findAsset(world, sub.assetId)
         if (!source) return fail('原资产已不存在，无法上架')
         try {
-          const master = materializePlaza(source, sub.submitterId, sub.includeLookIds)
+          const master = materializePlaza(source, sub.submitterId)
           set((s) => ({
             world: addAsset(s.world, master),
             plazaSubmissions: s.plazaSubmissions.map((x) =>
@@ -447,24 +459,137 @@ export const useStore = create<StoreState>()(
         return ok(`已删除「${asset.name}」（已复用出去的副本不受影响）`)
       },
 
-      runDeleteLook: (assetId, lookId) => {
+      runRemoveCandidate: (assetId, candidateId) => {
         const { world, currentUserId } = get()
         const user = findUser(world, currentUserId)
         const asset = findAsset(world, assetId)
         if (!user || !asset) return fail('数据不存在')
-        if (!canDeleteLibraryAsset(user, asset)) return fail('你没有权限删除这套造型')
+        if (!canDeleteLibraryAsset(user, asset)) return fail('你没有权限删除这张图片')
         try {
-          const next = removeLook(asset, lookId)
+          const next = removeCandidate(asset, candidateId)
           set((s) => ({
             world: {
               ...s.world,
               assets: s.world.assets.map((a) => (a.id === assetId ? next : a)),
             },
           }))
-          return ok('已删除该造型')
+          return ok('已删除该图片')
         } catch (e) {
           return fromError(e)
         }
+      },
+
+      runSetFinal: (assetId, candidateId) => {
+        const { world, currentUserId } = get()
+        const user = findUser(world, currentUserId)
+        const asset = findAsset(world, assetId)
+        if (!user || !asset) return fail('数据不存在')
+        if (!canDeleteLibraryAsset(user, asset)) return fail('你没有权限修改这份资产')
+        try {
+          const next = setFinal(asset, candidateId)
+          set((s) => ({
+            world: {
+              ...s.world,
+              assets: s.world.assets.map((a) => (a.id === assetId ? next : a)),
+            },
+          }))
+          return ok('已设为定稿')
+        } catch (e) {
+          return fromError(e)
+        }
+      },
+
+      appendCandidates: (assetId, urls) => {
+        const { world, currentUserId } = get()
+        const user = findUser(world, currentUserId)
+        const asset = findAsset(world, assetId)
+        if (!user || !asset) return fail('数据不存在')
+        if (!canRegenerate(user, asset)) return fail('你没有权限往这份资产生成图片')
+        if (urls.length === 0) return fail('没有可保留的图片')
+        const added = urls.map((u) => makeCandidate(u, asset.prompt))
+        set((s) => ({
+          world: {
+            ...s.world,
+            assets: s.world.assets.map((a) => {
+              if (a.id !== assetId) return a
+              const candidates = [...(a.candidates ?? []), ...added]
+              // 空壳追加后 → 成品，第一张追加的图成为定稿。
+              const becameDone = a.status === 'empty'
+              return {
+                ...a,
+                candidates,
+                status: 'done' as const,
+                cover: a.cover || (becameDone ? added[0].url : a.cover),
+              }
+            }),
+          },
+        }))
+        return ok(`已保留 ${added.length} 张`)
+      },
+
+      setPrompt: (assetId, prompt) => {
+        const { world, currentUserId } = get()
+        const user = findUser(world, currentUserId)
+        const asset = findAsset(world, assetId)
+        if (!user || !asset) return fail('数据不存在')
+        if (!canRegenerate(user, asset)) return fail('你没有权限编辑这份资产的提示词')
+        set((s) => ({
+          world: {
+            ...s.world,
+            assets: s.world.assets.map((a) => (a.id === assetId ? { ...a, prompt } : a)),
+          },
+        }))
+        return ok('提示词已更新')
+      },
+
+      removeReferenceImage: (assetId, index) => {
+        const { world, currentUserId } = get()
+        const user = findUser(world, currentUserId)
+        const asset = findAsset(world, assetId)
+        if (!user || !asset) return fail('数据不存在')
+        if (!canRegenerate(user, asset)) return fail('你没有权限编辑这份资产的参考图')
+        const refs = asset.referenceImages ?? []
+        if (index < 0 || index >= refs.length) return fail('参考图不存在')
+        const next = refs.filter((_, i) => i !== index)
+        set((s) => ({
+          world: {
+            ...s.world,
+            assets: s.world.assets.map((a) =>
+              a.id === assetId ? { ...a, referenceImages: next.length ? next : undefined } : a,
+            ),
+          },
+        }))
+        return ok('已移除参考图')
+      },
+
+      batchGenerate: (assetIds, placeholderUrl) => {
+        const { world, currentUserId } = get()
+        const user = findUser(world, currentUserId)
+        if (!user) return fail('数据不存在')
+        const idSet = new Set(assetIds)
+        let generated = 0
+        let skipped = 0
+        set((s) => ({
+          world: {
+            ...s.world,
+            assets: s.world.assets.map((a) => {
+              if (!idSet.has(a.id)) return a
+              // 没权限生成 / 已经是成品 → 跳过（doc：跳过已有成品）。
+              if (!canRegenerate(user, a) || a.status !== 'empty') {
+                skipped++
+                return a
+              }
+              generated++
+              // 空壳 → 成品：逐份取自己的参考图（= 来源角色的定稿图）作为生成图，没有则兜底占位图；
+              // 带 ?g=N 后缀保证 url 唯一（定稿按 url 认）。
+              const src = a.referenceImages?.[0] ?? placeholderUrl
+              const cand = makeCandidate(`${src.split('?')[0]}?g=${generated}`, a.prompt)
+              return { ...a, status: 'done' as const, cover: cand.url, candidates: [...(a.candidates ?? []), cand] }
+            }),
+          },
+        }))
+        if (generated === 0 && skipped === 0) return fail('没有可生成的资产')
+        return ok(`已生成 ${generated} 份资产（跳过 ${skipped} 份已有成品）`)
       },
 
       clearAssetImages: (assetId) => {
@@ -473,13 +598,13 @@ export const useStore = create<StoreState>()(
         const asset = findAsset(world, assetId)
         if (!user || !asset) return fail('数据不存在')
         if (!canDeleteLibraryAsset(user, asset)) return fail('你没有权限清空这份资产')
-        // 不可变降级为空壳：只清图片相关字段（cover / baseModel / looks），其余（name/prompt/voice/masterId/fields/tags）原样保留。
+        // 不可变降级为空壳：只清图片相关字段（cover / candidates），其余（name/prompt/referenceImages/voice/masterId/fields/tags）原样保留。
         set((s) => ({
           world: {
             ...s.world,
             assets: s.world.assets.map((a) =>
               a.id === assetId
-                ? { ...a, status: 'empty' as const, cover: '', baseModel: undefined, looks: undefined }
+                ? { ...a, status: 'empty' as const, cover: '', candidates: undefined }
                 : a,
             ),
           },
@@ -578,98 +703,6 @@ export const useStore = create<StoreState>()(
           },
         }))
       },
-
-      /* ── 重新生成 / 新增造型（v6）───────────────────────────────────────
-       * Demo 无生图后端：这三个动作只落"提示词 + 占位反馈"，像素待接模型。
-       * 都先过 canRegenerate 守卫（广场恒挡、admin 恒挡；子账号仅项目库）。
-       * 沿用 setCover/setVoice 的不可变写法：assets.map 造新数组、只碰这一份。 */
-
-      regenerateBaseModel: (assetId, newPrompt) => {
-        const { world, currentUserId } = get()
-        const user = findUser(world, currentUserId)
-        const asset = findAsset(world, assetId)
-        if (!user || !asset) return fail('数据不存在')
-        if (!canRegenerate(user, asset)) return fail('你没有权限对这份资产重新生成')
-        // 只改素模那份的 prompt（传了才改）；status 直接落 done（Demo 里不做生成中态）。不动 looks。
-        // 空壳（R1）重新生成：补一张占位图恢复成品——cover 落占位图，角色顺带补回素模；已有图的资产不受影响（cover 非空则原样保留）。
-        set((s) => ({
-          world: {
-            ...s.world,
-            assets: s.world.assets.map((a) =>
-              a.id === assetId
-                ? {
-                    ...a,
-                    prompt: newPrompt !== undefined ? newPrompt : a.prompt,
-                    status: 'done' as const,
-                    cover: a.cover || LOOK_PLACEHOLDER,
-                    ...(a.category === 'character' && !a.baseModel ? { baseModel: LOOK_PLACEHOLDER } : {}),
-                  }
-                : a,
-            ),
-          },
-        }))
-        return ok('已提交素模重新生成，接入生图模型后生效')
-      },
-
-      regenerateLook: (charId, lookId, newPrompt) => {
-        const { world, currentUserId } = get()
-        const user = findUser(world, currentUserId)
-        const asset = findAsset(world, charId)
-        if (!user || !asset) return fail('数据不存在')
-        if (!canRegenerate(user, asset)) return fail('你没有权限对这份资产重新生成')
-        if (!asset.looks?.some((l) => l.id === lookId)) return fail('造型不存在')
-        // 只更新 looks 里那一个 look 的 prompt；不动 baseModel、不动别的 look。
-        set((s) => ({
-          world: {
-            ...s.world,
-            assets: s.world.assets.map((a) =>
-              a.id === charId
-                ? {
-                    ...a,
-                    looks: a.looks!.map((l) =>
-                      l.id === lookId
-                        ? { ...l, prompt: newPrompt !== undefined ? newPrompt : l.prompt, status: 'done' as const }
-                        : l,
-                    ),
-                  }
-                : a,
-            ),
-          },
-        }))
-        return ok('已提交造型重新生成，接入生图模型后生效')
-      },
-
-      addLook: (charId, prompt, name) => {
-        const { world, currentUserId } = get()
-        const user = findUser(world, currentUserId)
-        const asset = findAsset(world, charId)
-        if (!user || !asset) return fail('数据不存在')
-        if (!canRegenerate(user, asset)) return fail('你没有权限新增造型')
-        // 追加一个新 look（占位图 + 提示词），同角色 scope/scopeId；参考 applySaveOutcome 的 addLook 分支。
-        const lookName = name?.trim() || `新造型 ${(asset.looks?.length ?? 0) + 1}`
-        const look: Asset = {
-          id: `look_${_lookSeq++}`,
-          category: 'character',
-          name: lookName,
-          scope: asset.scope,
-          scopeId: asset.scopeId,
-          status: 'done',
-          cover: LOOK_PLACEHOLDER,
-          fields: {},
-          tags: [],
-          prompt,
-          createdAt: Date.now(),
-        }
-        set((s) => ({
-          world: {
-            ...s.world,
-            assets: s.world.assets.map((a) =>
-              a.id === charId ? { ...a, looks: [...(a.looks ?? []), look] } : a,
-            ),
-          },
-        }))
-        return ok(`已新增造型「${lookName}」，接入生图模型后出图`)
-      },
     }),
     {
       name: 'phanty-demo-v1',
@@ -697,7 +730,7 @@ function findAsset(world: World, id: string): Asset | undefined {
 function addAsset(world: World, asset: Asset): World {
   return { ...world, assets: [...world.assets, asset] }
 }
-/** 入口一：把画布上传的产出意图不可变地提交进 world（新建顶层 / 关联到已有资产）。 */
+/** 入口一：把画布上传的产出意图不可变地提交进 world（新建顶层 / 追加候选到已有资产）。 */
 function applySaveOutcome(world: World, outcome: SaveOutcome): World {
   switch (outcome.kind) {
     case 'add':
@@ -706,7 +739,9 @@ function applySaveOutcome(world: World, outcome: SaveOutcome): World {
       return {
         ...world,
         assets: world.assets.map((a) =>
-          a.id === outcome.parentId ? { ...a, looks: [...(a.looks ?? []), outcome.child] } : a,
+          a.id === outcome.parentId
+            ? { ...a, candidates: [...(a.candidates ?? []), outcome.candidate] }
+            : a,
         ),
       }
   }
@@ -717,27 +752,15 @@ function saveMessage(outcome: SaveOutcome): string {
     case 'add':
       return `已上传「${outcome.asset.name}」到项目资产库`
     case 'link':
-      return `已把「${outcome.child.name}」关联到已有资产`
+      return '已把这张图追加到已有资产的候选池'
   }
 }
-/** 新增造型（v6）的占位图：Demo 无生图后端，新造型先用本地占位图，接模型后换真图。 */
-const LOOK_PLACEHOLDER = assetUrl('assets/canvas/image-placeholder.svg')
-/** 新增造型的自增 id 计数器（够 Demo 用且可预测）。 */
-let _lookSeq = 1
 /** 新建画布的自增 id 计数器（够 Demo 用且可预测）。 */
 let _canvasSeq = 1
 /** 造一条通知（自增 id，够 Demo 用且可预测）。 */
 let _notiSeq = 1
 function makeNotification(toUserId: string, text: string): Notification {
   return { id: `noti_${_notiSeq++}`, toUserId, text, createdAt: Date.now(), read: false }
-}
-/** 给复用/直接复用的结果补一句"带了哪些造型"的说明（非角色就只说独立副本）。 */
-function lookNote(source: Asset, includeLookIds?: string[]): string {
-  if (!source.looks?.length) return '（独立副本）'
-  if (includeLookIds === undefined) return '（独立副本 · 整份带）'
-  return includeLookIds.length
-    ? `（独立副本 · 素模 + ${includeLookIds.length} 套造型）`
-    : '（独立副本 · 仅素模）'
 }
 function ok(message: string): ActionResult {
   return { ok: true, message }

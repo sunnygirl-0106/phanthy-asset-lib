@@ -5,7 +5,7 @@
  *  ① 空壳/生成中节点无"上传"入口、成品有
  *  ② 文本/视频节点无"上传"入口，图片/音频有
  *  ③ 图片上传选类目后进项目库为 done
- *  ④ 图片新建角色带 baseModel；关联已有→挂到已有资产 looks
+ *  ④ 图片新建角色 cover 即定稿；关联已有→追加候选到已有资产候选池
  *  ⑤ 从团队库/广场拖来上传→项目副本且带 masterId；从项目库拖来→无"上传"入口
  *  ⑥ 拖到画布本身不新增 world.assets（只有上传才 +1）
  *  ⑦ 子账号画布上传项目库免审直接进，项目→团队沉淀才生成申请
@@ -90,26 +90,27 @@ describe('入口一 · 产出意图（saveCanvasNodeToProject 纯函数）', () 
     expect(out.asset.category).toBe('scene')
   })
 
-  it('④ 图片新建角色带 baseModel；关联已有→挂到已有资产 looks', () => {
-    const asBase = saveCanvasNodeToProject(node({ cover: '/mei.png' }), 'proj_neon', {
+  it('④ 图片新建角色：cover 即定稿；关联已有→追加候选到已有资产候选池', () => {
+    const asNew = saveCanvasNodeToProject(node({ cover: '/mei.png' }), 'proj_neon', {
       category: 'character',
       mode: 'new',
       name: '小美',
     })
-    expect(asBase.kind).toBe('add')
-    if (asBase.kind !== 'add') throw new Error('unreachable')
-    expect(asBase.asset.category).toBe('character')
-    expect(asBase.asset.baseModel).toBe('/mei.png') // 素模带上了
+    expect(asNew.kind).toBe('add')
+    if (asNew.kind !== 'add') throw new Error('unreachable')
+    expect(asNew.asset.category).toBe('character')
+    expect(asNew.asset.cover).toBe('/mei.png') // 定稿 = 这张图
 
-    const linked = saveCanvasNodeToProject(node(), 'proj_neon', {
+    const linked = saveCanvasNodeToProject(node({ cover: '/new.png' }), 'proj_neon', {
       category: 'character',
       mode: 'link',
       targetId: 'a_ajie',
-      name: '阿杰·新造型',
+      name: '阿杰·新候选',
     })
     expect(linked.kind).toBe('link')
     if (linked.kind !== 'link') throw new Error('unreachable')
     expect(linked.parentId).toBe('a_ajie')
+    expect(linked.candidate.url).toBe('/new.png') // 追加为候选图
   })
 
   it('⑤ 从团队库拖来上传→副本带 masterId；新生成→原创无 masterId', () => {
@@ -244,20 +245,20 @@ describe('入口一 · store 提交（runSaveToProject）', () => {
     expect(after.at(-1).status).toBe('done')
   })
 
-  it('④ 关联已有 → 挂到已有资产 looks，不新增顶层资产', () => {
+  it('④ 关联已有 → 追加候选到已有资产候选池，不新增顶层资产', () => {
     const ajieBefore = store.getState().world.assets.find((a: { id: string }) => a.id === 'a_ajie')
-    const looksBefore = ajieBefore.looks?.length ?? 0
+    const candsBefore = ajieBefore.candidates?.length ?? 0
     const totalBefore = store.getState().world.assets.length
     const r = store.getState().runSaveToProject(node(), 'proj_neon', {
       category: 'character',
       mode: 'link',
       targetId: 'a_ajie',
-      name: '阿杰·夜行造型',
+      name: '阿杰·新候选',
     })
     expect(r.ok).toBe(true)
     const ajieAfter = store.getState().world.assets.find((a: { id: string }) => a.id === 'a_ajie')
-    expect(ajieAfter.looks.length).toBe(looksBefore + 1) // 挂上去了
-    expect(store.getState().world.assets.length).toBe(totalBefore) // 顶层资产数不变（造型是子资产）
+    expect(ajieAfter.candidates.length).toBe(candsBefore + 1) // 追加进候选池
+    expect(store.getState().world.assets.length).toBe(totalBefore) // 顶层资产数不变（候选不是资产）
   })
 
   it('R4 ①：音频存为素材 → 项目库 audio +1，音源写进 fields.audioUrl', () => {
@@ -397,14 +398,14 @@ describe('演示动线：子账号画布上传 → 沉淀 → 主账号审批 �
     ).toBe(1)
   })
 
-  it('子账号带造型勾选沉淀 → 审批后团队库那份按勾选落库、素模仍在（v5 改动2）', () => {
-    // 小林（子账号，分配了霓虹东京）沉淀「阿杰」，但一个造型都不勾（[]）
+  it('子账号沉淀 → 审批后团队库那份只带定稿图、候选池不带（0803）', () => {
+    // 小林（子账号，分配了霓虹东京）沉淀「阿杰」
     store.getState().setCurrentUser('u_lin')
-    expect(store.getState().runDeposit('a_ajie', []).ok).toBe(true)
+    const ajie = store.getState().world.assets.find((a: { id: string }) => a.id === 'a_ajie')
+    expect(store.getState().runDeposit('a_ajie').ok).toBe(true)
     const appl = store.getState().applications.at(-1)
-    expect(appl.includeLookIds).toEqual([]) // 勾选（空）记进了申请
 
-    // 主账号审批通过 → 团队库那份：素模在、按勾选（空）不带任何造型
+    // 主账号审批通过 → 团队库那份：定稿在、候选池不带
     store.getState().setCurrentUser('u_sunny')
     expect(store.getState().approveApplication(appl.id).ok).toBe(true)
     const master = store
@@ -414,27 +415,7 @@ describe('演示动线：子账号画布上传 → 沉淀 → 主账号审批 �
           a.scope === 'team' && a.scopeId === 'team_a' && a.name === '阿杰',
       )
       .at(-1)
-    expect(master.baseModel).toBeTruthy() // 素模必带
-    expect(master.looks ?? []).toHaveLength(0) // 按勾选：一个造型都没带
-  })
-
-  it('子账号带造型勾选沉淀 → 勾上的造型会一起落库', () => {
-    store.getState().setCurrentUser('u_lin')
-    expect(store.getState().runDeposit('a_ajie', ['a_ajie_look']).ok).toBe(true)
-    const appl = store.getState().applications.at(-1)
-    expect(appl.includeLookIds).toEqual(['a_ajie_look'])
-
-    store.getState().setCurrentUser('u_sunny')
-    expect(store.getState().approveApplication(appl.id).ok).toBe(true)
-    const master = store
-      .getState()
-      .world.assets.filter(
-        (a: { scope: string; scopeId?: string; name: string }) =>
-          a.scope === 'team' && a.scopeId === 'team_a' && a.name === '阿杰',
-      )
-      .at(-1)
-    expect(master.baseModel).toBeTruthy()
-    expect(master.looks).toHaveLength(1)
-    expect(master.looks[0].id).toBe('a_ajie_look')
+    expect(master.cover).toBe(ajie.cover) // 定稿带上
+    expect(master.candidates).toBeUndefined() // 候选池不带
   })
 })

@@ -55,9 +55,9 @@ export function AssetCard({
   // 副标题：有真实创建时间就显示时间（对齐设计稿），否则退化成类目标签。
   const subtitle = asset.createdAt ? formatDateTime(asset.createdAt) : CATEGORY_LABEL[asset.category]
 
-  // 多造型角色：图片总数 = 素模（1 张）+ 造型数。≥2 时卡片叠出"卡边"并在右下角标出总张数。
-  const lookCount = asset.category === 'character' ? (asset.looks?.length ?? 0) + 1 : 0
-  const multiLook = lookCount >= 2
+  // 多图资产（0803）：候选池 ≥2 张时卡片叠出"卡边"并在右下角标出候选总数。
+  const candidateCount = asset.candidates?.length ?? 0
+  const multiLook = candidateCount >= 2
 
   // 「其他」类目：按 fields.media 分三种渲染（图片 / 视频 / 文本），并在左上角打一个媒介徽章。
   const otherMedia = asset.category === 'other' ? (asset.fields.media as 'image' | 'video' | 'text' | undefined) ?? 'image' : null
@@ -102,12 +102,13 @@ export function AssetCard({
         </>
       )}
 
-      {/* 左上角徽章：媒介（其他）/ 副本血缘 / 非成品状态 */}
-      {(otherMedia || asset.masterId || asset.status !== 'done') && (
+      {/* 左上角徽章：媒介（其他）/ 副本血缘 / 非成品状态。
+          「待生成」空壳不再打状态角标——封面中央已写「待生成」，避免同一张卡重复两次。 */}
+      {(otherMedia || asset.masterId || (asset.status !== 'done' && asset.status !== 'empty')) && (
         <div className={styles.badges}>
           {otherMedia && <span className={`${styles.badge} ${styles.badgeMedia}`}>{MEDIA_LABEL[otherMedia]}</span>}
           {asset.masterId && <span className={`${styles.badge} ${styles.badgeCopy}`}>副本</span>}
-          {asset.status !== 'done' && <span className={styles.badge}>{statusLabel(asset.status)}</span>}
+          {asset.status !== 'done' && asset.status !== 'empty' && <span className={styles.badge}>{statusLabel(asset.status)}</span>}
         </div>
       )}
 
@@ -122,9 +123,9 @@ export function AssetCard({
         </div>
         {multiLook && (
           <div className={styles.overlayRight}>
-            <span className={styles.lookCount} title={`素模 + ${lookCount - 1} 套造型 · 共 ${lookCount} 张`}>
+            <span className={styles.lookCount} title={`候选池共 ${candidateCount} 张`}>
               <img src={assetUrl('assets/icons/multi-angle.svg')} alt="" aria-hidden />
-              {lookCount}
+              {candidateCount}
             </span>
           </div>
         )}
@@ -145,7 +146,7 @@ function EmptyGlyph() {
 }
 
 function statusLabel(status: Asset['status']): string {
-  return status === 'empty' ? '空壳' : status === 'generating' ? '生成中' : status === 'failed' ? '失败' : '成品'
+  return status === 'empty' ? '待生成' : status === 'generating' ? '生成中' : status === 'failed' ? '失败' : '成品'
 }
 
 /** 时间格式对齐设计稿：2026年7月23日 11:08 */

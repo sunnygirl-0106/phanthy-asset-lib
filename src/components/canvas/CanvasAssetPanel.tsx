@@ -68,15 +68,15 @@ function mediaOf(asset: Asset): Media {
   return 'image'
 }
 
-/** 是否走音频条状列表（AudioList）：音频类目，或「其他·音频」。其余走卡片网格。 */
+/** 是否走音频条状列表（AudioList）：音频类目（「其他」不含音频）。其余走卡片网格。 */
 function isAudioAsset(asset: Asset): boolean {
-  return asset.category === 'audio' || (asset.category === 'other' && asset.fields.media === 'audio')
+  return asset.category === 'audio'
 }
 
 /** 单图资产从卡片直接使用时的默认载荷。 */
 function defaultPayload(asset: Asset): DragPayload {
   if (asset.category === 'character') {
-    return { scope: asset.scope, assetId: asset.id, media: 'image', name: asset.name, cover: asset.baseModel ?? asset.cover }
+    return { scope: asset.scope, assetId: asset.id, media: 'image', name: asset.name, cover: asset.cover }
   }
   // 「其他」文本：落文本节点（content 取 fields.text，无封面）；图片/视频：带封面落对应节点。
   if (asset.category === 'other' && mediaOf(asset) === 'text') {
@@ -118,7 +118,7 @@ export function CanvasAssetPanel({
     .filter((a) => !searching || a.name.toLowerCase().includes(q))
 
   const groupedItems = SCOPES.map((s) => ({ ...s, items: items.filter((a) => a.scope === s.key) }))
-  // 「全部」类目分区展示用：图片类走网格、音频类（含「其他·音频」）走条状列表。
+  // 「全部」类目分区展示用：图片类走网格、音频类走条状列表（音频只在音频类目，不进「其他」）。
   const imageItems = items.filter((a) => !isAudioAsset(a))
   const audioItems = items.filter((a) => isAudioAsset(a))
 
@@ -145,7 +145,8 @@ export function CanvasAssetPanel({
 
   /** 图片类资产卡（照旧）；音频类不进网格，走 renderAudioList 的条状列表。 */
   function renderCard(a: Asset) {
-    const singleImage = (a.looks?.length ?? 0) === 0 && !STYLE_CATS.has(a.category)
+    // 候选池 ≤1 张且不属于"进详情选图"品类的，卡片上直接「使用」；否则进详情挑候选。
+    const singleImage = (a.candidates?.length ?? 0) <= 1 && !STYLE_CATS.has(a.category)
     return (
       <AssetCard
         key={a.id}
@@ -332,23 +333,18 @@ export function CanvasAssetPanel({
           )}
         </>
       ) : category === 'other' ? (
-        // 「其他」按媒介分区（与项目资产库一致）：图片 → 视频 → 文本 → 音频，从上到下。
+        // 「其他」按媒介分区（与项目资产库一致）：图片 → 视频 → 文本，从上到下（不含音频）。
         <>
           {[
             { key: 'image', label: '图片', items: items.filter((a) => (a.fields.media ?? 'image') === 'image') },
             { key: 'video', label: '视频', items: items.filter((a) => a.fields.media === 'video') },
             { key: 'text', label: '文本', items: items.filter((a) => a.fields.media === 'text') },
-            { key: 'audio', label: '音频', items: items.filter((a) => a.fields.media === 'audio') },
           ]
             .filter((g) => g.items.length > 0)
             .map((g, i) => (
               <div key={g.key}>
                 {sectionHead(g.label, g.items.length, i > 0)}
-                {g.key === 'audio' ? (
-                  renderAudioList(g.items)
-                ) : (
-                  <div className={styles.grid}>{g.items.map(renderCard)}</div>
-                )}
+                <div className={styles.grid}>{g.items.map(renderCard)}</div>
               </div>
             ))}
         </>

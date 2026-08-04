@@ -18,8 +18,8 @@
  *   · 从本项目库拖上来的节点 → 已经是项目资产，不再给"上传"入口。
  * ─────────────────────────────────────────────────────────────────────── */
 
-import type { Asset, AssetFields, Category } from '../data/types'
-import { AssetRuleError } from './assetService'
+import type { Asset, AssetFields, Candidate, Category } from '../data/types'
+import { AssetRuleError, makeCandidate } from './assetService'
 
 /** 媒介 = 画布节点类型（与类目正交）。 */
 export type Media = 'text' | 'image' | 'video' | 'audio'
@@ -96,16 +96,16 @@ export function canUploadToProject(node: CanvasNode): boolean {
 /**
  * 上传时用户填的规格：类目 + 名字 + 保存方式（v7）。
  *
- * v7 概念调整：任何类目都可能对应多张资产（一个场景可以有很多张图、一个角色可以有很多造型），
- * 所以把老的「素模 / 造型」这一角色专属分叉，泛化成对所有类目通用的两个保存方式：
- *   · mode='new' 新建：把这张图/这段音当成一份全新的顶层资产。
- *   · mode='link' 关联已有：把它挂到某个已有同类资产下，作为它的一张子资产（变体/造型）。
- * 角色新建时额外把这张图当素模（baseModel）；其它类目无此概念。
+ * 【0803】任何类目都可能对应多张图（一份资产 = 定稿图 + 候选池）。两个保存方式：
+ *   · mode='new'  新建：把这张图/这段音当成一份全新的顶层资产。
+ *   · mode='link' 关联已有：把这张图**追加进某个已有同类资产的候选池**（candidates）。
+ *     变体（睡衣苏晚等）各自独立成资产，不再作为"子资产/造型"挂在父资产下；
+ *     所以「关联已有」在新模型里就是"并入候选池"，用户之后可在详情里「设为定稿」。
  */
 export type SaveSpec =
   // 新建：任意类目直接成一份新的顶层资产
   | { category: Category; mode: 'new'; name: string; extraFields?: AssetFields }
-  // 关联已有：挂到某个已有同类资产（targetId）下，作为它的一张子资产
+  // 关联已有：把这张图追加进某个已有同类资产（targetId）的候选池
   | { category: Category; mode: 'link'; targetId: string; name: string; extraFields?: AssetFields }
 
 // extraFields（可选透传）：「其他」类目落库时把媒介信息（media / videoUrl / text）
@@ -113,11 +113,12 @@ export type SaveSpec =
 
 /**
  * 上传的产出意图。「关联已有」不是新增一份顶层资产，
- * 而是往一个已有资产的 looks[] 里追加子资产，所以用可辨识联合区分，交给 store 各自不可变提交。
+ * 而是往一个已有资产的候选池（candidates[]）里追加一张候选图，所以用可辨识联合区分，
+ * 交给 store 各自不可变提交。
  */
 export type SaveOutcome =
   | { kind: 'add'; asset: Asset } // 新建一份顶层项目资产（任意类目）
-  | { kind: 'link'; parentId: string; child: Asset } // 关联到已有资产：往其 looks[] 追加一张子资产
+  | { kind: 'link'; parentId: string; candidate: Candidate } // 关联到已有资产：往其候选池追加一张候选图
 
 let _seq = 1
 function makeId(prefix: string): string {
@@ -168,24 +169,24 @@ export function saveCanvasNodeToProject(
     throw new AssetRuleError(`媒介「${node.media}」不能落类目「${spec.category}」。`)
   }
 
-  // 音频不再提供「关联已有」（R3/R4）：挂到另一段音频的 looks 下无处展示，语义废弃。
+  // 音频不再提供「关联已有」（R3/R4）：候选池是视觉图的概念，音频并入无处展示，语义废弃。
   if (node.media === 'audio' && spec.mode === 'link') {
     throw new AssetRuleError('音频不支持「关联已有」，请作为音频素材新建。')
   }
 
-  // 「其他」是存进来的成品留存物、没有子资产概念（§4.3）：只支持「新建」，不支持「关联已有」。
+  // 「其他」是存进来的成品留存物、没有候选池概念（§4.3）：只支持「新建」，不支持「关联已有」。
   if (spec.category === 'other' && spec.mode === 'link') {
     throw new AssetRuleError('「其他」类目不支持关联到已有资产。')
   }
 
-  // 关联已有：把这张图/这段音挂到某个已有同类资产下，作为它的一张子资产（变体/造型）。
+  // 关联已有：把这张图追加进某个已有同类资产的候选池（用户之后可在详情里「设为定稿」）。
   if (spec.mode === 'link') {
-    const child = buildProjectAsset(node, projectId, spec.category, spec.name, mergeExtraFields(spec))
-    return { kind: 'link', parentId: spec.targetId, child }
+    const candidate = makeCandidate(node.cover ?? '')
+    return { kind: 'link', parentId: spec.targetId, candidate }
   }
 
-  // 新建：成一份新的顶层资产。角色额外把这张图当素模 + 封面；其它类目无此概念。
-  const extra: Partial<Asset> = spec.category === 'character' ? { baseModel: node.cover ?? '' } : {}
+  // 新建：成一份新的顶层资产。cover 即定稿图（0803：不再有 baseModel 概念）。
+  const extra: Partial<Asset> = {}
   // 音频资产：把节点音源存进 fields.audioUrl，库里的音频行才能试听（AudioList 读的就是它）。
   if (node.media === 'audio') extra.fields = { ...extra.fields, audioUrl: node.content ?? '' }
   // 「其他」及任意带 extraFields 的规格：把媒介信息（media / videoUrl / text）合并进 fields。
@@ -203,8 +204,7 @@ function mergeExtraFields(spec: SaveSpec, extra: Partial<Asset> = {}): Partial<A
 /**
  * 库内同名去重（v5：每个库内「顶层资产名唯一」）：某个库（项目库 / 团队库）里是否已有同名顶层资产。
  *
- * 造型子资产（角色 looks）天然豁免：造型嵌在 asset.looks 里、不是 world.assets 顶层项，
- * 所以按 scope + scopeId + name 查 world.assets 只会命中顶层资产、碰不到造型——无需特殊逻辑。
+ * 候选图天然豁免：候选是 asset.candidates 里的图、不是 world.assets 顶层项，无需特殊逻辑。
  * 跨库 / 跨项目允许重名（scopeId 不同即各论各的）。
  */
 export function libraryHasSameName(

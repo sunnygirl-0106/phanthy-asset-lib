@@ -73,63 +73,118 @@ describe('store 流转动作', () => {
     expect(after.masterId).toBe('a_suwan') // 血缘还在
   })
 
-  it('设封面：把角色封面换成它某个造型的图，只改 cover、别的不动', () => {
-    const suwan = store.getState().world.assets.find((a: { id: string }) => a.id === 'a_suwan')
-    // 挑一个不是当前封面的造型（苏晚的赛博造型）
-    const target = suwan.looks.find((l: { cover: string }) => l.cover !== suwan.cover)
+  it('设封面：把定稿换成候选池里的某张图，只改 cover、别的不动', () => {
+    // 项目库阿杰有候选池（团队库 0803 起不带候选池）。
+    const ajie = store.getState().world.assets.find((a: { id: string }) => a.id === 'a_ajie')
+    // 挑一个不是当前定稿的候选图
+    const target = ajie.candidates.find((c: { url: string }) => c.url !== ajie.cover)
     expect(target).toBeTruthy()
-    store.getState().setCover('a_suwan', target.cover)
-    const after = store.getState().world.assets.find((a: { id: string }) => a.id === 'a_suwan')
-    expect(after.cover).toBe(target.cover) // 封面换了
-    expect(after.name).toBe(suwan.name) // 名字没动
-    expect(after.baseModel).toBe(suwan.baseModel) // 素模没动
-    expect(after.looks.length).toBe(suwan.looks.length) // 造型没动
+    store.getState().setCover('a_ajie', target.url)
+    const after = store.getState().world.assets.find((a: { id: string }) => a.id === 'a_ajie')
+    expect(after.cover).toBe(target.url) // 定稿换了
+    expect(after.name).toBe(ajie.name) // 名字没动
+    expect(after.candidates.length).toBe(ajie.candidates.length) // 候选池没动
   })
 })
 
-describe('重新生成 / 新增造型（v6 占位动作，只落提示词 + 反馈）', () => {
+describe('候选池动作（0803：appendCandidates / setFinal / removeCandidate / setPrompt）', () => {
   const byId = (id: string) =>
     store.getState().world.assets.find((a: { id: string }) => a.id === id)
 
-  it('regenerateBaseModel：只改素模 prompt，不动任何造型', () => {
-    const before = byId('a_suwan') // Sunny(主账号) 团队库角色，可重新生成
-    const looksBefore = before.looks.map((l: { id: string; prompt?: string }) => ({ id: l.id, prompt: l.prompt }))
-    const r = store.getState().regenerateBaseModel('a_suwan', '新素模提示词')
+  it('appendCandidates：把图并入候选池；空壳保留后 → 成品、第一张成定稿', () => {
+    // 阿杰·风衣造型是项目库空壳（Sunny 主账号可生成）
+    const before = byId('a_ajie_trench')
+    expect(before.status).toBe('empty')
+    const r = store.getState().appendCandidates('a_ajie_trench', ['/p1.png', '/p2.png'])
     expect(r.ok).toBe(true)
-    const after = byId('a_suwan')
-    expect(after.prompt).toBe('新素模提示词') // 素模提示词改了
-    expect(after.looks.map((l: { id: string; prompt?: string }) => ({ id: l.id, prompt: l.prompt }))).toEqual(looksBefore) // 造型一个没动
+    const after = byId('a_ajie_trench')
+    expect(after.status).toBe('done') // 空壳 → 成品
+    expect(after.candidates.length).toBe(2)
+    expect(after.cover).toBe('/p1.png') // 第一张成为定稿
   })
 
-  it('regenerateLook：只改目标造型，不动 baseModel 与其它造型', () => {
-    const before = byId('a_suwan')
-    const baseModelBefore = before.baseModel
-    const otherBefore = before.looks.find((l: { id: string }) => l.id === 'a_suwan_casual').prompt
-    const r = store.getState().regenerateLook('a_suwan', 'a_suwan_guofeng', '新国风造型提示词')
+  it('setFinal：把候选池里的某张设为定稿', () => {
+    store.getState().appendCandidates('a_ajie_trench', ['/p1.png', '/p2.png'])
+    const cand = byId('a_ajie_trench').candidates.find((c: { url: string }) => c.url === '/p2.png')
+    const r = store.getState().runSetFinal('a_ajie_trench', cand.id)
     expect(r.ok).toBe(true)
-    const after = byId('a_suwan')
-    expect(after.looks.find((l: { id: string }) => l.id === 'a_suwan_guofeng').prompt).toBe('新国风造型提示词') // 目标造型改了
-    expect(after.baseModel).toBe(baseModelBefore) // 素模没动
-    expect(after.looks.find((l: { id: string }) => l.id === 'a_suwan_casual').prompt).toBe(otherBefore) // 别的造型没动
+    expect(byId('a_ajie_trench').cover).toBe('/p2.png')
   })
 
-  it('addLook：looks 长度 +1，新造型带上 prompt', () => {
-    const before = byId('a_suwan').looks.length
-    const r = store.getState().addLook('a_suwan', '一套夜行造型提示词', '夜行造型')
+  it('removeCandidate：删非定稿直接移除；删定稿顶一张上来', () => {
+    store.getState().appendCandidates('a_ajie_trench', ['/p1.png', '/p2.png'])
+    const a = byId('a_ajie_trench')
+    const finalCand = a.candidates.find((c: { url: string }) => c.url === a.cover)
+    const r = store.getState().runRemoveCandidate('a_ajie_trench', finalCand.id)
     expect(r.ok).toBe(true)
-    const looks = byId('a_suwan').looks
-    expect(looks.length).toBe(before + 1)
-    const added = looks.at(-1)
-    expect(added.name).toBe('夜行造型')
-    expect(added.prompt).toBe('一套夜行造型提示词')
+    const after = byId('a_ajie_trench')
+    expect(after.candidates.length).toBe(1)
+    expect(after.cover).toBe(after.candidates[0].url) // 顶了一张上来
   })
 
-  it('权限：子账号对团队库角色不能重新生成 / 新增造型（广场恒挡）', () => {
+  it('setPrompt：改项目库资产的提示词（主账号可改）', () => {
+    const r = store.getState().setPrompt('a_ajie', '新的定稿提示词')
+    expect(r.ok).toBe(true)
+    expect(byId('a_ajie').prompt).toBe('新的定稿提示词')
+  })
+
+  it('权限：团队库提示词只读（改动五：主账号也不能改）；广场恒挡', () => {
+    // 主账号也不能改团队库提示词了（生产只发生在项目里）
+    expect(store.getState().setPrompt('a_suwan', 'x').ok).toBe(false) // 团队库只读
     store.getState().setCurrentUser('u_lin') // 子账号
-    expect(store.getState().regenerateBaseModel('a_suwan', 'x').ok).toBe(false) // 团队库，子账号不行
-    expect(store.getState().addLook('a_suwan', 'x').ok).toBe(false)
+    expect(store.getState().appendCandidates('a_suwan', ['/x.png']).ok).toBe(false) // 团队库，子账号不行
+    expect(store.getState().setPrompt('a_suwan', 'x').ok).toBe(false)
     store.getState().setCurrentUser('u_admin')
-    expect(store.getState().regenerateBaseModel('a_cyber_police', 'x').ok).toBe(false) // 广场恒挡
+    expect(store.getState().appendCandidates('a_cyber_police', ['/x.png']).ok).toBe(false) // 广场恒挡
+  })
+})
+
+describe('参考图删除（阶段二：removeReferenceImage）', () => {
+  const byId = (id: string) =>
+    store.getState().world.assets.find((a: { id: string }) => a.id === id)
+
+  it('删掉一张参考图；删光后 referenceImages 变 undefined', () => {
+    const before = byId('a_ajie_trench') // 项目库空壳，种子预置 1 张参考图
+    expect(before.referenceImages.length).toBe(1)
+    const r = store.getState().removeReferenceImage('a_ajie_trench', 0)
+    expect(r.ok).toBe(true)
+    expect(byId('a_ajie_trench').referenceImages).toBeUndefined()
+  })
+
+  it('越界下标被挡；无生成权者不能改参考图', () => {
+    expect(store.getState().removeReferenceImage('a_ajie_trench', 9).ok).toBe(false) // 越界
+    store.getState().setCurrentUser('u_admin') // admin 恒无生成权
+    expect(store.getState().removeReferenceImage('a_ajie_trench', 0).ok).toBe(false)
+  })
+})
+
+describe('批量生成（阶段三：batchGenerate）', () => {
+  const byId = (id: string) =>
+    store.getState().world.assets.find((a: { id: string }) => a.id === id)
+  const P = '/placeholder.png'
+
+  it('空壳被生成成成品并设为定稿；已有成品被跳过', () => {
+    // a_ajie_trench / a_ajie_battle 是项目库空壳；a_ajie 是成品 → 混选
+    expect(byId('a_ajie_trench').status).toBe('empty')
+    const r = store.getState().batchGenerate(['a_ajie_trench', 'a_ajie_battle', 'a_ajie'], P)
+    expect(r.ok).toBe(true)
+    expect(r.message).toContain('已生成 2 份')
+    expect(r.message).toContain('跳过 1 份')
+    const trench = byId('a_ajie_trench')
+    expect(trench.status).toBe('done')
+    // 生成图 = 空壳自己的参考图（阿杰素模），不是通用占位图 P；带 ?g=N 后缀去重。
+    expect(trench.cover).toContain('ajie_base.png')
+    expect(trench.cover).not.toBe(P)
+    expect(trench.cover).toBe(trench.candidates[0].url) // 落的图成为定稿
+    expect(trench.candidates.length).toBe(1)
+    expect(byId('a_ajie_battle').status).toBe('done')
+  })
+
+  it('子账号对被分配项目的空壳有权 → 生成；未分配项目 → 跳过', () => {
+    store.getState().setCurrentUser('u_lin') // 子账号，分配了霓虹东京
+    const r = store.getState().batchGenerate(['a_ajie_trench'], P)
+    expect(r.message).toContain('已生成 1 份')
+    expect(byId('a_ajie_trench').status).toBe('done') // 项目库子账号可生成
   })
 })
 
@@ -410,34 +465,18 @@ describe('广场素材下架 / 删除（admin 下架 · 作者删除；不影响
   })
 })
 
-describe('广场投稿 · 可选造型（素模必带，穿衣服的可选）', () => {
-  // Sunny(主账号) 贡献 sourceId、勾选 lookIds，admin 通过上架，返回刚上架的广场母版
-  function publish(sourceId: string, lookIds: string[]) {
-    store.getState().runContribute(sourceId, lookIds)
+describe('广场投稿 · 只带定稿图（0803）', () => {
+  it('上架的广场母版只带定稿图、候选池不带', () => {
+    // Sunny(主账号) 贡献苏晚，admin 通过上架
+    store.getState().runContribute('a_suwan')
     const sid = store.getState().plazaSubmissions.at(-1).id
     store.getState().setCurrentUser('u_admin')
     store.getState().approvePlazaSubmission(sid)
-    store.getState().setCurrentUser('u_sunny')
-    return store.getState().world.assets.at(-1)
-  }
-
-  it('只贡献素模：上架的广场角色带素模、不带任何造型', () => {
-    const p = publish('a_suwan', []) // 苏晚，一个造型都不勾
+    const suwan = store.getState().world.assets.find((a: { id: string }) => a.id === 'a_suwan')
+    const p = store.getState().world.assets.at(-1)
     expect(p.scope).toBe('plaza')
-    expect(p.baseModel).toBeTruthy() // 素模（本体）在
-    expect(p.looks ?? []).toHaveLength(0) // 没带造型
-  })
-
-  it('勾选部分造型：只带上被选中的那几套（不是一股脑全带）', () => {
-    const p = publish('a_suwan', ['a_suwan_guofeng']) // 只勾国风造型
-    expect(p.baseModel).toBeTruthy()
-    expect(p.looks.length).toBe(1)
-    expect(p.looks[0].id).toBe('a_suwan_guofeng')
-  })
-
-  it('勾选不属于该角色的造型 → 被拦下', () => {
-    const r = store.getState().runContribute('a_suwan', ['a_ajie_look']) // 阿杰的造型，不是苏晚的
-    expect(r.ok).toBe(false)
+    expect(p.cover).toBe(suwan.cover) // 定稿带上
+    expect(p.candidates).toBeUndefined() // 候选池不带
   })
 })
 
@@ -454,8 +493,7 @@ describe('删除分层（R1：项目库归零 → 空壳；团队库归零 → �
     const after = find('a_ajie')
     expect(after.status).toBe('empty')
     expect(after.cover).toBe('')
-    expect(after.baseModel).toBeUndefined()
-    expect(after.looks).toBeUndefined()
+    expect(after.candidates).toBeUndefined()
     expect(after.name).toBe(name) // 名字保留
     expect(after.prompt).toBe(prompt) // 提示词保留
     expect(after.voice?.name).toBe('测试音色') // 音色保留
@@ -467,15 +505,14 @@ describe('删除分层（R1：项目库归零 → 空壳；团队库归零 → �
     expect(store.getState().runContribute('a_ajie').ok).toBe(false)
   })
 
-  it('空壳重新生成 → 恢复成品：status done + 落占位图 + 角色补回素模', () => {
+  it('空壳生成 → 恢复成品：status done + 落候选图 + 第一张成定稿', () => {
     store.getState().clearAssetImages('a_ajie')
-    const r = store.getState().regenerateBaseModel('a_ajie', '新的素模提示词')
+    const r = store.getState().appendCandidates('a_ajie', ['/gen.png'])
     expect(r.ok).toBe(true)
     const after = find('a_ajie')
     expect(after.status).toBe('done')
-    expect(after.cover).not.toBe('') // 落了占位图
-    expect(after.baseModel).toBeTruthy() // 角色补回素模
-    expect(after.prompt).toBe('新的素模提示词')
+    expect(after.cover).toBe('/gen.png') // 第一张成定稿
+    expect(after.candidates.length).toBe(1)
   })
 
   it('团队库归零 = 整份删除：runDeleteAsset 把团队母版从 world 拿掉', () => {

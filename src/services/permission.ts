@@ -202,18 +202,16 @@ export function canContributeToPlaza(user: User, asset: Asset): boolean {
 }
 
 /**
- * 能不能对这份资产"重新生成 / 新增造型"（v6）。
- * - 广场：一律不行（官方货架、上架后不可编辑）。
+ * 能不能对这份资产"重新生成 / 新增造型"（0803 修订）。
+ * - 只有项目库能生成：生产只发生在项目里（空壳、批量生成都在项目层）。
+ * - 广场：官方货架，不可编辑。团队库：筛选过的成品母版，提示词只读、不再生成。
  * - admin：不行（只治理）。
- * - 主账号：项目库、团队库都行。
- * - 子账号：只有项目库行；团队库不行（想贡献团队库新造型走"复用到项目→重新生成→沉淀申请"）。
- * 说明：对造型(look)重新生成时，用它所属顶层角色的 scope 判定（seed 里 look 与角色同 scope）。
+ * - 主账号 / 子账号：仅项目库。
  */
 export function canRegenerate(user: User, asset: Asset): boolean {
-  if (asset.scope === 'plaza') return false
+  if (asset.scope !== 'project') return false // ← 只有项目库能生成：生产只发生在项目里
   if (isAdmin(user)) return false
-  if (isOwner(user)) return asset.scope === 'team' || asset.scope === 'project'
-  return isSub(user) && asset.scope === 'project'
+  return isOwner(user) || isSub(user)
 }
 
 /** 提示词可见性（v6）：项目库/团队库可看可复制；素材广场本期不给用户看。 */

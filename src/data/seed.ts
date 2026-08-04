@@ -13,7 +13,7 @@
  * createSeedWorld() 每次返回一份全新的 World，测试之间互不污染。
  * ─────────────────────────────────────────────────────────────────────── */
 
-import type { World, User, Team, Project, Canvas, Asset, Category, Scope } from './types'
+import type { World, User, Team, Project, Canvas, Asset, Candidate, Category, Scope } from './types'
 import { PRESET_VOICES } from './presetVoices'
 import { assetUrl } from '../utils/assets'
 
@@ -68,12 +68,26 @@ function asset(
     status: 'done',
     fields: {},
     tags: [],
-    // 演示提示词（v6）：按类目对号入座；角色与其每个造型都走同一段【人物】模板。
-    // partial 里没有 prompt，所以下面的 ...partial 不会覆盖它（种子不做个性化改写）。
+    // 演示提示词（v6）：按类目对号入座。partial 里没有 prompt，所以下面的 ...partial 不会覆盖它。
     prompt: PROMPT_BY_CATEGORY[partial.category],
     createdAt: 0,
     ...partial,
   }
+}
+
+/* ─── 候选池小助手（0803）：把一串图片 url 变成候选图数组。
+ * 定稿图（asset.cover）必定也在池中——种子里把定稿那张放在数组首位即可。 */
+let _candSeq = 1
+function cands(urls: string[]): Candidate[] {
+  return urls.map((url) => ({ id: `cand_seed_${_candSeq++}`, url, createdAt: 0 }))
+}
+
+/** 同一张图复制 N 份当候选（0803 修订）：演示"一次生成 N 张、都是同一个素模的备选"。
+ * 加 ?g=N 后缀只为让每张候选的 url 唯一——因为定稿是按 url 认的，
+ * url 全一样会导致「设为定稿」点了没反应、★ 永远停在第一张。
+ * （接后端后应改成给 Asset 加 finalCandidateId、按 id 认定稿，本 demo 先用后缀绕开。） */
+function sameImage(url: string, n: number): string[] {
+  return Array.from({ length: n }, (_, i) => `${url}?g=${i + 1}`)
 }
 
 /* ─── 音频资产小助手（占位）─────────────────────────────────────────────
@@ -98,13 +112,13 @@ function audioAsset(
  * 创作过程的留存物（分镜图 / 视频片段 / 剧本文本 / 音频片段），媒介写进 fields.media：
  *   · image：coverOrSrc 是图片地址；
  *   · video：coverOrSrc 是首帧/海报图（videoUrl 本期留空占位）；
- *   · text ：coverOrSrc 是正文（无封面，卡片渲染文字预览）；
- *   · audio：coverOrSrc 是音源地址（无封面，走 AudioList 条状列表）。 */
+ *   · text ：coverOrSrc 是正文（无封面，卡片渲染文字预览）。
+ * 音频不进「其他」：音频有自己的类目，只在那里存。 */
 function otherAsset(
   id: string, name: string, scopeId: string,
-  media: 'image' | 'video' | 'text' | 'audio', coverOrSrc: string, duration?: string,
+  media: 'image' | 'video' | 'text', coverOrSrc: string, duration?: string,
 ): Asset {
-  const noCover = media === 'text' || media === 'audio'
+  const noCover = media === 'text'
   const dur = duration ? { duration } : {}
   return asset({
     id, category: 'other', name, scope: 'project', scopeId,
@@ -114,9 +128,7 @@ function otherAsset(
         ? { media, text: coverOrSrc }
         : media === 'video'
           ? { media, videoUrl: '', ...dur }
-          : media === 'audio'
-            ? { media, audioUrl: coverOrSrc, ...dur }
-            : { media },
+          : { media },
   })
 }
 
@@ -177,14 +189,15 @@ export function createSeedWorld(): World {
     /* 【广场·官方货架 9】四类目齐（角色/服装/场景/道具）*/
     asset({
       id: 'a_cyber_police', category: 'character', name: '赛博女警', scope: 'plaza',
+      // 广场是官方成品货架：定稿用好看的定妆照，候选池留几张备选。
       cover: `${IMG}/plaza-shelf/cyber_police_role.png`,
-      baseModel: `${IMG}/character-base/cyber_police_base.png`,
+      candidates: cands([
+        `${IMG}/plaza-shelf/cyber_police_role.png`,
+        `${IMG}/character-base/cyber_police_base.png`,
+        `${IMG}/plaza-shelf/cyber_police_home.png`,
+      ]),
       fields: { gender: '女', age: '青年', style: '赛博' },
       voice: { ...PRESET_VOICES[0] }, // 广场角色有音色、可试听、但不可改
-      looks: [
-        asset({ id: 'a_cyber_police_look', category: 'character', name: '赛博女警·定妆照', scope: 'plaza', cover: `${IMG}/plaza-shelf/cyber_police_role.png` }),
-        asset({ id: 'a_cyber_police_home', category: 'character', name: '赛博女警·居家造型', scope: 'plaza', cover: `${IMG}/plaza-shelf/cyber_police_home.png` }),
-      ],
     }),
     asset({ id: 'a_cyber_uniform', category: 'costume', name: '女警制服', scope: 'plaza', cover: `${IMG}/plaza-shelf/cyber_police_uniform.png`, fields: { style: '赛博' } }),
     asset({ id: 'a_rainy_rooftop', category: 'scene', name: '雨夜天台', scope: 'plaza', cover: `${IMG}/plaza-shelf/rainy_rooftop_scene.png`, fields: { style: '赛博' } }),
@@ -192,44 +205,62 @@ export function createSeedWorld(): World {
     asset({
       id: 'a_swordsman', category: 'character', name: '东方剑客', scope: 'plaza',
       cover: `${IMG}/plaza-shelf/eastern_swordsman_role.png`,
-      baseModel: `${IMG}/character-base/eastern_swordsman_base.png`,
+      candidates: cands([
+        `${IMG}/plaza-shelf/eastern_swordsman_role.png`,
+        `${IMG}/character-base/eastern_swordsman_base.png`,
+      ]),
       fields: { gender: '男', age: '青年', style: '国风' },
-      looks: [asset({ id: 'a_swordsman_look', category: 'character', name: '东方剑客·定妆照', scope: 'plaza', cover: `${IMG}/plaza-shelf/eastern_swordsman_role.png` })],
     }),
     asset({
       id: 'a_mech_butler', category: 'character', name: '机械管家', scope: 'plaza',
       cover: `${IMG}/plaza-shelf/mech_butler_role.png`,
-      baseModel: `${IMG}/character-base/mech_butler_base.png`,
+      candidates: cands([
+        `${IMG}/plaza-shelf/mech_butler_role.png`,
+        `${IMG}/character-base/mech_butler_base.png`,
+      ]),
       fields: { style: '科幻' },
-      looks: [asset({ id: 'a_mech_butler_look', category: 'character', name: '机械管家·定妆照', scope: 'plaza', cover: `${IMG}/plaza-shelf/mech_butler_role.png` })],
     }),
     asset({ id: 'a_swordsman_robe', category: 'costume', name: '剑客长袍', scope: 'plaza', cover: `${IMG}/plaza-shelf/swordsman_robe_costume.png`, fields: { style: '国风' } }),
     asset({ id: 'a_cyber_street', category: 'scene', name: '赛博街市', scope: 'plaza', cover: `${IMG}/plaza-shelf/cyber_street_scene.png`, fields: { style: '赛博' } }),
     asset({ id: 'a_lightsaber', category: 'prop', name: '光剑', scope: 'plaza', cover: `${IMG}/plaza-shelf/lightsaber_prop.png`, fields: { style: '科幻' } }),
 
-    /* 【团队A 团队库·母版 9】（苏晚带 3 个造型子资产）*/
+    /* 【团队A 团队库·母版】（0803 修订：团队库没有空壳、不能重新生成，
+       但成品母版保留自己的候选池——详情右栏照样展示「已保留 + ★定稿」，只是看不到「生成」口子。
+       注意：跨层流转（复用 / 沉淀 / 贡献）产出的副本仍然只带定稿、候选池不跟着走，这条不变。）*/
+    // 成品：苏晚（定稿 = 原素模图；候选池含定稿那张 + 2 张备选）
     asset({
       id: 'a_suwan', category: 'character', name: '苏晚', scope: 'team', scopeId: IDS.teamA,
-      cover: `${IMG}/team-library/suwan_role.png`,
-      baseModel: `${IMG}/character-base/suwan_base.png`,
+      cover: `${IMG}/character-base/suwan_base.png`, // ← 定稿 = 原素模
+      candidates: cands([
+        `${IMG}/character-base/suwan_base.png`,
+        `${IMG}/team-library/suwan_role.png`,
+        `${IMG}/team-library/suwan_look_guofeng.png`,
+      ]),
       fields: { gender: '女', age: '青年', style: '国风' },
       voice: { ...PRESET_VOICES[0] }, // 已设置 + 可编辑
       createdAt: 1_785_000_000_000,
-      looks: [
-        asset({ id: 'a_suwan_dingzhuang', category: 'character', name: '苏晚·定妆照', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/suwan_role.png` }),
-        asset({ id: 'a_suwan_guofeng', category: 'character', name: '苏晚·国风造型', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/suwan_look_guofeng.png` }),
-        asset({ id: 'a_suwan_casual', category: 'character', name: '苏晚·便装造型', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/suwan_look_casual.png` }),
-        asset({ id: 'a_suwan_cyber', category: 'character', name: '苏晚·赛博造型', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/suwan_look_cyber.png` }),
-      ],
     }),
+    // 已生成的变体资产（独立）：苏晚·国风造型（以苏晚定稿图为参考生成，已有定稿图）
+    asset({
+      id: 'a_suwan_guofeng', category: 'character', name: '苏晚·国风造型', scope: 'team', scopeId: IDS.teamA,
+      cover: `${IMG}/team-library/suwan_look_guofeng.png`,
+      candidates: cands([`${IMG}/team-library/suwan_look_guofeng.png`]),
+      referenceImages: [`${IMG}/character-base/suwan_base.png`],
+      referencedFrom: 'a_suwan',
+      fields: { gender: '女', age: '青年', style: '国风' },
+      createdAt: 1_784_900_000_000,
+    }),
+    // 成品：老K（定稿 = 原素模图 + 候选池）
     asset({
       id: 'a_oldk', category: 'character', name: '老K', scope: 'team', scopeId: IDS.teamA,
-      cover: `${IMG}/team-library/oldk_role.png`,
-      baseModel: `${IMG}/character-base/oldk_base.png`,
+      cover: `${IMG}/character-base/oldk_base.png`,
+      candidates: cands([
+        `${IMG}/character-base/oldk_base.png`,
+        `${IMG}/team-library/oldk_role.png`,
+      ]),
       fields: { gender: '男', age: '中年' },
       voice: { ...PRESET_VOICES[1] }, // 已设置 + 可编辑
       createdAt: 1_784_600_000_000,
-      looks: [asset({ id: 'a_oldk_look', category: 'character', name: '老K·定妆照', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/oldk_role.png` })],
     }),
     asset({ id: 'a_cyber_jacket', category: 'costume', name: '赛博夹克', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/cyber_jacket_costume.png`, fields: { style: '赛博' }, createdAt: 1_784_300_000_000 }),
     asset({ id: 'a_palace_dress', category: 'costume', name: '国风宫装', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/palace_dress_costume.png`, fields: { style: '国风' }, createdAt: 1_784_000_000_000 }),
@@ -237,82 +268,131 @@ export function createSeedWorld(): World {
     asset({ id: 'a_folding_fan', category: 'prop', name: '折扇', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team-library/folding_fan_prop.png`, fields: { style: '国风' }, createdAt: 1_783_400_000_000 }),
 
     /* 【项目·霓虹东京 5】（团队A）*/
+    // 项目库候选池 = 同一张定稿素模的 N 份复制（0803 修订）：候选池就是"这一次生成给你的
+    // N 张素模、你保留下来的那些"，本来就长得一样；N 取 2/3/4 刻意做出差异。
     asset({
       id: 'a_ajie', category: 'character', name: '阿杰', scope: 'project', scopeId: IDS.projNeon,
-      cover: `${IMG}/proj-neon-tokyo/ajie_role.png`,
-      baseModel: `${IMG}/character-base/ajie_base.png`,
+      cover: `${IMG}/character-base/ajie_base.png?g=1`, // 定稿 = 原素模（带后缀保证在池中）
+      candidates: cands(sameImage(`${IMG}/character-base/ajie_base.png`, 4)),
       fields: { gender: '男', style: '赛博' },
-      looks: [asset({ id: 'a_ajie_look', category: 'character', name: '阿杰·定妆照', scope: 'project', scopeId: IDS.projNeon, cover: `${IMG}/proj-neon-tokyo/ajie_role.png` })],
     }),
     asset({
       id: 'a_neon_dancer', category: 'character', name: '霓虹舞者', scope: 'project', scopeId: IDS.projNeon,
-      cover: `${IMG}/proj-neon-tokyo/neon_dancer_role.png`,
-      baseModel: `${IMG}/character-base/neon_dancer_base.png`,
+      cover: `${IMG}/character-base/neon_dancer_base.png?g=1`,
+      candidates: cands(sameImage(`${IMG}/character-base/neon_dancer_base.png`, 3)),
       fields: { gender: '女', style: '赛博' },
-      looks: [asset({ id: 'a_neon_dancer_look', category: 'character', name: '霓虹舞者·定妆照', scope: 'project', scopeId: IDS.projNeon, cover: `${IMG}/proj-neon-tokyo/neon_dancer_role.png` })],
     }),
-    asset({ id: 'a_mech_exo', category: 'costume', name: '机甲外骨骼', scope: 'project', scopeId: IDS.projNeon, cover: `${IMG}/proj-neon-tokyo/mech_exoskeleton_costume.png`, fields: { style: '科幻' } }),
-    // 场景也能有「其他样式」（= 角色造型的同款能力，只是叫法不同）：同一场景的不同时段 / 视角。
+    asset({
+      id: 'a_mech_exo', category: 'costume', name: '机甲外骨骼', scope: 'project', scopeId: IDS.projNeon,
+      cover: `${IMG}/proj-neon-tokyo/mech_exoskeleton_costume.png?g=1`, fields: { style: '科幻' },
+      candidates: cands(sameImage(`${IMG}/proj-neon-tokyo/mech_exoskeleton_costume.png`, 3)),
+    }),
     asset({
       id: 'a_neon_bar', category: 'scene', name: '霓虹酒吧', scope: 'project', scopeId: IDS.projNeon,
-      cover: `${IMG}/proj-neon-tokyo/neon_bar_scene.png`, fields: { style: '赛博' },
-      looks: [
-        asset({ id: 'a_neon_bar_look1', category: 'scene', name: '霓虹酒吧·街景', scope: 'project', scopeId: IDS.projNeon, cover: `${IMG}/plaza-shelf/cyber_street_scene.png` }),
-        asset({ id: 'a_neon_bar_look2', category: 'scene', name: '霓虹酒吧·全景', scope: 'project', scopeId: IDS.projNeon, cover: `${IMG}/project-covers/neon_tokyo_cover.png` }),
-      ],
+      cover: `${IMG}/proj-neon-tokyo/neon_bar_scene.png?g=1`, fields: { style: '赛博' },
+      candidates: cands(sameImage(`${IMG}/proj-neon-tokyo/neon_bar_scene.png`, 4)),
     }),
-    // 道具也能有「其他样式」：同一道具的不同版本 / 配色。
     asset({
       id: 'a_mech_prosthetic', category: 'prop', name: '机械义肢', scope: 'project', scopeId: IDS.projNeon,
-      cover: `${IMG}/proj-neon-tokyo/mech_prosthetic_prop.png`, fields: { style: '科幻' },
-      looks: [
-        asset({ id: 'a_mech_prosthetic_look1', category: 'prop', name: '机械义肢·全息版', scope: 'project', scopeId: IDS.projNeon, cover: `${IMG}/plaza-shelf/holographic_bracelet_prop.png` }),
-      ],
+      cover: `${IMG}/proj-neon-tokyo/mech_prosthetic_prop.png?g=1`, fields: { style: '科幻' },
+      candidates: cands(sameImage(`${IMG}/proj-neon-tokyo/mech_prosthetic_prop.png`, 2)),
     }),
-    // 【项目·霓虹东京 · 其他】创作留存物：图片 / 视频 / 文本 / 音频四种媒介都覆盖，仅存本项目、不沉淀。
+    /* 【项目·霓虹东京 · 空壳】拆解剧本时一次性写好提示词、只出素模图；
+       穿衣服的造型 / 别的时段的场景此刻只有提示词没有图，等用户点生成（单张或批量）。
+       参考图预置成来源资产的定稿图，点生成时就以它为底出图。 */
+    asset({
+      id: 'a_ajie_trench', category: 'character', name: '阿杰·风衣造型',
+      scope: 'project', scopeId: IDS.projNeon,
+      status: 'empty', cover: '',
+      referenceImages: [`${IMG}/character-base/ajie_base.png`],
+      referencedFrom: 'a_ajie',
+      fields: { gender: '男', style: '赛博' },
+      createdAt: 1_784_850_000_000,
+    }),
+    asset({
+      id: 'a_ajie_battle', category: 'character', name: '阿杰·战损造型',
+      scope: 'project', scopeId: IDS.projNeon,
+      status: 'empty', cover: '',
+      referenceImages: [`${IMG}/character-base/ajie_base.png`],
+      referencedFrom: 'a_ajie',
+      fields: { gender: '男', style: '赛博' },
+      createdAt: 1_784_840_000_000,
+    }),
+    asset({
+      id: 'a_dancer_stage', category: 'character', name: '霓虹舞者·舞台造型',
+      scope: 'project', scopeId: IDS.projNeon,
+      status: 'empty', cover: '',
+      referenceImages: [`${IMG}/character-base/neon_dancer_base.png`],
+      referencedFrom: 'a_neon_dancer',
+      fields: { gender: '女', style: '赛博' },
+      createdAt: 1_784_830_000_000,
+    }),
+    // 空壳不只有角色：同一场景的不同时段各自独立成资产，也可以先只有提示词。
+    asset({
+      id: 'a_neon_bar_day', category: 'scene', name: '霓虹酒吧·白日',
+      scope: 'project', scopeId: IDS.projNeon,
+      status: 'empty', cover: '',
+      referenceImages: [`${IMG}/proj-neon-tokyo/neon_bar_scene.png`],
+      referencedFrom: 'a_neon_bar',
+      fields: { style: '赛博' },
+      createdAt: 1_784_820_000_000,
+    }),
+    // 【项目·霓虹东京 · 其他】创作留存物：图片 / 视频 / 文本三种媒介（音频不进「其他」，只存音频类目），仅存本项目、不沉淀。
     otherAsset('a_other_mission', '任务线·九宫格分镜', IDS.projNeon, 'image', `${IMG}/proj-neon-tokyo/mission_storyboard_other.png`),
     otherAsset('a_other_plot', '完整情节故事板', IDS.projNeon, 'image', `${IMG}/proj-neon-tokyo/full_plot_board_other.png`),
     otherAsset('a_other_rainy', '雨夜街头·分镜片段', IDS.projNeon, 'video', `${IMG}/proj-neon-tokyo/rainy_street_storyboard_other.png`, '0:12'),
     otherAsset('a_other_script', '第一幕剧本·雨夜追踪', IDS.projNeon, 'text', SCRIPT_RAINY_CHASE),
-    // 音频示意两条（复用预置音源占位，可真的点开试听）。
-    otherAsset('a_other_bgm1', '雨夜追逐·配乐草稿', IDS.projNeon, 'audio', AUDIO_SRC[1], '0:48'),
-    otherAsset('a_other_vo1', '第一幕·旁白录音', IDS.projNeon, 'audio', AUDIO_SRC[0], '0:36'),
 
     /* 【项目·山海志 3】（团队A）*/
     asset({
       id: 'a_shangui', category: 'character', name: '山鬼', scope: 'project', scopeId: IDS.projShanhai,
-      cover: `${IMG}/proj-shanhai/shangui_role.png`,
-      baseModel: `${IMG}/character-base/shangui_base.png`,
+      cover: `${IMG}/character-base/shangui_base.png?g=1`,
+      candidates: cands(sameImage(`${IMG}/character-base/shangui_base.png`, 3)),
       fields: { style: '国风' },
-      looks: [asset({ id: 'a_shangui_look', category: 'character', name: '山鬼·定妆照', scope: 'project', scopeId: IDS.projShanhai, cover: `${IMG}/proj-shanhai/shangui_role.png` })],
     }),
-    asset({ id: 'a_bamboo', category: 'scene', name: '竹林', scope: 'project', scopeId: IDS.projShanhai, cover: `${IMG}/proj-shanhai/bamboo_forest_scene.png`, fields: { style: '国风' } }),
-    asset({ id: 'a_token', category: 'prop', name: '令牌', scope: 'project', scopeId: IDS.projShanhai, cover: `${IMG}/proj-shanhai/token_prop.png`, fields: { style: '国风' } }),
+    asset({
+      id: 'a_bamboo', category: 'scene', name: '竹林', scope: 'project', scopeId: IDS.projShanhai,
+      cover: `${IMG}/proj-shanhai/bamboo_forest_scene.png?g=1`, fields: { style: '国风' },
+      candidates: cands(sameImage(`${IMG}/proj-shanhai/bamboo_forest_scene.png`, 2)),
+    }),
+    asset({
+      id: 'a_token', category: 'prop', name: '令牌', scope: 'project', scopeId: IDS.projShanhai,
+      cover: `${IMG}/proj-shanhai/token_prop.png?g=1`, fields: { style: '国风' },
+      candidates: cands(sameImage(`${IMG}/proj-shanhai/token_prop.png`, 2)),
+    }),
+    // 【项目·山海志 · 空壳】山鬼·战斗造型（只有提示词，参考图预置山鬼素模，等生成）
+    asset({
+      id: 'a_shangui_battle', category: 'character', name: '山鬼·战斗造型',
+      scope: 'project', scopeId: IDS.projShanhai,
+      status: 'empty', cover: '',
+      referenceImages: [`${IMG}/character-base/shangui_base.png`],
+      referencedFrom: 'a_shangui',
+      fields: { style: '国风' },
+      createdAt: 1_784_810_000_000,
+    }),
 
     /* 【项目·都市迷案 1】林警官（=广场赛博女警 直接复用改名而来，masterId 记录血缘）*/
     asset({
       id: 'a_linjingguan', category: 'character', name: '林警官', scope: 'project', scopeId: IDS.projUrban,
       cover: `${IMG}/proj-urban-mystery/linjingguan_look_cyberjacket.png`,
-      baseModel: `${IMG}/character-base/cyber_police_base.png`,
+      // 从广场直接复用来的副本，天然只带定稿这一张、没有生产过程 → 候选池仅定稿。
+      candidates: cands([`${IMG}/proj-urban-mystery/linjingguan_look_cyberjacket.png`]),
       masterId: 'a_cyber_police', fields: { gender: '女', style: '赛博' },
-      looks: [asset({ id: 'a_linjingguan_look', category: 'character', name: '林警官·赛博夹克造型', scope: 'project', scopeId: IDS.projUrban, cover: `${IMG}/proj-urban-mystery/linjingguan_look_cyberjacket.png` })],
     }),
 
     /* 【项目·星际公约 1】（团队B）*/
     asset({
       id: 'a_captain', category: 'character', name: '星舰船长', scope: 'project', scopeId: IDS.projStar,
-      cover: `${IMG}/proj-star-covenant/starship_captain_role.png`,
-      baseModel: `${IMG}/character-base/starship_captain_base.png`,
+      cover: `${IMG}/character-base/starship_captain_base.png?g=1`,
+      candidates: cands(sameImage(`${IMG}/character-base/starship_captain_base.png`, 3)),
       fields: { style: '科幻' },
-      looks: [asset({ id: 'a_captain_look', category: 'character', name: '星舰船长·定妆照', scope: 'project', scopeId: IDS.projStar, cover: `${IMG}/proj-star-covenant/starship_captain_role.png` })],
     }),
 
     /* 【项目·孤舟 1】（Solo）*/
     asset({
       id: 'a_indie_lead', category: 'character', name: '孤舟主角', scope: 'project', scopeId: IDS.projBoat,
-      cover: `${IMG}/proj-lone-boat/indie_lead_role.png`,
-      baseModel: `${IMG}/character-base/indie_lead_base.png`,
-      looks: [asset({ id: 'a_indie_lead_look', category: 'character', name: '孤舟主角·定妆照', scope: 'project', scopeId: IDS.projBoat, cover: `${IMG}/proj-lone-boat/indie_lead_role.png` })],
+      cover: `${IMG}/character-base/indie_lead_base.png?g=1`,
+      candidates: cands(sameImage(`${IMG}/character-base/indie_lead_base.png`, 2)),
     }),
 
     /* 【音频 · 占位】三层各铺几段，让画布资产面板的「音频」类目有内容可展示 */

@@ -16,6 +16,7 @@ import { useStore } from '../store/useStore'
 import { AssetCard } from './AssetCard'
 import { AssetDetail } from './AssetDetail'
 import { AudioList } from './AudioList'
+import { OtherVideoPlayer } from './OtherVideoPlayer'
 import { assetUrl } from '../utils/assets'
 import styles from './ProjectAssetLibrary.module.css'
 
@@ -35,6 +36,7 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
   const world = useStore((s) => s.world)
   const renameAsset = useStore((s) => s.renameAsset)
   const runDeleteAsset = useStore((s) => s.runDeleteAsset)
+  const batchGenerate = useStore((s) => s.batchGenerate)
 
   const [category, setCategory] = useState<Category>('character')
   const [query, setQuery] = useState('')
@@ -42,6 +44,16 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
   const [batch, setBatch] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [detailAssetId, setDetailAssetId] = useState<string | null>(null)
+  const [onlyEmpty, setOnlyEmpty] = useState(false) // 「只看待生成」：只显示当前类目下的空壳
+  const [toast, setToast] = useState<string | null>(null)
+  // 「其他」视频：不进详情弹窗，直接大屏播放（§用户口径：视频就直接大屏播放，不用这么麻烦）。
+  const [videoAsset, setVideoAsset] = useState<Asset | null>(null)
+
+  /** 点开一份资产：「其他」里的视频直接大屏播放，其余（含图片 / 文本）走详情弹窗。 */
+  const openAsset = (a: Asset) => {
+    if (a.category === 'other' && a.fields.media === 'video') setVideoAsset(a)
+    else setDetailAssetId(a.id)
+  }
 
   // 本项目资产池（与画布共享同一批数据）。
   const projectAssets = useMemo(
@@ -56,14 +68,27 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
     return m
   }, [projectAssets])
 
-  // 类目 → 搜索 → 排序，派生出当前网格要摆的资产。
+  // 当前类目下的空壳数量（「只看待生成」角标）。
+  const emptyCount = useMemo(
+    () => projectAssets.filter((a) => a.category === category && a.status === 'empty').length,
+    [projectAssets, category],
+  )
+
+  // 类目 →（只看待生成）→ 搜索 → 排序，派生出当前网格要摆的资产。
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
     return projectAssets
       .filter((a) => a.category === category)
+      .filter((a) => (onlyEmpty ? a.status === 'empty' : true))
       .filter((a) => (q ? a.name.toLowerCase().includes(q) : true))
-      .sort((a, b) => (sortDesc ? b.createdAt - a.createdAt : a.createdAt - b.createdAt))
-  }, [projectAssets, category, query, sortDesc])
+      .sort((a, b) => {
+        // 已生成的成品排在前面、待生成（空壳）排在后面；组内再按时间排序。
+        const ae = a.status === 'empty' ? 1 : 0
+        const be = b.status === 'empty' ? 1 : 0
+        if (ae !== be) return ae - be
+        return sortDesc ? b.createdAt - a.createdAt : a.createdAt - b.createdAt
+      })
+  }, [projectAssets, category, onlyEmpty, query, sortDesc])
 
   function toggleSelect(id: string) {
     setSelected((prev) => {
@@ -78,7 +103,20 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
     setSelected(new Set())
   }
 
-  // AudioList 库模式（改名 / 删除）——音频类目 &「其他·音频」共用。
+  function showToast(message: string) {
+    setToast(message)
+    window.setTimeout(() => setToast((t) => (t === message ? null : t)), 2600)
+  }
+
+  /** 批量生成：对选中的空壳各落一张占位图 → 成品（已有成品自动跳过），toast 汇报。 */
+  function runBatchGenerate() {
+    if (selected.size === 0) return
+    const r = batchGenerate([...selected], assetUrl('assets/canvas/image-placeholder.svg'))
+    showToast(r.message)
+    exitBatch()
+  }
+
+  // AudioList 库模式（改名 / 删除）——音频类目专用（「其他」不含音频）。
   const audioLibMode = {
     kind: 'library' as const,
     onRename: (a: Asset, name: string) => renameAsset(a.id, name),
@@ -96,7 +134,7 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
           >
             <AssetCard
               asset={a}
-              onClick={batch ? () => toggleSelect(a.id) : () => setDetailAssetId(a.id)}
+              onClick={batch ? () => toggleSelect(a.id) : () => openAsset(a)}
             />
             {batch && (
               <span className={`${styles.check} ${selected.has(a.id) ? styles.checkOn : ''}`}>
@@ -120,30 +158,21 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
     )
   }
 
-  // 「其他」按媒介分区（复用画布资产面板「图片资产 / 音频」的分区设计）：图片 → 视频 → 文本 → 音频。
+  // 「其他」按媒介分区（复用画布资产面板的分区设计）：图片 → 视频 → 文本（音频不进「其他」）。
   const otherGroups = [
     { key: 'image', label: '图片', items: visible.filter((a) => (a.fields.media ?? 'image') === 'image') },
     { key: 'video', label: '视频', items: visible.filter((a) => a.fields.media === 'video') },
     { key: 'text', label: '文本', items: visible.filter((a) => a.fields.media === 'text') },
-    { key: 'audio', label: '音频', items: visible.filter((a) => a.fields.media === 'audio') },
   ].filter((g) => g.items.length > 0)
 
   return (
     <div className={styles.wrap}>
-      {/* ── 类目 Tab（顶部横排）+ 工具条 同一行 ── */}
-      <div className={styles.bar}>
-        <nav className={styles.tabs}>
-          {CATEGORIES.map((c) => (
-            <button
-              key={c.key}
-              className={`${styles.tab} ${category === c.key ? styles.tabActive : ''} ${c.key === 'other' ? styles.tabOther : ''}`}
-              onClick={() => setCategory(c.key)}
-            >
-              <img className={styles.tabIcon} src={c.icon} alt="" aria-hidden />
-              <span>{c.label}（{counts[c.key]}）</span>
-            </button>
-          ))}
-        </nav>
+      {/* ── 页头：标题 + 副标题（左） · 工具条（右） ── */}
+      <header className={styles.header}>
+        <div className={styles.heading}>
+          <h1 className={styles.title}>项目资产库</h1>
+          <p className={styles.subtitle}>浏览项目内的所有资产</p>
+        </div>
 
         <div className={styles.tools}>
           {batch && (
@@ -154,6 +183,20 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
               </button>
             </span>
           )}
+
+          {batch && (
+            <button className={styles.btnGen} disabled={selected.size === 0} onClick={runBatchGenerate}>
+              批量生成（{selected.size}）
+            </button>
+          )}
+
+          {/* 只看待生成：让批量生成好用的前提（只显示当前类目下的空壳）。 */}
+          <button
+            className={`${styles.btn} ${onlyEmpty ? styles.btnOn : ''}`}
+            onClick={() => setOnlyEmpty((v) => !v)}
+          >
+            只看待生成（{emptyCount}）
+          </button>
 
           <button
             className={`${styles.btn} ${batch ? styles.btnOn : ''}`}
@@ -179,7 +222,21 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
             />
           </div>
         </div>
-      </div>
+      </header>
+
+      {/* ── 类目 Tab（独立一行） ── */}
+      <nav className={styles.tabs}>
+        {CATEGORIES.map((c) => (
+          <button
+            key={c.key}
+            className={`${styles.tab} ${category === c.key ? styles.tabActive : ''}`}
+            onClick={() => setCategory(c.key)}
+          >
+            <img className={styles.tabIcon} src={c.icon} alt="" aria-hidden />
+            <span>{c.label}（{counts[c.key]}）</span>
+          </button>
+        ))}
+      </nav>
 
       {/* ── 网格 ── */}
       {visible.length === 0 ? (
@@ -192,16 +249,12 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
         // 音频为一等展示类目（R3）：条状行列表，仅支持改名 / 删除，不进详情、不参与批量。
         <AudioList items={visible} mode={audioLibMode} />
       ) : category === 'other' ? (
-        // 「其他」按媒介分区（复用画布资产面板设计）：图片 → 视频 → 文本 → 音频，从上到下。
+        // 「其他」按媒介分区（复用画布资产面板设计）：图片 → 视频 → 文本，从上到下（不含音频）。
         <div className={styles.otherSections}>
           {otherGroups.map((g, i) => (
             <section key={g.key}>
               {sectionHead(g.label, g.items.length, i > 0)}
-              {g.key === 'audio' ? (
-                <AudioList items={g.items} mode={audioLibMode} />
-              ) : (
-                renderGrid(g.items)
-              )}
+              {renderGrid(g.items)}
             </section>
           ))}
         </div>
@@ -213,6 +266,14 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
       {detailAssetId && (
         <AssetDetail assetId={detailAssetId} onClose={() => setDetailAssetId(null)} />
       )}
+
+      {/* 「其他」视频大屏播放器（直接播放，不走详情弹窗） */}
+      {videoAsset && (
+        <OtherVideoPlayer asset={videoAsset} onClose={() => setVideoAsset(null)} />
+      )}
+
+      {/* 批量生成结果 toast */}
+      {toast && <div className={styles.toast}>{toast}</div>}
     </div>
   )
 }

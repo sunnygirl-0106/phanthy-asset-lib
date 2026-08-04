@@ -50,6 +50,18 @@ export type Category = 'character' | 'costume' | 'scene' | 'prop' | 'audio' | 'o
 export type VoiceType = 'preset' | 'cloned'
 
 /**
+ * 候选图（0803 结构重做）：一次次生成留下来的备选图。
+ * 它**不是资产**——没有名字 / 类目，不能被单独流转；只是这份资产历次生成的产物之一。
+ * 定稿图（Asset.cover）必定也是候选池里某一张（url 与 cover 相等的那张即定稿）。
+ */
+export interface Candidate {
+  id: string
+  url: string
+  prompt?: string      // 产出这张图时用的提示词（本 demo 可空）
+  createdAt: number
+}
+
+/**
  * 音色 = 角色的"听觉身份锚点"（1 个，是素模的孪生兄弟，不是造型）。
  * 本期无后端：预置音色 previewUrl 指向真实 mp3；复刻音色 previewUrl 先回放用户上传的原音占位。
  */
@@ -67,6 +79,11 @@ export interface Voice {
 /**
  * 资产状态机：资产"成不成立"看状态，不看有没有图。
  * 红线规则：只有 'done'（成品）才能被复用 / 沉淀 / 贡献。
+ *
+ * 【0803】'empty'（空壳）语义扩大，成为一等公民：
+ *   · 既表示"图被删光后的降级态"，
+ *   · 也表示"只有提示词、还没生成过"（拆解剧本时一次性写好提示词、只出素模图，
+ *     穿衣服的角色只有提示词没有图，等用户手动 / 批量触发生成）。
  */
 export type AssetStatus = 'empty' | 'generating' | 'done' | 'failed'
 //                         空壳      生成中          成品      失败
@@ -150,14 +167,13 @@ export interface AssetFields {
   age?: string
   style?: string
   /**
-   * 「其他」类目（category==='other'）专用，标记这一份到底是图 / 视频 / 文本 / 音频，决定卡片与详情怎么渲染：
+   * 「其他」类目（category==='other'）专用，标记这一份到底是图 / 视频 / 文本，决定卡片与详情怎么渲染：
    *   · media==='image'：cover 存图片地址（与前五类一致）。
    *   · media==='video'：cover 存视频首帧/海报图，videoUrl 存可播放视频源（demo 可空串占位）。
    *   · media==='text' ：cover 留空，text 存正文；卡片渲染文字预览块，不出现裂图。
-   *   · media==='audio'：cover 留空，audioUrl/duration 存音源与时长；走音频条状列表（AudioList），不进网格。
-   * 沿用音频把 audioUrl/duration 塞进 fields 的做法，不动 Asset 顶层结构。
+   * 音频不进「其他」：音频有自己的类目（category==='audio'），只在那里存。
    */
-  media?: 'image' | 'video' | 'text' | 'audio'
+  media?: 'image' | 'video' | 'text'
   videoUrl?: string
   text?: string
   [key: string]: unknown
@@ -184,22 +200,38 @@ export interface Asset {
 
   masterId?: string     // 母版血缘：从哪个资产拷来的。原创资产没有（它自己就是母版）。纯信息，不挂同步行为。
 
-  baseModel?: string    // 素模：角色的"基础形象/身份锚点"（穿白衣、无戏服），做参考图用；仅角色有、始终作详情锚点展示
-
   /**
-   * 图片级提示词（v6）：产出这张图的出图提示词，跟"人设/角色设定"无关。
-   * - 角色（顶层 Asset）：这里存的是【素模】那张图的提示词。
-   * - 造型（looks[] 里的每个 Asset）：各自存自己那套造型图的提示词。
-   * - 扁平资产（服装/场景/道具/音频）：这份资产自己那张图/段音的提示词。
+   * 图片级提示词（v6）：产出这份资产图的出图提示词，跟"人设/角色设定"无关。
+   * 每份资产（角色 / 服装 / 场景 / 道具 / 音频）都只有一段自己的提示词——
+   * 变体（睡衣苏晚、夜晚客厅…）各自独立成资产、各自带自己的提示词，不再挂在父资产下。
    * 本地字段，随副本走、可改，不参与库内去重。
    */
   prompt?: string
 
+  /**
+   * 定稿图（0803，原 cover 语义升级）：这份资产对外就长这样——
+   * 卡片封面、被引用时用的都是它。空壳（status==='empty'）时为空串。
+   */
   cover: string
+
+  /**
+   * 候选池（0803）：本资产历次生成中被用户「保留」下来的图。定稿图必定也在池中。
+   * 跨层流转只带定稿、不带候选（候选是原始库的生产过程中间物），所以副本的 candidates 通常为空。
+   */
+  candidates?: Candidate[]
+
+  /**
+   * 参考图（0803，本版只做展示与删除，不做「从资产库选」的选择器——下一版再加）。
+   * 存图片 url 数组。空壳资产由种子预置好来源资产的定稿图，引导用户点生成。
+   */
+  referenceImages?: string[]
+
+  /** 参考自哪份资产（可选，用于卡片 / 详情上的「参考自 XX」小标签）。纯展示，不挂任何行为。 */
+  referencedFrom?: string
+
   fields: AssetFields
   tags: string[]        // 本地标签：改了不断链
   voice?: Voice         // 角色音色：1 个；通常随角色走，广场直接复用时可取消；仅角色有
-  looks?: Asset[]       // 角色的造型变体子资产（角色×服装生的成品图，挂在角色下）
   contributedBy?: string // 广场素材专用：是谁投稿上架的。作者本人可删自己投的；admin 可下架任何一份。种子里的官方素材没有这个字段（只有 admin 能下架）。
   createdAt: number
 }

@@ -2,7 +2,7 @@
 
 .card {
   position: relative;
-  aspect-ratio: 3 / 4;
+  aspect-ratio: 1 / 1;
   border: 1px solid var(--line-soft);
   border-radius: 8px; /* 对齐 Figma Actor Card 的 rounded-[8px]，比全局卡片圆角更收敛 */
   overflow: hidden;

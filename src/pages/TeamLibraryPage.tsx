@@ -39,8 +39,6 @@ export function TeamLibraryPage() {
   const [category, setCategory] = useState<Category>('character')
   const [query, setQuery] = useState('')
   const [sortDesc, setSortDesc] = useState(true) // 智能排序：默认最新在前
-  const [batch, setBatch] = useState(false)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
   const [detailAssetId, setDetailAssetId] = useState<string | null>(null)
 
   // 当前账号在团队库里能看到的全部资产（权限说了算）。
@@ -58,6 +56,7 @@ export function TeamLibraryPage() {
   }, [teamAssets])
 
   // 类目 → 搜索 → 排序，派生出当前网格要摆的资产。
+  // （0803 修订：团队库没有空壳，不再有「只看待生成」；生成/批量生成都挪到项目库。）
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
     return teamAssets
@@ -65,19 +64,6 @@ export function TeamLibraryPage() {
       .filter((a) => (q ? a.name.toLowerCase().includes(q) : true))
       .sort((a, b) => (sortDesc ? b.createdAt - a.createdAt : a.createdAt - b.createdAt))
   }, [teamAssets, category, query, sortDesc])
-
-  function toggleSelect(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
-  }
-
-  function exitBatch() {
-    setBatch(false)
-    setSelected(new Set())
-  }
 
   return (
     <div className={styles.wrap}>
@@ -100,26 +86,9 @@ export function TeamLibraryPage() {
       {/* ── 右侧内容 ── */}
       <section className={styles.content}>
         <div className={styles.toolbar}>
-          <div className={styles.toolbarLeft}>
-            {batch && (
-              <div className={styles.batchStatus}>
-                已选 {selected.size} 项
-                <button className={styles.batchCancel} onClick={exitBatch}>
-                  取消
-                </button>
-              </div>
-            )}
-          </div>
+          <div className={styles.toolbarLeft} />
 
           <div className={styles.toolbarRight}>
-            <button
-              className={`${styles.btn} ${batch ? styles.btnOn : ''}`}
-              onClick={() => (batch ? exitBatch() : setBatch(true))}
-            >
-              <img className={styles.btnIcon} src={assetUrl('assets/icons/batch-all.svg')} alt="" aria-hidden />
-              批量操作
-            </button>
-
             <button className={`${styles.btn} ${styles.btnSort}`} onClick={() => setSortDesc((v) => !v)}>
               <img className={styles.btnIcon} src={assetUrl('assets/icons/sort-two.svg')} alt="" aria-hidden />
               智能排序（{sortDesc ? '最新' : '最早'}）
@@ -156,19 +125,8 @@ export function TeamLibraryPage() {
         ) : (
           <div className={styles.grid}>
             {visible.map((a) => (
-              <div
-                key={a.id}
-                className={`${styles.cell} ${batch && selected.has(a.id) ? styles.cellSelected : ''}`}
-              >
-                <AssetCard
-                  asset={a}
-                  onClick={batch ? () => toggleSelect(a.id) : () => setDetailAssetId(a.id)}
-                />
-                {batch && (
-                  <span className={`${styles.check} ${selected.has(a.id) ? styles.checkOn : ''}`}>
-                    {selected.has(a.id) ? '✓' : ''}
-                  </span>
-                )}
+              <div key={a.id} className={styles.cell}>
+                <AssetCard asset={a} onClick={() => setDetailAssetId(a.id)} />
               </div>
             ))}
           </div>
