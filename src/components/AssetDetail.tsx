@@ -19,12 +19,23 @@ import type { Category, Voice } from '../data/types'
 import { useStore, useCurrentUser, type ActionResult } from '../store/useStore'
 import { canDirectReuse, canFavorite, canReuseFromTeam, canRemovePlazaAsset, canDeleteLibraryAsset, canContributeToPlaza, canViewPrompt, canRegenerate, isAdmin } from '../services/permission'
 import { coverOf } from '../services/assetService'
+import { COST_PER_IMAGE } from '../data/pricing'
 import { PRESET_VOICES } from '../data/presetVoices'
+import { CanvasAssetPanel, type PickedRef } from './canvas/CanvasAssetPanel'
 import { assetUrl } from '../utils/assets'
 import styles from './AssetDetail.module.css'
 
 const CATEGORY_LABEL: Record<Category, string> = {
   character: '角色', costume: '服装', scene: '场景', prop: '道具', audio: '音频', other: '其他',
+}
+/** 空态文案按类目走："你的角色图将会在这里展示"。音频不进这个面板。 */
+const EMPTY_HINT_BY_CATEGORY: Record<Category, string> = {
+  character: '你的角色图将会在这里展示',
+  costume: '你的服装图将会在这里展示',
+  scene: '你的场景图将会在这里展示',
+  prop: '你的道具图将会在这里展示',
+  audio: '',
+  other: '',
 }
 const SCOPE_LABEL = { plaza: '素材广场', team: '团队资产库', project: '项目资产库' }
 /** 「其他」媒介文案（详情大图 cap / 徽章共用）。 */
@@ -34,13 +45,11 @@ const IMG_PLACEHOLDER = assetUrl('assets/canvas/image-placeholder.svg')
 
 /** 去掉 ?g=N 后缀，拿到图片本体地址。 */
 function baseUrl(u: string): string { return u.split('?')[0] }
-/** 生成图来源：定稿 → 参考图第一张 → 通用占位图。 */
-function genSourceOf(a: { cover: string; referenceImages?: string[] }): string {
-  return baseUrl(a.cover || a.referenceImages?.[0] || IMG_PLACEHOLDER)
+/** 生成图来源：定稿 → 造型真实成品图替身（fields.lookUrl，演示脚手架）→ 参考图第一张 → 通用占位图。 */
+function genSourceOf(a: { cover: string; fields?: { lookUrl?: unknown }; referenceImages?: string[] }): string {
+  const look = typeof a.fields?.lookUrl === 'string' ? a.fields.lookUrl : undefined
+  return baseUrl(a.cover || look || a.referenceImages?.[0] || IMG_PLACEHOLDER)
 }
-
-/** 「本次生成」暂存图的本地自增 id（仅用于勾选/预览，不入库）。 */
-let _batchSeq = 1
 
 /** 生成参数选项（纯展示，对齐现有产品「一键生成」弹窗；仅数量驱动张数）。 */
 const RATIO_OPTS = ['3 : 4', '1 : 1', '9 : 16', '16 : 9']
@@ -199,9 +208,11 @@ export function AssetDetail({
   const runDeleteAsset = useStore((s) => s.runDeleteAsset)
   const runRemoveCandidate = useStore((s) => s.runRemoveCandidate)
   const runSetFinal = useStore((s) => s.runSetFinal)
+  const runUnsetFinal = useStore((s) => s.runUnsetFinal)
   const appendCandidates = useStore((s) => s.appendCandidates)
   const setPrompt = useStore((s) => s.setPrompt)
   const removeReferenceImage = useStore((s) => s.removeReferenceImage)
+  const addReferenceImages = useStore((s) => s.addReferenceImages)
   const clearAssetImages = useStore((s) => s.clearAssetImages)
   const renameAsset = useStore((s) => s.renameAsset)
   const setVoice = useStore((s) => s.setVoice)
@@ -230,22 +241,21 @@ export function AssetDetail({
   const [preview, setPreview] = useState<{ src: string; name: string } | null>(null) // 放大查看灯箱
 
   // ── 阶段二 · 三栏生成面板的本地态 ──────────────────────────────────
-  // 「本次生成」暂存区：还没被「保留」进候选池的图，纯本地态（资产 status 不变，见 3.4-1）。
-  // url = 这份资产自己的图（定稿 / 参考图）+ ?g=N 去重后缀；id 仅本地区分与勾选用。
-  const [batch, setBatch] = useState<{ id: string; url: string; sel: boolean }[]>([])
-  // 中栏大图当前显示哪张：null=定稿；否则指向右栏某张（本次生成 / 已保留）。
-  const [centerSel, setCenterSel] = useState<{ zone: 'batch' | 'kept'; id: string } | null>(null)
-  // 「本次生成」还有未处理候选时再点生成 → 先确认替换（避免手滑丢掉挑好的）。
-  const [genConfirm, setGenConfirm] = useState(false)
+  // 生成中（demo 用定时器模拟出图耗时，让演示看得出"在调模型"）。null = 不在生成；值 = 本次生成张数。
+  const [generating, setGenerating] = useState<number | null>(null)
+  // 中栏预览的是候选池里哪一张。null = 定稿（没有定稿时 = 池里第一张）。
+  const [centerKeptId, setCenterKeptId] = useState<string | null>(null)
   // 生成参数（纯展示，仅「生成数量」驱动本次生成的张数）。
   const [genCount, setGenCount] = useState(4)
+  // 参考图选择器（0804）：null=关；'menu'=二选一；'library'=从素材库多选。
+  const [refPicker, setRefPicker] = useState<'menu' | 'library' | null>(null)
 
   // Esc：先收子面板 / 改名，再关整扇弹窗
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       if (preview) setPreview(null)
-      else if (genConfirm) setGenConfirm(false)
+      else if (refPicker) setRefPicker(null)
       else if (promptOpen) setPromptOpen(false)
       else if (picker) setPicker(null)
       else if (renaming) setRenaming(false)
@@ -253,16 +263,23 @@ export function AssetDetail({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [preview, genConfirm, promptOpen, picker, renaming, onClose])
+  }, [preview, refPicker, promptOpen, picker, renaming, onClose])
 
-  // 切换到另一份资产时，清掉三栏面板的本地态（本次生成 / 中栏选中 / 提示词草稿）。
+  // 切换到另一份资产时，清掉三栏面板的本地态（生成中 / 中栏选中 / 提示词草稿）。
   useEffect(() => {
-    setBatch([])
-    setCenterSel(null)
-    setGenConfirm(false)
+    setGenerating(null)
+    setCenterKeptId(null)
+    setRefPicker(null)
     setPromptDraft(asset?.prompt ?? '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assetId])
+
+  // 结果提示 3 秒自动消失（浮层，不占布局）。
+  useEffect(() => {
+    if (!result) return
+    const t = window.setTimeout(() => setResult(null), 3000)
+    return () => window.clearTimeout(t)
+  }, [result])
 
   if (!asset) return null
 
@@ -281,6 +298,11 @@ export function AssetDetail({
   const candidates = asset.candidates ?? []
   const isEmpty = asset.status === 'empty'
   const referenceImages = asset.referenceImages ?? []
+  const referenceLabels = asset.referenceLabels ?? []
+  // 候选池是项目层特有的生产过程留存物（规则 14）：团队库 / 广场只展示定稿，右栏不出。
+  const hasCandidatePool = asset.scope === 'project' && !isOther
+  // 参考图选择器（从素材库添加）需要项目上下文：空壳/造型都在项目层，取它所在项目。
+  const refProject = asset.scope === 'project' ? world.projects.find((p) => p.id === asset.scopeId) : undefined
 
   const canRemovePlaza = canRemovePlazaAsset(user, asset)
   const canDeleteLib = canDeleteLibraryAsset(user, asset)
@@ -307,13 +329,13 @@ export function AssetDetail({
     if (isEmpty) return deleteWholeAsset() // 空壳整删，无需确认
     if (isOther) return setConfirmKind('whole') // 「其他」是成品留存物，删就是删
     if (canRemovePlaza) return setConfirmKind('whole') // 广场下架/删投稿
-    // 团队/项目库：删定稿图。
-    const finalCand = candidates.find((c) => c.url === asset!.cover)
-    if (finalCand && candidates.length > 1) {
-      // 池中还有别的图：删这张，服务层顶一张上来当新定稿。
-      return setResult(runRemoveCandidate(asset!.id, finalCand.id))
+    // 池里还有别的图 → 交给 removeCandidate 处理（它会顶一张上来或降级空壳）。
+    // 待定稿态 cover === ''，找不到定稿时兜底删第一张，别错走归零分流。
+    if (candidates.length > 1) {
+      const target = (asset!.cover && candidates.find((c) => c.url === asset!.cover)) || candidates[0]
+      return setResult(runRemoveCandidate(asset!.id, target.id))
     }
-    // 池空 / 最后一张 → 归零分流：团队删整份资产，项目仅清空图片。
+    // 最后一张 → 归零分流：团队删整份，项目仅清空图片。
     if (asset!.scope === 'team') setConfirmKind('whole')
     else if (asset!.scope === 'project') setConfirmKind('clear')
   }
@@ -330,101 +352,95 @@ export function AssetDetail({
     setConfirmKind(null)
   }
 
-  // ─── 三栏生成面板：派生值 ─────────────────────────────────────────
-  // 有生成能力（canRegen）且非「其他」→ 出左栏（提示词 + 参考图 + 参数 + 生成）与「本次生成」暂存区。
+  // ─── 结果区面板：派生值 ─────────────────────────────────────────
+  // 有生成能力（canRegen）且非「其他」→ 出左栏（提示词 + 参考图 + 参数 + 生成）。
   const hasGenPanel = canRegen && !isOther
-  // 中栏当前展示的候选（来自「已保留」）或暂存图（来自「本次生成」）；都为空则展示定稿。
-  const centerCand = centerSel?.zone === 'kept' ? candidates.find((c) => c.id === centerSel.id) : undefined
-  const centerBatch = centerSel?.zone === 'batch' ? batch.find((b) => b.id === centerSel.id) : undefined
-  // 定稿是按 url 认的候选（候选 url 带 ?g=N 去重后缀，保证只有一张命中）。
-  const finalCandId = candidates.find((c) => c.url === asset.cover)?.id
-  // 中栏大图 url：优先当前选中项，否则定稿（空壳时为空 → 占位）。
-  const centerUrl = centerBatch ? centerBatch.url : centerCand ? centerCand.url : coverImg
-  // 当前展示的是不是定稿（定稿星角标 / 「设为定稿」禁用判断）——按候选 id 比。
-  const centerIsFinal = !centerSel && !isEmpty ? true : centerCand ? centerCand.id === finalCandId : false
-  const centerCaption = centerBatch ? '本次候选 · 未保留' : centerCand ? '已保留' : '定稿'
-  // 「设为定稿」：仅当选中「已保留」里一张、且它还不是定稿时可用。
-  const canSetCenterFinal = canRegen && !!centerCand && centerCand.id !== finalCandId
-  const selCount = batch.filter((b) => b.sel).length
-  const allSelected = batch.length > 0 && selCount === batch.length
-  // 中栏「删除」何时可点：删暂存图 / 删候选 / 广场下架 / 团队·项目删定稿。空壳无图 → 不可删。
-  const centerDeletable =
-    !!centerBatch ||
-    !!centerCand ||
-    (!centerSel && (canRemovePlaza || (canDeleteLib && !!coverImg)))
+  // 弹窗加宽：出左栏 或 出右栏（全部图片）时都用宽版布局。
+  const wide = hasGenPanel || hasCandidatePool
+  // 定稿是按 url 认的候选；待定稿时 cover 为空 → finalCandId 为 undefined。
+  const finalCandId = asset.cover ? candidates.find((c) => c.url === asset.cover)?.id : undefined
+  // 中栏预览：优先用户点选的那张 → 定稿 → 池里第一张（待定稿态的默认预览）。
+  const centerCand =
+    (centerKeptId ? candidates.find((c) => c.id === centerKeptId) : undefined) ||
+    (finalCandId ? candidates.find((c) => c.id === finalCandId) : undefined) ||
+    candidates[0]
+  // ⚠️ 团队库 / 广场资产没有候选池（规则 14），centerCand 恒为 undefined，必须回落到 cover，
+  //    否则中栏会渲染空 src 裂图。这是本次最容易踩的一个坑。
+  const centerUrl = centerCand?.url ?? coverImg
+  const centerIsFinal = centerCand ? centerCand.id === finalCandId : !!coverImg
+  // 定稿是项目层的生产概念：团队库 / 广场里每一张都已经是定稿，标了等于没标。
+  const showFinalBadge = asset.scope === 'project'
+  // 当前预览的这张，是不是已经在参考图里了。
+  // ⚠️ 必须按 baseUrl 比：候选池的 url 带 ?g=N 去重后缀，参考图存的是不带后缀的裸地址
+  //    （见 seed.ts 里素模的 cover 与 referenceImages），裸字符串比较永远不相等。
+  const isCenterInRefs = !!centerCand && referenceImages.some((u) => baseUrl(u) === baseUrl(centerCand.url))
 
-  /** 生成（占位）：往「本次生成」暂存区放 genCount 张本资产自己的图，默认全勾；资产 status 不变。
-   *  取图 = 定稿 → 参考图第一张（空壳）→ 通用占位图；每张带 ?g=N 后缀保证 url 唯一。 */
+  /** 生成：先进「生成中」骨架态，1.2s 后把 genCount 张直接并入候选池，并自动预览第一张。 */
   function doGenerate() {
+    if (!canRegen || generating !== null) return
+    if (!promptDraft.trim()) {
+      setResult({ ok: false, message: '先写提示词再生成' })
+      return
+    }
     if (promptDraft !== (asset!.prompt ?? '')) setPrompt(asset!.id, promptDraft)
+    setGenerating(genCount)
     const src = genSourceOf(asset!)
-    const items = Array.from({ length: genCount }, () => {
-      const seq = _batchSeq++
-      return { id: `b${seq}`, url: `${src}?g=${seq}`, sel: true } // 后缀保证每张 url 唯一
-    })
-    setBatch(items)
-    setCenterSel({ zone: 'batch', id: items[0].id })
-    setResult({ ok: true, message: `已生成 ${genCount} 张候选 · 默认全选，取消勾选即不保留` })
+    const urls = Array.from({ length: genCount }, (_, i) => `${src}?g=${Date.now()}${i}`)
+    window.setTimeout(() => {
+      const r = appendCandidates(asset!.id, urls)
+      setGenerating(null)
+      setResult(r.ok ? { ok: true, message: `${r.message} · 消耗 ${genCount * COST_PER_IMAGE} 星钻` } : r)
+      // 生成完自动预览本批第一张——否则用户点了生成，中栏还停在旧定稿上，像什么都没发生。
+      // 已有定稿的资产同样要跳过去看新图（用户刚花了星钻，第一诉求就是看结果）。
+      if (r.ok) {
+        const fresh = useStore.getState().world.assets.find((a) => a.id === asset!.id)
+        const firstNew = fresh?.candidates?.[(fresh.candidates?.length ?? 0) - urls.length]
+        if (firstNew) setCenterKeptId(firstNew.id)
+      }
+    }, 1200)
   }
 
-  /** 点「生成」：暂存区还有未处理候选时先确认替换，否则直接生成。 */
-  function onGenerateClick() {
-    if (!canRegen) return
-    if (batch.length) {
-      setGenConfirm(true)
+  /**
+   * 上传本地图片作为这份资产的图（不是参考图）：并入候选池，进待定稿等用户拍板。
+   * 传 allowAutoFinal=false——上传是用户主动放进来的探索行为，即便是第一张也不代他定稿。
+   */
+  function uploadLocalImage(file: File | null) {
+    if (!file) return
+    const url = URL.createObjectURL(file)
+    const r = appendCandidates(asset!.id, [url], false)
+    setResult(r.ok ? { ok: true, message: '已上传，挑一张点「设为定稿」' } : r)
+  }
+
+  /**
+   * 把当前预览的这张图加进 / 移出这份资产自己的参考图（0808）。
+   * 标签直接写资产名（规则 20：参考图标签写它的真名），与种子里素模的口径一致。
+   * 存进去的 url 统一去掉 ?g=N 后缀，跟 referenceImages 的既有格式对齐——
+   * 否则同一张图会以两个字符串身份存在，判重和「已是参考图」都会失灵。
+   */
+  function toggleAsReference(cand: { url: string }) {
+    const key = baseUrl(cand.url)
+    const i = referenceImages.findIndex((u) => baseUrl(u) === key)
+    if (i >= 0) {
+      setResult(removeReferenceImage(asset!.id, i))
       return
     }
-    doGenerate()
+    setResult(addReferenceImages(asset!.id, [{ url: key, label: asset!.name }]))
   }
 
-  /** 保留选中：把勾中的暂存图并入候选池（空壳保留后 → 成品、第一张成定稿），清空暂存区。 */
-  function keepSelected() {
-    const picked = batch.filter((b) => b.sel)
-    if (!picked.length) return
-    const wasEmpty = asset!.status === 'empty'
-    const dropped = batch.length - picked.length
-    const r = appendCandidates(asset!.id, picked.map((b) => b.url))
-    if (r.ok) {
-      // 说清楚没勾的去哪了；空壳第一次出图再补一句"第 1 张已设为定稿"。
-      let message = wasEmpty ? `已保留 ${picked.length} 张，第 1 张已设为定稿` : `已保留 ${picked.length} 张`
-      if (dropped > 0) message += `，其余 ${dropped} 张已丢弃`
-      else if (wasEmpty) message += '，可在右栏更换'
-      setResult({ ok: true, message })
-    } else {
-      setResult(r)
-    }
-    setBatch([])
-    setCenterSel(null) // 回到定稿（空壳保留后即为第一张）
+  /** 参考图选择器：确定从素材库选的图 → 并入 referenceImages（标签写被选资产的真名 · 规则 20）。 */
+  function confirmRefPick(pickedItems: PickedRef[]) {
+    if (pickedItems.length === 0) return setRefPicker(null)
+    const items = pickedItems.map((p) => ({ url: p.cover, label: p.name }))
+    setResult(addReferenceImages(asset!.id, items, pickedItems[0].assetId))
+    setRefPicker(null)
   }
 
-  /** 都不要：清空「本次生成」，什么都不保留。 */
-  function dropBatch() {
-    const n = batch.length
-    setBatch([])
-    setCenterSel((prev) => (prev?.zone === 'batch' ? null : prev))
-    setResult({ ok: true, message: `已丢弃本次生成的 ${n} 张` })
-  }
-
-  /** 勾选 / 取消暂存图。 */
-  function toggleBatchPick(id: string) {
-    setBatch((prev) => prev.map((b) => (b.id === id ? { ...b, sel: !b.sel } : b)))
-  }
-
-  /** 中栏「删除」：删暂存图只回到本批 / 定稿；删定稿或候选走 3.5 归零判定。 */
-  function deleteCenter() {
-    if (centerBatch) {
-      const idx = batch.findIndex((b) => b.id === centerBatch.id)
-      const next = batch.filter((b) => b.id !== centerBatch.id)
-      setBatch(next)
-      setCenterSel(next.length ? { zone: 'batch', id: next[Math.min(idx, next.length - 1)].id } : null)
-      return
-    }
-    if (centerCand) {
-      deleteCandidate(centerCand.id)
-      setCenterSel(null)
-      return
-    }
-    deleteCoverImage() // 定稿
+  /** 参考图选择器：上传本地临时参考图（纯前端占位，刷新即失）。 */
+  function uploadTempRef(file: File | null) {
+    if (!file) return
+    const url = URL.createObjectURL(file)
+    setResult(addReferenceImages(asset!.id, [{ url, label: '临时' }]))
+    setRefPicker(null)
   }
 
   function renderDeleteConfirm() {
@@ -459,21 +475,44 @@ export function AssetDetail({
     )
   }
 
-  /** 「本次生成」还有未处理候选时再点生成的替换确认。 */
-  function renderGenConfirm() {
-    if (!genConfirm) return null
+  /** 参考图选择器（0804 · 改动三）：二选一菜单 + 从素材库多选 / 上传临时参考。 */
+  function renderRefPicker() {
+    if (!refPicker) return null
+    if (refPicker === 'library') {
+      return (
+        <div className={styles.refPickRoot}>
+          <div className={styles.sscrim} onClick={() => setRefPicker(null)} />
+          <div className={styles.refPickPanel}>
+            <CanvasAssetPanel
+              pid={asset!.scopeId ?? ''}
+              projectName={refProject?.name ?? '当前项目'}
+              mode="pick"
+              onUse={() => {}}
+              onPick={confirmRefPick}
+              onClose={() => setRefPicker(null)}
+            />
+          </div>
+        </div>
+      )
+    }
     return (
       <div className={styles.msubroot}>
-        <div className={styles.sscrim} onClick={() => setGenConfirm(false)} />
-        <div className={styles.confirmCard}>
-          <div className={`${styles.confirmIcon} ${styles.confirmIconAccent}`}><RegenIcon /></div>
-          <h4 className={styles.confirmTitle}>替换本次候选？</h4>
-          <p className={styles.confirmBody}>
-            「本次生成」里还有未处理的候选，重新生成会替换掉它们。想留下的请先点「保留选中」。
-          </p>
-          <div className={styles.confirmActions}>
-            <button className={styles.btnGhost} onClick={() => setGenConfirm(false)}>取消</button>
-            <button className={`${styles.btn} ${styles.btnPri}`} onClick={() => { setGenConfirm(false); doGenerate() }}>替换并重新生成</button>
+        <div className={styles.sscrim} onClick={() => setRefPicker(null)} />
+        <div className={styles.msub}>
+          <h4 className={styles.subH}>添加参考图</h4>
+          <div className={styles.refChoices}>
+            <button className={styles.refChoice} onClick={() => setRefPicker('library')}>
+              <b>从素材库添加</b>
+              <span>选一张已有资产的定稿图作为参考</span>
+            </button>
+            <label className={styles.refChoice} title="本地预览，接后端后落对象存储">
+              <b>上传临时参考</b>
+              <span>从本地选图，仅本次生成使用</span>
+              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => uploadTempRef(e.target.files?.[0] ?? null)} />
+            </label>
+          </div>
+          <div className={styles.inlActions}>
+            <button className={styles.btnGhost} onClick={() => setRefPicker(null)}>取消</button>
           </div>
         </div>
       </div>
@@ -865,11 +904,13 @@ export function AssetDetail({
             </div>
           </div>
 
-          {/* 候选池：挑一张用到画布 */}
+          {/* 全部图片：挑一张用到画布（规则 14：只有项目层资产有候选池；团队库 / 广场只给定稿 → 使用）。 */}
+          {hasCandidatePool && (
           <div className={styles.looksHead}>
-            <div className={styles.looksHeadT}>候选池（{candidates.length}）</div>
+            <div className={styles.looksHeadT}>全部图片（{candidates.length}）</div>
           </div>
-          {candidates.length > 0 && (
+          )}
+          {hasCandidatePool && candidates.length > 0 && (
             <div className={styles.looksGrid}>
               {candidates.map((c) => (
                 <div key={c.id} className={styles.lookCard}>
@@ -882,7 +923,7 @@ export function AssetDetail({
                     <div className={styles.lookOvC}>
                       <button className={styles.lookUse} onClick={() => onUse({ cover: c.url })}>使用</button>
                     </div>
-                    {c.id === finalCandId && <span className={styles.finalStar} title="定稿">★</span>}
+                    {showFinalBadge && c.id === finalCandId && <span className={styles.finalBadgeSm}>★ 定稿</span>}
                   </div>
                 </div>
               ))}
@@ -900,7 +941,7 @@ export function AssetDetail({
   return (
     <div className={styles.mroot}>
       <div className={styles.mscrim} onClick={onClose} />
-      <div className={`${styles.modal} ${hasGenPanel ? styles.modal3 : ''}`}>
+      <div className={`${styles.modal} ${wide ? styles.modal3 : ''}`}>
         {/* ── 头部：标题 + 改名 + chips + 流转动作 + 关闭 ── */}
         <div className={styles.mhead}>
           <div className={styles.mtitleWrap}>
@@ -923,10 +964,11 @@ export function AssetDetail({
                 <div className={styles.chips}>
                   <span className={styles.chip}>{CATEGORY_LABEL[asset.category]}</span>
                   <span className={styles.chip}>{SCOPE_LABEL[asset.scope]}</span>
-                  {asset.masterId && (
+                  {/* 广场是源头，不展示"我从哪来"（血缘 / 参考自）——规则 14。 */}
+                  {asset.scope !== 'plaza' && asset.masterId && (
                     <span className={`${styles.chip} ${styles.chipCopy}`}>副本 · 源自「{master?.name ?? '母版'}」</span>
                   )}
-                  {referencedFrom && (
+                  {asset.scope !== 'plaza' && referencedFrom && (
                     <span className={styles.chip}>参考自「{referencedFrom.name}」</span>
                   )}
                 </div>
@@ -953,8 +995,8 @@ export function AssetDetail({
           </div>
         </div>
 
-        {/* ── 主体三栏：左（提示词 + 参考图 + 参数 + 生成）｜中（定稿大图 + 动作 + 音色）｜右（本次生成 + 已保留）── */}
-        <div className={`${styles.mbody} ${hasGenPanel ? styles.mbody3 : ''}`}>
+        {/* ── 主体：左（提示词 + 参考图 + 参数 + 计价/生成）｜中（本批结果区 / 定稿大图）｜右（已保留）── */}
+        <div className={`${styles.mbody} ${wide ? styles.mbody3 : ''}`}>
 
           {/* ═══ 左栏：生成面板（有生成能力才出）═══ */}
           {hasGenPanel && (
@@ -971,24 +1013,26 @@ export function AssetDetail({
               </div>
 
               <div className={styles.gfield}>
-                <div className={styles.flabel}>参考图 <span className={styles.fhint}>（仅展示，不参与生成）</span></div>
+                <div className={styles.flabel}>参考图</div>
                 <div className={styles.refRow}>
                   {referenceImages.map((src, i) => (
-                    <div key={i} className={styles.refSlot}>
-                      <img src={src} alt="参考图" loading="lazy" />
-                      <button className={styles.refZoom} title="放大查看" onClick={() => setPreview({ src, name: '参考图' })}><ZoomIcon /></button>
-                      <button className={styles.refRemove} title="移除参考图" onClick={() => setResult(removeReferenceImage(asset.id, i))}>✕</button>
+                    <div key={i} className={styles.refItem}>
+                      <div className={styles.refSlot}>
+                        <img src={src} alt="参考图" loading="lazy" />
+                        <button className={styles.refZoom} title="放大查看" onClick={() => setPreview({ src, name: referenceLabels[i] || '参考图' })}><ZoomIcon /></button>
+                        <button className={styles.refRemove} title="移除参考图" onClick={() => setResult(removeReferenceImage(asset.id, i))}>✕</button>
+                      </div>
+                      {referenceLabels[i] && <span className={styles.refLabel}>{referenceLabels[i]}</span>}
                     </div>
                   ))}
-                  <button className={styles.refAdd} disabled title="下一版支持从资产库选择">
+                  <button className={styles.refAdd} onClick={() => setRefPicker('menu')} title="从素材库添加 / 上传临时参考">
                     <span className={styles.refPlus}>＋</span>
-                    <span>从资产库选</span>
+                    <span>添加参考图</span>
                   </button>
                 </div>
-                {referencedFrom && <div className={styles.refFrom}>参考自 <b>{referencedFrom.name}</b> 的定稿图</div>}
               </div>
 
-              {/* 生成参数：4 个下拉压成紧凑 2×2 一组，给上方提示词让出空间。 */}
+              {/* 生成参数：4 个下拉压成紧凑一行，给上方提示词让出空间。 */}
               <div className={styles.paramGrid}>
                 <label className={styles.selWrap}>
                   <span className={styles.subLabel}>生成比例</span>
@@ -1010,13 +1054,25 @@ export function AssetDetail({
                 </label>
               </div>
 
-              <button className={`${styles.genBtn} ${isEmpty ? styles.genBtnPulse : ''}`} onClick={onGenerateClick}>生成</button>
+              {/* 底部一行：预计消耗星钻 + 生成 */}
+              <div className={styles.genFoot}>
+                <span className={styles.costHint}>预计消耗 <b>{genCount * COST_PER_IMAGE}</b> 星钻</span>
+                <button
+                  className={`${styles.genBtn} ${!asset.cover ? styles.genBtnPulse : ''}`}
+                  disabled={generating !== null}
+                  onClick={doGenerate}
+                >
+                  {generating !== null ? '生成中…' : '生成'}
+                </button>
+              </div>
             </div>
           )}
 
-          {/* ═══ 中栏：定稿大图 + 动作 + 音色 ═══ */}
+          {/* ═══ 中栏：预览台（生成中骨架 / 空态 / 预览大图）+ 动作 + 音色 ═══ */}
           <div className={styles.genCenter}>
-            <div className={styles.stageTitle}>{isOther ? OTHER_MEDIA_LABEL[otherMedia!] : '定稿大图'}</div>
+            <div className={styles.stageTitle}>
+              {isOther ? OTHER_MEDIA_LABEL[otherMedia!] : isEmpty ? '待生成' : '预览'}
+            </div>
             <div className={styles.bigframe}>
               {isOther ? (
                 otherMedia === 'text' ? (
@@ -1029,23 +1085,49 @@ export function AssetDetail({
                     )}
                   </div>
                 )
-              ) : isEmpty && !centerBatch ? (
-                <div className={styles.emptyBig}>
-                  <PlaceholderIcon />
-                  <span>待生成{canRegen ? ' · 点左侧「生成」' : ''}</span>
+              ) : generating !== null ? (
+                /* 生成中骨架态：中栏旋转圈 + 一行说明（右栏同步出流光骨架格）。 */
+                <div className={styles.genLoading}>
+                  <div className={styles.genSpinner} />
+                  <span>正在生成 {generating} 张…</span>
+                </div>
+              ) : isEmpty ? (
+                /* 空态（改动三）：大片留白 + 一行灰字 + 上传本地图片，不放占位方框。 */
+                <div className={styles.emptyResult}>
+                  <span className={styles.emptyResultText}>{EMPTY_HINT_BY_CATEGORY[asset.category] || '你的图将会在这里展示'}</span>
+                  {canRegen && (
+                    <label className={styles.emptyUpload}>
+                      上传本地图片
+                      <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => uploadLocalImage(e.target.files?.[0] ?? null)} />
+                    </label>
+                  )}
                 </div>
               ) : (
                 <div className={styles.bigImgWrap}>
                   <img src={centerUrl} alt={asset.name} />
-                  {centerIsFinal && <span className={styles.centerStar}>★ 定稿</span>}
+
+                  {/* 定稿徽章：半透明黑底 + 青绿字。待定稿态显示灰底「待定稿」。只在项目库出（规则 25）。 */}
+                  {showFinalBadge && (centerIsFinal
+                    ? <span className={styles.finalBadge}>★ 定稿</span>
+                    : !asset.cover && <span className={styles.pendingBadge}>待定稿</span>)}
+
+                  {/* 图片自身的操作一律 hover 浮在图上（规则 17）。 */}
                   <div className={styles.thumbIcons}>
-                    <button className={styles.thumbBtn} title="放大查看" onClick={() => setPreview({ src: centerUrl, name: centerCaption })}><ZoomIcon /></button>
-                    <button className={styles.thumbBtn} title="下载原图" onClick={() => downloadImage(centerUrl, `${asset.name}·${centerCaption}`)}><DownloadIcon /></button>
+                    <button className={styles.thumbBtn} title="放大查看" onClick={() => setPreview({ src: centerUrl, name: asset.name })}><ZoomIcon /></button>
+                    <button className={styles.thumbBtn} title="下载原图" onClick={() => downloadImage(centerUrl, asset.name)}><DownloadIcon /></button>
+                    {/* 删除（规则 18 改写）：项目库删的是"预览的这一张候选"；团队库 / 广场没有候选池，
+                        沿用原来的整份删除 / 下架路径（deleteCoverImage 内部按层分流）。 */}
+                    {centerCand
+                      ? canDeleteLib && (
+                          <button className={styles.thumbBtn} title="删除这张" onClick={() => deleteCandidate(centerCand.id)}><TrashIcon /></button>
+                        )
+                      : (canRemovePlaza || (asset.scope === 'team' && canDeleteLib && !!coverImg)) && (
+                          <button className={styles.thumbBtn} title={canRemovePlaza ? '下架 / 删除' : '删除资产'} onClick={deleteCoverImage}><TrashIcon /></button>
+                        )}
                   </div>
-                  <span className={styles.centerCap}>{centerCaption}</span>
                 </div>
               )}
-              {/* 只读态（2 栏）才在大图上给提示词入口；3 栏时提示词已在左栏常驻。 */}
+              {/* 只读态（无左栏生成面板）才在大图上给提示词入口。 */}
               {!hasGenPanel && !isEmpty && !isOther && canViewPrompt(asset) && (
                 <button className={styles.promptBadge} title="查看提示词" onClick={openPrompt}>
                   <PromptIcon />
@@ -1053,154 +1135,121 @@ export function AssetDetail({
               )}
             </div>
 
-            {/* 中栏动作 */}
-            {isOther ? (
-              showCoverTrash && (
-                <div className={styles.centerActs}>
-                  <button className={`${styles.btn} ${styles.btnDangerGhost}`} onClick={deleteCoverImage}>删除该留存物</button>
-                </div>
-              )
-            ) : (
-              <div className={styles.centerActs}>
-                {hasGenPanel && (
+            {/* ── 预览动作条（0808）：改变资产状态的动作用实体按钮（规则 17）── */}
+            {!isOther && !isEmpty && centerCand && canRegen && (
+              <div className={styles.previewActs}>
+                <button
+                  className={styles.pvBtn}
+                  onClick={() => toggleAsReference(centerCand)}
+                >
+                  {isCenterInRefs ? '✓ 已是参考图' : '＋ 添加至参考图'}
+                </button>
+                {centerIsFinal ? (
+                  <button className={styles.pvBtn} onClick={() => setResult(runUnsetFinal(asset.id))}>
+                    取消定稿
+                  </button>
+                ) : (
                   <button
-                    className={`${styles.btn} ${styles.btnPri}`}
-                    disabled={!canSetCenterFinal}
-                    onClick={() => { if (centerCand) setResult(runSetFinal(asset.id, centerCand.id)) }}
+                    className={`${styles.pvBtn} ${styles.pvBtnPri}`}
+                    onClick={() => setResult(runSetFinal(asset.id, centerCand.id))}
                   >
                     ★ 设为定稿
                   </button>
                 )}
-                <button
-                  className={styles.btn}
-                  disabled={isEmpty && !centerBatch}
-                  onClick={() => { if (centerUrl) downloadImage(centerUrl, `${asset.name}·${centerCaption}`) }}
-                >
-                  下载
-                </button>
-                {centerDeletable && (
-                  <button className={`${styles.btn} ${styles.btnDangerGhost}`} onClick={deleteCenter}>删除</button>
-                )}
               </div>
             )}
 
-            {/* 音色（角色专用，两种布局都展示） */}
-            {isCharacter && renderVoice()}
-          </div>
-
-          {/* ═══ 右栏：本次生成 + 已保留 ═══ */}
-          <div className={styles.genRight}>
-            {isOther ? (
-              <p className={styles.secD}>
-                「其他」是创作过程的留存物（分镜 / 视频片段 / 台词）：仅存在于本项目、可随时拖回画布，
-                不沉淀到团队库、不贡献到广场。
-              </p>
-            ) : (
-              <>
-                {/* 本次生成（暂存区）——仅有生成能力时出现 */}
-                {hasGenPanel && (
-                  <>
-                    <div className={styles.rsecHead}>
-                      <div className={styles.rsecT}>本次生成 <b>（{batch.length}）</b></div>
-                      {batch.length > 0 && (
-                        <span
-                          className={styles.selall}
-                          onClick={() => { const on = allSelected; setBatch((prev) => prev.map((b) => ({ ...b, sel: !on }))) }}
-                        >
-                          {allSelected ? '取消全选' : '全选'}
-                        </span>
-                      )}
-                    </div>
-                    {batch.length > 0 ? (
-                      <>
-                        <div className={styles.thumbsGrid}>
-                          {batch.map((b, i) => {
-                            const isCur = centerSel?.zone === 'batch' && centerSel.id === b.id
-                            return (
-                              <div
-                                key={b.id}
-                                className={`${styles.pickThumb} ${b.sel ? styles.pickOn : ''} ${isCur ? styles.thumbCurrent : ''}`}
-                                onClick={() => setCenterSel({ zone: 'batch', id: b.id })}
-                              >
-                                <img src={b.url} alt="本次候选" />
-                                <button className={styles.pickCheck} onClick={(e) => { e.stopPropagation(); toggleBatchPick(b.id) }}>{b.sel ? '✓' : ''}</button>
-                                <span className={styles.pickNum}>{i + 1}</span>
-                              </div>
-                            )
-                          })}
-                        </div>
-                        <div className={styles.batchActs}>
-                          <button className={`${styles.btn} ${styles.btnPri} ${styles.keepBtn}`} disabled={selCount === 0} onClick={keepSelected}>
-                            保留选中（{selCount}）
-                          </button>
-                          <button className={styles.btn} onClick={dropBatch}>都不要</button>
-                        </div>
-                      </>
-                    ) : (
-                      <div className={styles.rempty}>尚未生成 · 点「生成」出图</div>
-                    )}
-                    <div className={styles.rdivider} />
-                  </>
-                )}
-
-                {/* 已保留（候选池） */}
-                <div className={styles.rsecHead}>
-                  <div className={styles.rsecT}>已保留 <b>（{candidates.length}）</b></div>
-                </div>
-                {candidates.length > 0 ? (
-                  <div className={styles.thumbsGrid}>
-                    {candidates.map((c) => {
-                      const isFinal = c.id === finalCandId
-                      const isCur = centerSel?.zone === 'kept' && centerSel.id === c.id
-                      return (
-                        <div
-                          key={c.id}
-                          className={`${styles.look} ${isCur ? styles.thumbCurrent : ''}`}
-                          onClick={() => setCenterSel({ zone: 'kept', id: c.id })}
-                        >
-                          <img src={c.url} alt={asset.name} loading="lazy" />
-                          <div className={`${styles.thumbIcons} ${canDeleteLib ? styles.thumbIconsShifted : ''}`}>
-                            <button className={styles.thumbBtn} title="放大查看" onClick={(e) => { e.stopPropagation(); setPreview({ src: c.url, name: '候选图' }) }}><ZoomIcon /></button>
-                            <button className={styles.thumbBtn} title="下载原图" onClick={(e) => { e.stopPropagation(); downloadImage(c.url, `${asset.name}·候选`) }}><DownloadIcon /></button>
-                          </div>
-                          {canDeleteLib && (
-                            <button type="button" className={styles.cardDelete} title="删除这张图片" onClick={(e) => { e.stopPropagation(); deleteCandidate(c.id) }}>
-                              <TrashIcon />
-                            </button>
-                          )}
-                          <div className={styles.lkNm}>{isFinal ? '★ 定稿' : '候选'}</div>
-                          {canRegen && !isFinal && (
-                            <div className={styles.lookOv}>
-                              <button className={styles.tbtn} onClick={(e) => { e.stopPropagation(); setResult(runSetFinal(asset.id, c.id)) }}>设为定稿</button>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <div className={styles.rempty}>{isEmpty ? '待生成资产：还没有图，点左侧「生成」' : '保留满意的候选后会显示在这里'}</div>
-                )}
-              </>
+            {/* 「其他」留存物删除入口（预览台的成品删除都收在大图 hover 里，这里只剩「其他」）。 */}
+            {isOther && showCoverTrash && (
+              <div className={styles.centerActs}>
+                <button className={`${styles.btn} ${styles.btnDangerGhost}`} onClick={deleteCoverImage}>删除该留存物</button>
+              </div>
             )}
 
-            <div className={styles.mfoot}>
-              {isAdmin(user) && asset.scope !== 'plaza' && (
+            {/* 音色（角色专用）：中栏最底部常驻（规则 4b）。 */}
+            {isCharacter && renderVoice()}
+
+            {/* 「其他」留存物说明 */}
+            {isOther && (
+              <p className={styles.secD}>
+                「其他」是创作过程的留存物（分镜 / 视频片段 / 台词）：仅存在于本项目、可随时拖回画布，
+                不存入团队库、不贡献到广场。
+              </p>
+            )}
+
+            {/* 治理提示。结果提示已改成弹窗顶部的浮层 toast——
+                原来挂在这里（音色块下方），每出一次提示就把中栏顶一次，布局一直在跳。 */}
+            {isAdmin(user) && asset.scope !== 'plaza' && (
+              <div className={styles.mfoot}>
                 <p className={styles.note}>管理员只治理，不参与创作与流转。</p>
-              )}
-              {result && (
-                <div className={`${styles.result} ${result.ok ? styles.resultOk : styles.resultErr}`}>
-                  {result.ok ? '✅ ' : '⚠️ '}{result.message}
+              </div>
+            )}
+          </div>
+
+          {/* ═══ 右栏：全部图片（候选池只属于项目层 · 规则 14）═══ */}
+          {hasCandidatePool && (
+            <div className={styles.genRight}>
+              <div className={styles.rsecHead}>
+                <div className={styles.rsecT}>全部图片 <b>（{candidates.length}）</b></div>
+                {canRegen && (
+                  <label className={styles.rUpload} title="从本地上传一张图，直接进这份资产">
+                    ＋ 上传
+                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => uploadLocalImage(e.target.files?.[0] ?? null)} />
+                  </label>
+                )}
+              </div>
+              {/* 生成中：右栏铺 genCount 个流光骨架格，与中栏骨架同步。 */}
+              {generating !== null ? (
+                <div className={styles.thumbsGrid}>
+                  {Array.from({ length: generating }, (_, i) => (
+                    <div key={i} className={styles.thumbSkeleton} />
+                  ))}
                 </div>
+              ) : candidates.length > 0 ? (
+                <div className={styles.thumbsGrid}>
+                  {candidates.map((c) => {
+                    const isFinal = c.id === finalCandId
+                    const isCur = centerCand?.id === c.id
+                    return (
+                      <div
+                        key={c.id}
+                        className={`${styles.look} ${isCur ? styles.thumbCurrent : ''}`}
+                        onClick={() => setCenterKeptId(c.id)}
+                      >
+                        <img src={c.url} alt={asset.name} loading="lazy" />
+                        {showFinalBadge && isFinal && <span className={styles.finalBadgeSm}>★ 定稿</span>}
+                        {canDeleteLib && (
+                          <button type="button" className={styles.cardDelete} title="删除这张图片" onClick={(e) => { e.stopPropagation(); deleteCandidate(c.id) }}>
+                            <TrashIcon />
+                          </button>
+                        )}
+                        {canRegen && !isFinal && (
+                          <div className={styles.lookOv}>
+                            <button className={styles.tbtn} onClick={(e) => { e.stopPropagation(); setResult(runSetFinal(asset.id, c.id)) }}>设为定稿</button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className={styles.rempty}>生成，或从本地上传一张</div>
               )}
             </div>
-          </div>
+          )}
         </div>
+
+        {/* 结果提示：浮在弹窗顶部，不占布局、3 秒自动消失。 */}
+        {result && (
+          <div className={`${styles.toast} ${result.ok ? styles.toastOk : styles.toastErr}`}>
+            {result.message}
+          </div>
+        )}
 
         {renderPicker()}
         {renderPromptPanel()}
         {renderDeleteConfirm()}
-        {renderGenConfirm()}
+        {renderRefPicker()}
       </div>
       {renderLightbox()}
     </div>

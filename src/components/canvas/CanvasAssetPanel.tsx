@@ -85,17 +85,33 @@ function defaultPayload(asset: Asset): DragPayload {
   return { scope: asset.scope, assetId: asset.id, media: mediaOf(asset), name: asset.name, cover: coverOf(asset) }
 }
 
+/** 选图模式（0804）下回调返回的一条被选资产。 */
+export interface PickedRef {
+  assetId: string
+  cover: string
+  name: string
+}
+
 export function CanvasAssetPanel({
   pid,
   projectName,
   onUse,
   onClose,
+  mode = 'canvas',
+  onPick,
+  maxPick,
 }: {
   pid: string
   projectName: string
   onUse: (payload: DragPayload) => void
   /** 关闭整个资产浮层（详情二级页右上角 ✕ 用）。 */
   onClose?: () => void
+  /** 选图模式（0804）：给"参考图选择器"复用。传 'pick' 就进多选模式，
+   *  卡片右上角出勾选框、底部出「确定（N）」，点确定回调选中资产，
+   *  不再走 onUse（画布落节点）那条路。默认 'canvas' 不破坏画布现有调用。 */
+  mode?: 'canvas' | 'pick'
+  onPick?: (picked: PickedRef[]) => void
+  maxPick?: number
 }) {
   const world = useStore((s) => s.world)
   const user = useCurrentUser()
@@ -104,6 +120,22 @@ export function CanvasAssetPanel({
   const [query, setQuery] = useState('')
   const [detailAssetId, setDetailAssetId] = useState<string | null>(null)
   const [openPromptDirectly, setOpenPromptDirectly] = useState(false)
+  // 选图模式：已勾选的资产（按 assetId 存全量载荷，确定时一次性回调）。
+  const [picked, setPicked] = useState<Record<string, PickedRef>>({})
+  const picking = mode === 'pick'
+  const pickedList = Object.values(picked)
+
+  function togglePick(a: Asset) {
+    setPicked((prev) => {
+      if (prev[a.id]) {
+        const { [a.id]: _drop, ...rest } = prev
+        return rest
+      }
+      // 到达上限则不再新增（已选的仍可取消）。
+      if (maxPick && Object.keys(prev).length >= maxPick) return prev
+      return { ...prev, [a.id]: { assetId: a.id, cover: coverOf(a), name: a.name } }
+    })
+  }
 
   // 单一数据源 + 派生视图：无搜索时按来源浏览；输入后跨三层搜，并保留当前项目的边界。
   // 只列成品：空壳 / 生成中 / 失败的资产不进画布资产网格。
@@ -112,6 +144,8 @@ export function CanvasAssetPanel({
   const items = world.assets
     .filter((a) => canSee(world, user, a))
     .filter((a) => a.status === 'done')
+    // 选图模式只挑图当参考（0805 · 5a）：音频、以及「其他」里的视频/文本一律不列，只留图片。
+    .filter((a) => !picking || (a.category !== 'audio' && (a.category !== 'other' || a.fields.media === 'image')))
     .filter((a) => a.scope !== 'project' || a.scopeId === pid)
     .filter((a) => searching || a.scope === scope)
     .filter((a) => category === 'all' || a.category === category)
@@ -143,8 +177,17 @@ export function CanvasAssetPanel({
     )
   }
 
-  /** 图片类资产卡（照旧）；音频类不进网格，走 renderAudioList 的条状列表。 */
+  /** 图片类资产卡。选图模式 = 点击勾选（卡片右上角勾选框 + 选中高亮）；画布模式照旧。 */
   function renderCard(a: Asset) {
+    if (picking) {
+      const on = !!picked[a.id]
+      return (
+        <div key={a.id} className={`${styles.pickWrap} ${on ? styles.pickWrapOn : ''}`}>
+          <AssetCard asset={a} hideSub compact onClick={() => togglePick(a)} />
+          <span className={`${styles.pickBox} ${on ? styles.pickBoxOn : ''}`}>{on ? '✓' : ''}</span>
+        </div>
+      )
+    }
     // 候选池 ≤1 张且不属于"进详情选图"品类的，卡片上直接「使用」；否则进详情挑候选。
     const singleImage = (a.candidates?.length ?? 0) <= 1 && !STYLE_CATS.has(a.category)
     return (
@@ -271,9 +314,9 @@ export function CanvasAssetPanel({
         ))}
       </div>
 
-      {/* 类目筛选：青色下划线 Tab（对齐 Figma 头部） */}
+      {/* 类目筛选：青色下划线 Tab（对齐 Figma 头部）。选图模式隐藏「音频」「其他」（只挑图片作参考 · 5a）。 */}
       <div className={styles.catTabs} role="tablist">
-        {CATEGORY_TABS.map((t) => (
+        {CATEGORY_TABS.filter((t) => !picking || (t.value !== 'audio' && t.value !== 'other')).map((t) => (
           <button
             key={t.value}
             role="tab"
@@ -353,6 +396,24 @@ export function CanvasAssetPanel({
         <div className={styles.grid}>{items.map(renderCard)}</div>
       )}
 
+      {/* 选图模式底部固定条：已选 N 张 · 取消 / 确定 */}
+      {picking && (
+        <div className={styles.pickBar}>
+          <span className={styles.pickCount}>
+            已选 <b>{pickedList.length}</b> 张{maxPick ? ` / 上限 ${maxPick}` : ''}
+          </span>
+          <div className={styles.pickBarBtns}>
+            <button className={styles.pickCancel} onClick={() => onClose?.()}>取消</button>
+            <button
+              className={styles.pickConfirm}
+              disabled={pickedList.length === 0}
+              onClick={() => onPick?.(pickedList)}
+            >
+              确定（{pickedList.length}）
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

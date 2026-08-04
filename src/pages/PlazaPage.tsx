@@ -20,7 +20,7 @@
 import { useMemo, useState } from 'react'
 import type { Category } from '../data/types'
 import { useStore, useCurrentUser } from '../store/useStore'
-import { canSee } from '../services/permission'
+import { canSee, isListed } from '../services/permission'
 import { AssetCard } from '../components/AssetCard'
 import { AssetDetail } from '../components/AssetDetail'
 import { WorkCard } from '../components/WorkCard'
@@ -66,8 +66,10 @@ export function PlazaPage() {
   )
 
   // 当前账号在广场能看到的官方素材（权限说了算；广场对所有人可见）。
+  // 显式再收一道 isListed：canSee 给了投稿人本人一个口子（让他在通知跳转等处看到自己被下架的那份），
+  // 但广场是对外货架，下架的东西不该混在货架里给作者一个人看——所以货架页再过滤一次。
   const plazaAssets = useMemo(
-    () => world.assets.filter((a) => canSee(world, user, a) && a.scope === 'plaza'),
+    () => world.assets.filter((a) => a.scope === 'plaza' && isListed(a) && canSee(world, user, a)),
     [world, user],
   )
 

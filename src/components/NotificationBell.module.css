@@ -55,6 +55,24 @@
 
 .item:hover { background: var(--line-soft); }
 
+/* 带 link 的通知：整条可点，右侧一个 › 箭头明示"能点"，hover 整行背景变化。 */
+.itemLink {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+}
+.itemLink:hover { background: var(--accent-soft); }
+.itemText { flex: 1; min-width: 0; }
+.itemArrow { flex-shrink: 0; font-size: 16px; line-height: 1; opacity: 0.8; }
+
 .empty {
   font-size: 13px;
   color: var(--text-muted);

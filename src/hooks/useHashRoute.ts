@@ -15,7 +15,8 @@
  *   #/project/:pid/assets       项目资产库
  *   #/project/:pid/workflow     工作流
  *   #/project/:pid/canvas/:cid  某一张无限画布（沉浸式整页）
- *   #/review                    审核中心（头像菜单进入）
+ *   #/team/deposits             团队资产库 + 「资产存入申请」抽屉展开（主账号从通知/边栏进）
+ *   #/review                    审核中心（仅 admin，头像菜单进入：作品 / 素材）
  */
 
 import { useSyncExternalStore, useCallback } from 'react'
@@ -27,7 +28,13 @@ export type ProjectTab = 'canvases' | 'assets' | 'workflow'
 export type Route =
   | { name: 'home' }
   | { name: 'projects' }
-  | { name: 'team' }
+  /**
+   * 团队资产库。drawer 段用于从别处（通知铃铛 / 边栏入口）直接唤起覆盖在页面上的抽屉——
+   * 抽屉是页面的一种状态，不是另一个页面，所以做成 team 的子段而不是独立路由。
+   *   #/team            纯团队库
+   *   #/team/deposits   团队库 + 「资产存入申请」抽屉展开
+   */
+  | { name: 'team'; drawer?: 'deposits' }
   | { name: 'plaza' }
   | { name: 'review' }
   | { name: 'project'; pid: string; tab: ProjectTab }
@@ -50,7 +57,8 @@ export function parseHash(hash: string): Route {
     case 'projects':
       return { name: 'projects' }
     case 'team':
-      return { name: 'team' }
+      // #/team/deposits → 团队库上覆盖「资产存入申请」抽屉；其它/缺省 → 纯团队库。
+      return { name: 'team', drawer: seg[1] === 'deposits' ? 'deposits' : undefined }
     case 'plaza':
       return { name: 'plaza' }
     case 'review':
@@ -79,6 +87,8 @@ export function routeToHash(route: Route): string {
       return `#/project/${route.pid}/canvas/${route.cid}`
     case 'project':
       return route.tab === 'canvases' ? `#/project/${route.pid}` : `#/project/${route.pid}/${route.tab}`
+    case 'team':
+      return route.drawer ? `#/team/${route.drawer}` : '#/team'
     default:
       return `#/${route.name}`
   }

@@ -248,6 +248,7 @@ export function CanvasShell({
           onNodeMove={moveNode}
           onNodeUpload={openSaveFor}
           onNodePreview={(node) => setPreviewNode(node)}
+          onNodeDelete={(node) => deleteNode(node.id)}
           onNodeContextMenu={(node, x, y) => setMenu({ node, x, y })}
           onDropAsset={onDropAsset}
         />

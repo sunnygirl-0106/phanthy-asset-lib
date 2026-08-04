@@ -1,7 +1,16 @@
 .page {
-  max-width: 760px;
+  max-width: 1040px;
   margin: 0 auto;
   padding: 24px 20px 80px;
+}
+
+/* ── 页头：标题 + 副标题（左）· 状态筛选（右）── */
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
 .title {
@@ -14,50 +23,168 @@
 .sub {
   font-size: 13px;
   color: var(--text-faint);
-  margin: 0 0 18px;
+  margin: 0;
 }
 
-.groupTitle {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-body);
-  margin: 22px 0 10px;
-}
-
-.list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.card {
+.filterWrap {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 16px;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.filterLabel { font-size: 12.5px; color: var(--text-faint); }
+.filter {
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--panel-3);
+  border: 1px solid var(--line-mid);
+  border-radius: 9px;
+  color: var(--text-main);
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 30px 7px 12px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7078' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+.filter:focus { outline: none; border-color: var(--accent); }
+
+/* ── Tab 条 ── */
+.tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid var(--line-soft);
+  margin-bottom: 16px;
+}
+.tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 16px;
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tab:hover { color: var(--text-body); }
+.tabOn { color: var(--text-main); font-weight: 600; border-bottom-color: var(--accent); }
+.tabBadge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── 行式表格 ── */
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-card);
   background: var(--panel);
 }
 
-.cardDone { background: var(--panel-2); }
+.thumbBtn {
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  line-height: 0;
+}
+.thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  object-fit: cover;
+  display: block;
+  border: 1px solid var(--line-soft);
+}
+.thumbEmpty {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  background: var(--panel-3);
+  border: 1px dashed var(--line-mid);
+}
+/* 作品行封面是 16:9 宽图 */
+.thumbWide {
+  width: 104px;
+  height: 60px;
+  border-radius: 8px;
+  object-fit: cover;
+  display: block;
+  flex-shrink: 0;
+  border: 1px solid var(--line-soft);
+}
 
-.cardMain { min-width: 0; }
-
-.assetName {
+.rowMain { flex: 1; min-width: 0; }
+.rowName {
   font-size: 15px;
   font-weight: 600;
   color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-
-.meta {
+.rowMeta {
   font-size: 12px;
   color: var(--text-faint);
-  margin-top: 3px;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.catTag {
+  font-size: 11px;
+  color: var(--text-body);
+  border: 1px solid var(--line-mid);
+  border-radius: var(--radius-pill);
+  padding: 1px 8px;
+}
+.reason {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 5px;
 }
 
-.cardActions {
+.likes { font-size: 12.5px; color: var(--text-faint); flex-shrink: 0; }
+.rowDate { font-size: 12px; color: var(--text-muted); flex-shrink: 0; }
+
+.tag {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+}
+.tagOk { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; }
+.tagNo { background: rgba(255, 143, 143, 0.15); color: var(--danger); }
+.tagWarn { background: rgba(180, 83, 9, 0.18); color: #fbbf7a; }
+.tagWait { background: var(--accent-soft); color: var(--accent); }
+
+.rowActions {
   display: flex;
   gap: 8px;
   flex-shrink: 0;
@@ -68,12 +195,12 @@
   border-radius: 9px;
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: var(--bg);
+  color: var(--accent-ink);
   cursor: pointer;
   font-size: 13px;
+  font-weight: 600;
 }
-
-.btn:hover { opacity: 0.9; }
+.btn:hover { filter: brightness(1.06); }
 
 .btnGhost {
   padding: 7px 16px;
@@ -84,32 +211,21 @@
   cursor: pointer;
   font-size: 13px;
 }
-
-.btnGhost:hover { border-color: var(--line-strong); }
-
-.tag {
-  flex-shrink: 0;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: var(--radius-pill);
-}
-
-.tagOk { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; }
-.tagNo { background: rgba(255, 143, 143, 0.15); color: var(--danger); }
+.btnGhost:hover:not(:disabled) { border-color: var(--line-strong); }
+.btnGhost:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .empty {
   font-size: 13px;
   color: var(--text-muted);
-  padding: 14px 0;
+  padding: 28px 0;
+  text-align: center;
 }
 
 .result {
-  margin: 4px 0 14px;
+  margin: 0 0 14px;
   padding: 10px 12px;
   border-radius: 8px;
   font-size: 13px;
 }
-
 .resultOk { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; }
 .resultErr { background: rgba(255, 143, 143, 0.15); color: var(--danger); }

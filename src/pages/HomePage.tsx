@@ -34,7 +34,7 @@ export function HomePage({ navigate }: { navigate: (to: Route | string) => void 
         <HomeEntryCard
           icon={assetUrl('assets/home/home-canvas.svg')}
           title="无限画布"
-          desc="自由摆放文本/图片/视频/音频节点的草稿台，边比划边沉淀项目资产。"
+          desc="自由摆放文本/图片/视频/音频节点的草稿台，边比划边存入项目资产。"
           onClick={() => setPickMode('canvas')}
         />
       </div>

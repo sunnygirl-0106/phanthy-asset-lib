@@ -131,6 +131,16 @@
 }
 .btnOn:hover { background: rgba(var(--accent-rgb), 0.16); }
 
+/* 主动作按钮（0809）：青绿描边 + 淡填充，替掉原来的青绿实底。
+   尺寸/圆角沿用 .btn，跟工具条其余按钮对齐（原来的 .btnGen 是 36px，比邻居矮 4px）。 */
+.btnAccent {
+  border-color: rgba(var(--accent-rgb), 0.5);
+  background: rgba(var(--accent-rgb), 0.1);
+  color: var(--accent);
+  font-weight: 600;
+}
+.btnAccent:hover { background: rgba(var(--accent-rgb), 0.18); border-color: var(--accent); }
+
 /* 批量生成主按钮（批量态下出现） */
 .btnGen {
   display: inline-flex; align-items: center; gap: 8px;
@@ -278,3 +288,139 @@
   .tabs { gap: 20px; flex-wrap: wrap; }
   .search { width: 160px; }
 }
+
+/* 类目 Tab 行右端的一键生成入口（0809，替掉原来的 .genGuide 整幅横幅）。 */
+.tabAction {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 15px;
+  border: 1px solid rgba(var(--accent-rgb), 0.45);
+  border-radius: var(--radius-pill);
+  background: rgba(var(--accent-rgb), 0.1);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.tabAction:hover { background: rgba(var(--accent-rgb), 0.18); border-color: var(--accent); }
+
+/* ── 左下角「演示」浮动控件（0805 · 演示脚手架）── */
+.demoDock {
+  position: fixed;
+  left: 24px;
+  bottom: 24px;
+  z-index: 40;
+}
+
+.demoPill {
+  height: 40px;
+  padding: 0 20px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--panel-2, #1b1f27);
+  color: var(--text-body);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  transition: background 0.15s, border-color 0.15s;
+}
+.demoPill:hover { background: rgba(255, 255, 255, 0.08); border-color: var(--accent); color: var(--accent); }
+
+.demoCard {
+  width: 232px;
+  padding: 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: var(--panel-2, #1b1f27);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+  animation: demoPop 0.16s ease;
+}
+@keyframes demoPop { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+
+.demoHead { display: flex; align-items: center; justify-content: space-between; }
+.demoTitle { font-size: 14px; font-weight: 700; color: var(--text-main); }
+.demoClose {
+  width: 24px; height: 24px; border-radius: 7px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text-muted); font-size: 13px; cursor: pointer;
+}
+.demoClose:hover { background: rgba(255, 255, 255, 0.08); color: var(--text-body); }
+
+.demoScaffold {
+  margin: 4px 0 12px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  letter-spacing: 0.2px;
+}
+
+.demoStep {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(var(--accent-rgb), 0.35);
+  border-radius: 10px;
+  background: rgba(var(--accent-rgb), 0.08);
+  color: var(--text-body);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+.demoStep:hover:not(:disabled) { background: rgba(var(--accent-rgb), 0.14); border-color: var(--accent); }
+.demoStepNo { color: var(--accent); font-weight: 700; flex: none; }
+.demoStepLabel { flex: 1; }
+.demoStepState { font-size: 11.5px; color: var(--accent); font-weight: 600; flex: none; }
+
+/* 已完成 / 未解锁：置灰不可点 */
+.demoStep:disabled { cursor: not-allowed; }
+.demoStepDone {
+  border-color: var(--line-mid);
+  background: rgba(255, 255, 255, 0.04);
+  opacity: 0.75;
+}
+.demoStepDone .demoStepNo { color: var(--text-muted); }
+.demoStepDone .demoStepState { color: var(--text-muted); }
+/* 未解锁（②在①之前）：更暗一点 */
+.demoStep:disabled:not(.demoStepDone) { opacity: 0.45; }
+
+.demoReset {
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.demoReset:hover { background: rgba(255, 255, 255, 0.06); color: var(--text-body); }
+
+/* ── 新增资产弹窗（0808）──────────────────────────────────────────────
+ * 遮罩层本文件原来没有，一起补上（风格对齐 AssetDetail.module.css 的 .confirmCard）。 */
+.msubroot { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; }
+.sscrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(2px); }
+
+.createCard {
+  position: relative; z-index: 2; width: 380px; padding: 22px;
+  background: #12161c; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.createTitle { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
+.createDesc { margin: 0 0 14px; font-size: 12px; line-height: 1.6; color: rgba(255, 255, 255, 0.55); }
+.createInput {
+  width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 10px;
+  background: #0d1015; border: 1px solid rgba(255, 255, 255, 0.14); color: #e9ecf1; font: inherit; font-size: 13px;
+}
+.createInput:focus { outline: none; border-color: var(--accent); }
+.createErr { margin-top: 8px; font-size: 11.5px; color: #ff8080; }
+.createActs { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }

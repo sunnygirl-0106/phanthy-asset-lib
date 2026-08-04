@@ -89,6 +89,10 @@ export function canSeeProjectAssets(user: User, project: Project, _team: Team): 
 export function canSee(world: World, user: User, asset: Asset): boolean {
   switch (asset.scope) {
     case 'plaza':
+      // 已下架的素材不再对外陈列：只有 admin（治理）和投稿人本人（能看到自己的稿被下了）看得见。
+      if (!isListed(asset)) {
+        return isAdmin(user) || (!!asset.contributedBy && asset.contributedBy === user.id)
+      }
       return canBrowsePlaza(user)
 
     case 'team': {
@@ -140,11 +144,11 @@ export function canReuseFromTeam(user: User, targetProject: Project): boolean {
 }
 
 /**
- * 沉淀（项目 → 团队库）的方式。
+ * 存入（项目 → 团队库）的方式。
  * 用一个联合类型表达三种情况，比返回 true/false 更能表达"子账号是要走审批的"：
- * - 'direct'：主账号，直接沉淀
+ * - 'direct'：主账号，直接存入
  * - 'apply' ：子账号，要走"申请 → 主账号批"
- * - 'none'  ：admin，不参与创作/沉淀
+ * - 'none'  ：admin，不参与创作/存入
  */
 export type DepositMode = 'direct' | 'apply' | 'none'
 
@@ -162,11 +166,22 @@ export function canManagePlaza(user: User): boolean {
 }
 
 /**
- * 谁能"移除"一份广场素材（v4：上架后不可编辑，只能删/下架）：
- * - admin：可以下架任何一份广场素材。
+ * 一份广场素材现在是不是在货架上（审核中心改造新增）。
+ * 缺省（老数据 / 种子官方素材没有这个字段）一律算「在架」。
+ * 全仓库判断上架状态都走这里，不要在页面里裸写 shelfStatus 比较。
+ */
+export function isListed(asset: Asset): boolean {
+  return (asset.shelfStatus ?? 'listed') === 'listed'
+}
+
+/**
+ * 谁能"移除"一份广场素材（审核中心改造后语义收窄）：
+ * 现在这条只回答「**作者撤回自己的投稿**」——硬删除，作者不要了就是不要了。
+ * admin 的「下架」不再走这里（下架 ≠ 删除，走 store.runDelistPlaza 打状态位、可重新上架）。
+ * - admin：仍返回 true（页面不用它做删除，但撤稿判定的语义上 admin 也算有权）。
  * - 投稿作者本人：可以删掉自己投上去的那份（contributedBy === 我）。
  * - 其他人：不行。
- * 注意：删/下架只是把广场这份拿掉，已经被别人复用/收藏出去的独立副本不受影响。
+ * 注意：删只是把广场这份拿掉，已经被别人复用/收藏出去的独立副本不受影响。
  */
 export function canRemovePlazaAsset(user: User, asset: Asset): boolean {
   if (asset.scope !== 'plaza') return false
@@ -175,11 +190,19 @@ export function canRemovePlazaAsset(user: User, asset: Asset): boolean {
 }
 
 /**
+ * 谁能把一份已下架的素材「重新上架」：只有 admin。
+ * 投稿作者不行——他能撤回自己的稿（删除），但把东西放回全网货架是平台的权力。
+ */
+export function canRelistPlazaAsset(user: User, asset: Asset): boolean {
+  return isAdmin(user) && asset.scope === 'plaza' && !isListed(asset)
+}
+
+/**
  * 谁能"删除"一份团队库 / 项目资产库里的资产：
  * - 只针对 team / project 两层（广场走 canRemovePlazaAsset，那是下架/撤稿）。
  * - admin 只治理、不碰团队与项目里的创作物，所以不给删。
  * - 其余账号（owner / sub）能删他们所在层看到的这份。删的只是这一份，
- *   已被复用/沉淀出去的独立副本 id 不同、不受影响。
+ *   已被复用/存出去的独立副本 id 不同、不受影响。
  */
 export function canDeleteLibraryAsset(user: User, asset: Asset): boolean {
   if (asset.scope !== 'team' && asset.scope !== 'project') return false
@@ -192,7 +215,7 @@ export function canDeleteLibraryAsset(user: User, asset: Asset): boolean {
  * - 主账号：团队库、项目库都能发起。
  * - 子账号：只能在【项目资产库】发起；团队库对子账号封闭。
  * 【v4→v6】原来只吃 user（owner/sub 都能投）；v6 增加 scope 感知：子账号想让团队库的东西
- * 进广场，走"复用到项目 → 重新生成 → 沉淀申请"，不在团队库直接投。
+ * 进广场，走"复用到项目 → 重新生成 → 资产存入申请"，不在团队库直接投。
  */
 export function canContributeToPlaza(user: User, asset: Asset): boolean {
   if (isAdmin(user)) return false
@@ -225,7 +248,28 @@ export function canReviewPlaza(user: User): boolean {
 }
 
 /**
- * 审批"子账号沉淀申请"：只有该子账号所在团队的主账号能批。
+ * 能不能进「审核中心」页面（#/review）。
+ *
+ * 【v2 收敛】原来主账号也能进——现在不能了。原因不是权限，是产品形态：
+ * 审核中心是 admin 的岗位工作台（广场投稿、内容下架/重新上架），他每次登录都为这个来。
+ * 主账号的「资产存入申请」是被动打断，不该塞进一个他想不起来的菜单里；
+ * 它改由通知铃铛推送 + 团队资产库边栏常驻入口触达，在团队库上开抽屉处理。
+ */
+export function canEnterReviewCenter(user: User): boolean {
+  return isAdmin(user)
+}
+
+/**
+ * 能不能审批「资产存入申请」——即主账号处理自己名下子账号的申请。
+ * 和 canApproveDeposit（判断某一条具体申请）不同，这个只回答「这个账号有没有这项职责」，
+ * 用来决定要不要渲染入口（团队库边栏入口 / 抽屉守卫共用）。
+ */
+export function canHandleDepositRequests(user: User): boolean {
+  return isOwner(user)
+}
+
+/**
+ * 审批"子账号资产存入申请"：只有该子账号所在团队的主账号能批。
  * 这是团队内部唯一的治理动作（团队库本身像内部 wiki，不做常规审核）。
  */
 export function canApproveDeposit(approver: User, applicant: User): boolean {

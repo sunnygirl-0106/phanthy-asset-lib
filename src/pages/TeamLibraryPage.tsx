@@ -13,10 +13,12 @@
 import { useMemo, useState } from 'react'
 import type { Category } from '../data/types'
 import { useStore, useCurrentUser } from '../store/useStore'
-import { canSee } from '../services/permission'
+import { canSee, canHandleDepositRequests } from '../services/permission'
+import { useHashRoute } from '../hooks/useHashRoute'
 import { AssetCard } from '../components/AssetCard'
 import { AssetDetail } from '../components/AssetDetail'
 import { AudioList } from '../components/AudioList'
+import { DepositRequestDrawer } from '../components/DepositRequestDrawer'
 import { assetUrl } from '../utils/assets'
 import styles from './TeamLibraryPage.module.css'
 
@@ -33,8 +35,22 @@ const CATEGORIES: { key: Category; label: string; icon: string }[] = [
 export function TeamLibraryPage() {
   const world = useStore((s) => s.world)
   const user = useCurrentUser()
+  const applications = useStore((s) => s.applications)
   const renameAsset = useStore((s) => s.renameAsset)
   const runDeleteAsset = useStore((s) => s.runDeleteAsset)
+  const { route, navigate } = useHashRoute()
+  // 抽屉开关是路由状态（#/team/deposits）：可刷新、可后退、可被通知/边栏直接唤起。
+  const drawerOpen = route.name === 'team' && route.drawer === 'deposits'
+
+  // 团队库放存入申请入口（不展开审批 UI，只唤起抽屉）：主账号名下子账号仍在待审批的申请数。
+  const pendingDeposits = useMemo(
+    () =>
+      applications.filter((a) => {
+        const applicant = world.users.find((u) => u.id === a.applicantId)
+        return applicant?.parentId === user.id && a.status === 'pending'
+      }).length,
+    [applications, world.users, user.id],
+  )
 
   const [category, setCategory] = useState<Category>('character')
   const [query, setQuery] = useState('')
@@ -81,6 +97,19 @@ export function TeamLibraryPage() {
             </span>
           </button>
         ))}
+
+        {/* 存入申请入口（§7）：只在主账号且确有待办时出现——常年挂个「0」比没有更糟，直接不渲染。
+            贴底（margin-top:auto）+ 上方分隔线，读起来是"另一类东西"，不是第六个类目。 */}
+        {canHandleDepositRequests(user) && pendingDeposits > 0 && (
+          <button
+            className={styles.depositEntry}
+            onClick={() => navigate({ name: 'team', drawer: 'deposits' })}
+          >
+            <img className={styles.navIcon} src={assetUrl('assets/icons/clock.svg')} alt="" aria-hidden />
+            <span className={styles.depositLabel}>资产存入申请</span>
+            <span className={styles.depositCount}>{pendingDeposits}</span>
+          </button>
+        )}
       </aside>
 
       {/* ── 右侧内容 ── */}
@@ -136,6 +165,12 @@ export function TeamLibraryPage() {
       {/* 资产详情弹窗（自带外壳，见 AssetDetail） */}
       {detailAssetId && (
         <AssetDetail assetId={detailAssetId} onClose={() => setDetailAssetId(null)} />
+      )}
+
+      {/* 资产存入申请抽屉（§7.3）：路由 #/team/deposits 时覆盖在网格上。
+          守卫 canHandleDepositRequests：子账号手敲这个 hash 也开不出抽屉。 */}
+      {drawerOpen && canHandleDepositRequests(user) && (
+        <DepositRequestDrawer onClose={() => navigate({ name: 'team' })} />
       )}
     </div>
   )

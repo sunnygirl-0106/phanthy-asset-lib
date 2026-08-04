@@ -40,7 +40,7 @@ export type Scope = 'plaza' | 'team' | 'project'
 /**
  * 资产类目：前 5 类是可复用的「生产要素」，三层库的类目和字段完全一致。
  * 第 6 类 'other'（其他）是另一层东西——创作过程的留存物（分镜图 / 视频片段 / 剧本文本），
- * 只存在于项目资产库，不参与向上流转（不能沉淀到团队库、不能贡献到广场），
+ * 只存在于项目资产库，不参与向上流转（不能存入团队库、不能贡献到广场），
  * 也不套用前五类的素模 / 造型 / 音色结构。详见 canvasService / assetService 的守卫。
  */
 export type Category = 'character' | 'costume' | 'scene' | 'prop' | 'audio' | 'other'
@@ -77,16 +77,32 @@ export interface Voice {
 }
 
 /**
- * 资产状态机：资产"成不成立"看状态，不看有没有图。
- * 红线规则：只有 'done'（成品）才能被复用 / 沉淀 / 贡献。
+ * 资产状态机（0807 新增 'pending'）：
+ *   empty      空壳   —— 候选池为空、cover 为空。只有名字 / 提示词 / 参考图。
+ *   generating 生成中 —— 本次生成在途（demo 用定时器模拟，1.2s 后落地）。
+ *   pending    待定稿 —— 候选池有图，但用户还没选定稿（cover === ''）。★0807 新增★
+ *   done       成品   —— cover 指向候选池里某一张的 url。
+ *   failed     失败
+ *
+ * 红线不变：只有 'done' 才能被复用 / 存入 / 贡献。'pending' 同样不许流转——
+ * 一份连作者自己都没拍板的图，不该出现在团队库或广场上。
  *
  * 【0803】'empty'（空壳）语义扩大，成为一等公民：
  *   · 既表示"图被删光后的降级态"，
  *   · 也表示"只有提示词、还没生成过"（拆解剧本时一次性写好提示词、只出素模图，
  *     穿衣服的角色只有提示词没有图，等用户手动 / 批量触发生成）。
  */
-export type AssetStatus = 'empty' | 'generating' | 'done' | 'failed'
-//                         空壳      生成中          成品      失败
+export type AssetStatus = 'empty' | 'generating' | 'pending' | 'done' | 'failed'
+//                         空壳      生成中         待定稿      成品      失败
+
+/**
+ * 广场素材的上架状态（审核中心改造新增）。只有 scope==='plaza' 的资产才谈得上它。
+ *
+ * 为什么要有这个：原来 admin「下架」是把资产从 world.assets 里直接删掉，
+ * 数据一没，就无从「重新上架」——而审核中心的职责恰恰是「处理下架与重新上架」。
+ * 所以下架改成打状态位：数据留着，只是不在货架上陈列。
+ */
+export type PlazaShelfStatus = 'listed' | 'delisted'
 
 
 /* ─── 二、账号与组织 ─── */
@@ -176,6 +192,11 @@ export interface AssetFields {
   media?: 'image' | 'video' | 'text'
   videoUrl?: string
   text?: string
+  /**
+   * 演示脚手架专用：造型空壳"生成后应长成的真实成品图"地址。
+   * demo 没有生图后端，生成时优先拿它当出图替身（见 genSourceOf / batchGenerate）。
+   */
+  lookUrl?: string
   [key: string]: unknown
 }
 
@@ -226,6 +247,13 @@ export interface Asset {
    */
   referenceImages?: string[]
 
+  /**
+   * 参考图的角色标签（0804 · 规则 16），与 referenceImages 一一对应、下标对齐。
+   * 例如 ['素模', '服装']。纯展示，用于在参考图缩略图下方打小标签，讲清"先挂素模、再挂服装"。
+   * 不填就不显示标签，不影响任何逻辑。
+   */
+  referenceLabels?: string[]
+
   /** 参考自哪份资产（可选，用于卡片 / 详情上的「参考自 XX」小标签）。纯展示，不挂任何行为。 */
   referencedFrom?: string
 
@@ -233,19 +261,55 @@ export interface Asset {
   tags: string[]        // 本地标签：改了不断链
   voice?: Voice         // 角色音色：1 个；通常随角色走，广场直接复用时可取消；仅角色有
   contributedBy?: string // 广场素材专用：是谁投稿上架的。作者本人可删自己投的；admin 可下架任何一份。种子里的官方素材没有这个字段（只有 admin 能下架）。
+
+  /**
+   * 广场上架状态（审核中心改造新增，仅对 scope==='plaza' 有意义，其它层恒为空）。
+   * 缺省（undefined）一律视为 'listed'——种子里的官方素材不用逐个补字段。
+   * 全仓库读它一律走 permission.isListed(asset)，不要写 === 'listed' 的裸判断。
+   */
+  shelfStatus?: PlazaShelfStatus
+  /** 下架理由（选填）。随通知发给投稿人，让他知道怎么改。 */
+  delistedReason?: string
+  /** 下架时间，纯记录，用于审核中心列表显示「谁在什么时候下的」。 */
+  delistedAt?: number
+  /** 下架操作人 id，纯记录。 */
+  delistedBy?: string
+
   createdAt: number
 }
 
 
 /* ─── 三·五、通知（本期占位）─────────────────────────────────────────
- * 要发通知的事：审核结果、子账号沉淀审批结果。用户主动动作不通知。
+ * 要发通知的事：审核结果、子账号存入审批结果。用户主动动作不通知。
  * 本期只做一张"通知大表"，最小实现：谁收到、一句话、读没读。 */
+
+/**
+ * 平台会发出的消息类型（审核中心改造新增）。本期只用于前端分类/图标，不参与任何逻辑判断——
+ * 加它是因为产品要能一眼说清「平台会发哪几种消息」，字符串文案不适合当契约。
+ *   plaza_approved        投稿通过、已上架素材广场            → 发给投稿人
+ *   plaza_rejected        投稿被驳回（带理由）                → 发给投稿人
+ *   plaza_delisted        已上架的贡献素材被 admin 下架（带理由）→ 发给投稿人
+ *   plaza_relisted        已下架素材被重新上架                → 发给投稿人
+ *   deposit_submitted     子账号发起资产存入申请                  → 发给主账号（★原来缺这条）
+ *   deposit_approved      资产存入申请通过、已进团队库            → 发给申请人
+ *   deposit_rejected      资产存入申请被驳回（带理由）            → 发给申请人
+ *   plaza_submit_notice   子账号向广场投了稿（知会，不拦截）  → 发给主账号
+ */
+export type NotificationKind =
+  | 'plaza_approved' | 'plaza_rejected' | 'plaza_delisted' | 'plaza_relisted'
+  | 'deposit_submitted' | 'deposit_approved' | 'deposit_rejected'
+  | 'plaza_submit_notice'
+
 export interface Notification {
   id: string
   toUserId: string     // 收件人
   text: string         // 一句给人看的话
   createdAt: number
   read: boolean
+  /** 消息类型（审核中心改造新增）：只用于前端分类/图标，不参与逻辑。 */
+  kind?: NotificationKind
+  /** 点这条通知跳去哪（hash 路由串，如 '#/review'）。不填就是不可点。 */
+  link?: string
 }
 
 

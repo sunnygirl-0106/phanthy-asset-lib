@@ -2,15 +2,17 @@
  * 【组件】NotificationBell —— 顶部通知铃铛（本期占位版）
  *
  * 只做一件事：把"通知大表"里发给当前账号的通知列出来，未读的显个红点数。
- * 点开就把当前账号的通知标为已读。审批中心通过/驳回后产生的通知，切到申请人账号
- * 就能在这里看到——这条协作线的"回执"。
+ * 点开就把当前账号的通知标为已读。审核中心通过/驳回后产生的通知，切到申请人账号
+ * 就能在这里看到——这条协作线的"回执"。子账号也能收（铃铛对所有账号可见）。
+ *
+ * 审核中心改造：带 link 的通知（如"有新申请待你审批"）可点，点了跳去对应页面。
  */
 
 import { useState } from 'react'
 import { useStore, useCurrentUser } from '../store/useStore'
 import styles from './NotificationBell.module.css'
 
-export function NotificationBell() {
+export function NotificationBell({ navigate }: { navigate: (to: string) => void }) {
   const user = useCurrentUser()
   const notifications = useStore((s) => s.notifications)
   const markRead = useStore((s) => s.markNotificationsRead)
@@ -37,11 +39,22 @@ export function NotificationBell() {
           {mine.length === 0 ? (
             <p className={styles.empty}>暂无通知</p>
           ) : (
-            mine.map((n) => (
-              <div key={n.id} className={styles.item}>
-                {n.text}
-              </div>
-            ))
+            mine.map((n) =>
+              n.link ? (
+                <button
+                  key={n.id}
+                  className={`${styles.item} ${styles.itemLink}`}
+                  onClick={() => { setOpen(false); navigate(n.link!) }}
+                >
+                  <span className={styles.itemText}>{n.text}</span>
+                  <span className={styles.itemArrow} aria-hidden>›</span>
+                </button>
+              ) : (
+                <div key={n.id} className={styles.item}>
+                  {n.text}
+                </div>
+              ),
+            )
           )}
         </div>
       )}

@@ -55,7 +55,7 @@ export function TopBar({
 
       <div className={styles.right}>
         <button className={styles.recharge}>充值中心</button>
-        <NotificationBell />
+        <NotificationBell navigate={navigate} />
         <AvatarMenu route={route} navigate={navigate} />
       </div>
     </header>

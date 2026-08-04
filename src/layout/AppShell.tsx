@@ -10,8 +10,6 @@
  */
 
 import { useHashRoute } from '../hooks/useHashRoute'
-import { useCurrentUser } from '../store/useStore'
-import { isAdmin, isOwner } from '../services/permission'
 import { TopBar } from './TopBar'
 import { HomePage } from '../pages/HomePage'
 import { ProjectsPage } from '../pages/ProjectsPage'
@@ -26,8 +24,6 @@ import styles from './AppShell.module.css'
 
 export function AppShell() {
   const { route, navigate } = useHashRoute()
-  const user = useCurrentUser()
-  const canReview = isOwner(user) || isAdmin(user)
 
   // 无限画布是沉浸式整页：自带顶栏，不叠全局四板块顶栏（对齐截图）。
   const immersive = route.name === 'canvas'
@@ -54,8 +50,8 @@ export function AppShell() {
       case 'plaza':
         return <PlazaPage />
       case 'review':
-        // 只有能审的角色进得去；切到无权限账号时回落到创作中心。
-        return canReview ? <ReviewCenterPage /> : <HomePage navigate={navigate} />
+        // v2：审核中心恒定渲染，页面自己按角色分流（仅 admin 见内容，其余见指路提示）。
+        return <ReviewCenterPage />
       case 'canvas':
         // 某一张无限画布：沉浸式整页，自带顶栏 + 左侧悬浮工具条。
         return <CanvasShell pid={route.pid} cid={route.cid} navigate={navigate} />

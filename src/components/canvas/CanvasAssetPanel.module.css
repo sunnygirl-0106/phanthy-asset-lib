@@ -246,3 +246,37 @@
 }
 
 .actGhost:hover { background: rgba(0, 0, 0, 0.6); }
+
+/* ─── 选图模式（0804 · 参考图选择器）─────────────────────────────────
+ * 卡片外裹一层：选中高亮 + 右上角勾选框；底部固定「已选 N · 取消/确定」条。 */
+.pickWrap { position: relative; border-radius: 12px; }
+.pickWrap.pickWrapOn { box-shadow: 0 0 0 2px var(--accent); border-radius: 12px; }
+.pickBox {
+  position: absolute; top: 8px; right: 8px; z-index: 3;
+  width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: transparent;
+  background: rgba(0, 0, 0, 0.4); border: 2px solid rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(3px); pointer-events: none;
+}
+.pickBox.pickBoxOn { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+
+.pickBar {
+  position: sticky; bottom: -18px; margin: 12px -16px -18px; padding: 12px 16px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: var(--panel); border-top: 1px solid var(--line-soft);
+}
+.pickCount { font-size: 12.5px; color: var(--text-body); }
+.pickCount b { color: var(--accent); font-weight: 700; }
+.pickBarBtns { display: flex; gap: 8px; }
+.pickCancel {
+  height: 34px; padding: 0 16px; border-radius: 9px; font-size: 13px; cursor: pointer; font-family: inherit;
+  background: rgba(255, 255, 255, 0.06); color: var(--text-body); border: 1px solid var(--line-soft);
+}
+.pickCancel:hover { background: rgba(255, 255, 255, 0.1); }
+.pickConfirm {
+  height: 34px; padding: 0 18px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+  background: var(--accent); color: var(--bg); border: 1px solid var(--accent);
+}
+.pickConfirm:hover:not(:disabled) { filter: brightness(1.06); }
+.pickConfirm:disabled { opacity: 0.5; cursor: not-allowed; }

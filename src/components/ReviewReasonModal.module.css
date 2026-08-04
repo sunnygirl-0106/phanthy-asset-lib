@@ -1,0 +1,78 @@
+.panel { width: min(440px, 92vw); }
+
+.title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0 0 14px;
+}
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.chip {
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-mid);
+  background: var(--panel-3);
+  color: var(--text-body);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: border-color 0.14s, color 0.14s, background 0.14s;
+}
+.chip:hover { border-color: var(--line-strong); }
+.chipOn { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+.input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  background: var(--panel-3);
+  border: 1px solid var(--line-mid);
+  border-radius: 10px;
+  color: var(--text-main);
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  font-family: inherit;
+}
+.input:focus { outline: none; border-color: var(--accent); }
+
+.hint {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin: 8px 0 16px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.btn {
+  padding: 8px 18px;
+  border-radius: 9px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn:hover { filter: brightness(1.06); }
+
+.btnGhost {
+  padding: 8px 18px;
+  border-radius: 9px;
+  border: 1px solid var(--line-mid);
+  background: var(--panel-3);
+  color: var(--text-body);
+  font-size: 13px;
+  cursor: pointer;
+}
+.btnGhost:hover { border-color: var(--line-strong); }

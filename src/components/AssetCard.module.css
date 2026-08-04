@@ -16,19 +16,6 @@
   border-color: var(--line-mid);
 }
 
-/* 多造型角色：右下角叠出两层"卡边"，一眼看出这张角色不止一张造型（对齐弹窗原型的 stacked 卡） */
-.card.stacked {
-  box-shadow:
-    4px 5px 0 -2px rgba(255, 255, 255, 0.1), 4px 5px 0 -1px #202326,
-    9px 11px 0 -4px rgba(255, 255, 255, 0.07), 9px 11px 0 -3px #181a1c;
-}
-
-.card.stacked:hover {
-  box-shadow:
-    4px 5px 0 -2px rgba(255, 255, 255, 0.1), 9px 11px 0 -3px #181a1c,
-    var(--shadow-float);
-}
-
 .cover {
   position: absolute;
   inset: 0;
@@ -74,6 +61,9 @@
 }
 
 .badgeCopy { background: rgba(180, 83, 9, 0.85); }
+
+/* 「待定稿」角标：青绿描边（与详情页徽章同源），跟其它状态区分开。 */
+.badgePending { color: var(--accent); border: 1px solid rgba(var(--accent-rgb), 0.45); background: rgba(0, 0, 0, 0.62); }
 
 /* 「其他」媒介徽章：中性青灰底，和副本(橙)/状态(黑)区分开 */
 .badgeMedia { background: rgba(37, 99, 120, 0.9); }
@@ -221,35 +211,3 @@
 .compact .hoverActions { gap: 5px; padding: 8px; }
 .compact .name { font-size: 13px; }
 .compact .sub { font-size: 10.5px; }
-.compact .lookCount {
-  font-size: 10px;
-  padding: 3px 6px;
-}
-
-/* 浮层右侧：造型数角标 + 更多，靠底对齐 */
-.overlayRight {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-/* 造型数角标：一个小"多造型"icon + 数字，压在封面右下 */
-.lookCount {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 11px;
-  line-height: 1;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.42);
-  backdrop-filter: blur(4px);
-  padding: 3px 8px;
-  border-radius: var(--radius-pill);
-}
-
-.lookCount img {
-  width: 12px;
-  height: 12px;
-  opacity: 0.9;
-}

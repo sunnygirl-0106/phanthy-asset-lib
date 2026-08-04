@@ -14,6 +14,16 @@ import styles from './CanvasNode.module.css'
 /** 在线占位图（人像照）加载失败（断网等）时回落的本地占位图。 */
 const LOCAL_FALLBACK = assetUrl('assets/canvas/image-placeholder.svg')
 
+/** 存原图：同源静态资源用 <a download> 触发浏览器下载（占位图即可）。 */
+function downloadNodeImage(src: string, name: string) {
+  const a = document.createElement('a')
+  a.href = src
+  a.download = `${name || 'image'}.png`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
 export function CanvasNode({
   node,
   selected,
@@ -21,6 +31,7 @@ export function CanvasNode({
   onMove,
   onUpload,
   onPreview,
+  onDelete,
   onContextMenu,
 }: {
   node: Node
@@ -29,6 +40,8 @@ export function CanvasNode({
   onMove: (id: string, x: number, y: number) => void
   onUpload: () => void
   onPreview: () => void
+  /** 删除本节点（规则 17 · 图卡右上角 hover 垃圾桶）。复用右键菜单的删除逻辑。 */
+  onDelete: () => void
   onContextMenu: (e: React.MouseEvent) => void
 }) {
   // 拖动状态：记下按下点与节点原位，pointermove 时按位移实时更新 x/y（参照 canvas-demo）。
@@ -123,19 +136,37 @@ export function CanvasNode({
             <div className={styles.pending}>无预览</div>
           )}
 
-          {hasImage && (
+          {/* 图片自身操作一律 hover 浮在图上（规则 17）：放大 / 下载 / 删除节点。 */}
+          <div className={styles.thumbIcons}>
+            {hasImage && (
+              <>
+                <button
+                  className={styles.thumbBtn}
+                  title="放大查看"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); onPreview() }}
+                >
+                  <ZoomIcon />
+                </button>
+                <button
+                  className={styles.thumbBtn}
+                  title="下载原图"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); if (node.cover) downloadNodeImage(node.cover, node.name) }}
+                >
+                  <DownloadIcon />
+                </button>
+              </>
+            )}
             <button
-              className={styles.previewBtn}
+              className={styles.thumbBtn}
+              title="删除节点"
               onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation()
-                onPreview()
-              }}
+              onClick={(e) => { e.stopPropagation(); onDelete() }}
             >
-              <EyeIcon />
-              预览
+              <TrashIcon />
             </button>
-          )}
+          </div>
         </div>
 
         {/* 左右连接手柄（连线本期不实现，纯装饰） */}
@@ -167,11 +198,31 @@ function UploadIcon() {
   )
 }
 
-function EyeIcon() {
+function ZoomIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
-      <circle cx="12" cy="12" r="2.6" />
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="7" />
+      <path d="m21 21-4.3-4.3M11 8v6M8 11h6" />
+    </svg>
+  )
+}
+
+function DownloadIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3v12M7 10l5 5 5-5" />
+      <path d="M5 21h14" />
+    </svg>
+  )
+}
+
+function TrashIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h18" />
+      <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6M14 11v6" />
     </svg>
   )
 }

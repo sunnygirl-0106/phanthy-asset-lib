@@ -74,6 +74,44 @@
   flex: 1;
 }
 
+/* 存入申请入口（§7）：贴在边栏底部（margin-top:auto），上方一条分隔线让它读成"另一类东西"。
+   青色系但不做成实心主按钮——它是提示，不是页面主动作。节奏对齐 .navItem。 */
+.depositEntry {
+  margin-top: auto;               /* 贴底的关键 */
+  margin-bottom: 16px;            /* 别贴死屏幕边缘 */
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 20px;
+  border: none;
+  border-top: 1px solid var(--line-soft); /* 分隔线：和上面的类目区分开 */
+  background: rgba(var(--accent-rgb), 0.06);
+  color: var(--accent);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.depositEntry:hover { background: rgba(var(--accent-rgb), 0.12); }
+.depositEntry .navIcon { opacity: 1; }
+.depositLabel { flex: 1; line-height: 16px; white-space: nowrap; }
+.depositCount {
+  flex-shrink: 0;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .batchStatus {
   display: inline-flex;
   align-items: center;

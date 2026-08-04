@@ -231,7 +231,7 @@ export function SaveToLibraryModal({
           {soleDest ? (
             <div className={styles.field}>
               <div className={styles.otherHint}>
-                创作留存物（分镜 / 视频片段 / 台词）仅归档于本项目，不沉淀至团队库
+                创作留存物（分镜 / 视频片段 / 台词）仅归档于本项目，不存入团队库
               </div>
             </div>
           ) : (
@@ -247,7 +247,7 @@ export function SaveToLibraryModal({
                       {/* 「其他」/「角色音色」与前面的项之间的分隔小字，暗示"这不是同一层的东西" */}
                       {d === 'other' && (
                         <div className={styles.otherHint}>
-                          创作留存物（分镜 / 视频片段 / 台词）仅归档于本项目，不沉淀至团队库
+                          创作留存物（分镜 / 视频片段 / 台词）仅归档于本项目，不存入团队库
                         </div>
                       )}
                       <button

@@ -12,7 +12,6 @@
 import type { ReactNode } from 'react'
 import type { Asset, Category } from '../data/types'
 import { coverOf } from '../services/assetService'
-import { assetUrl } from '../utils/assets'
 import styles from './AssetCard.module.css'
 
 const CATEGORY_LABEL: Record<Category, string> = {
@@ -24,11 +23,27 @@ const CATEGORY_LABEL: Record<Category, string> = {
   other: '其他',
 }
 
-/** 「其他」类目媒介 → 卡片左上角的媒介小徽章文案。 */
+/** 「其他」类目媒介 → 卡片左上角的媒介小徽章文案 / 副标题形态标签。 */
 const MEDIA_LABEL: Record<'image' | 'video' | 'text', string> = {
   image: '图片',
   video: '视频',
   text: '文本',
+}
+
+/**
+ * 卡片副标题（0805 · 改动三）：不显示时间，显示这份资产是什么"形态"。
+ * 「其他」按媒介、音频写「音频」、有 referencedFrom 的写「角色造型 / 场景变体 / 道具变体」，
+ * 其余（顶层素模）写类目名（角色 / 服装 / 场景 / 道具）。
+ */
+function formLabel(a: Asset): string {
+  if (a.category === 'other') return MEDIA_LABEL[(a.fields.media as 'image' | 'video' | 'text' | undefined) ?? 'image']
+  if (a.category === 'audio') return '音频'
+  if (a.referencedFrom) {
+    return a.category === 'character' ? '角色造型'
+      : a.category === 'scene' ? '场景变体'
+        : a.category === 'prop' ? '道具变体' : '造型'
+  }
+  return CATEGORY_LABEL[a.category]
 }
 
 export function AssetCard({
@@ -52,12 +67,8 @@ export function AssetCard({
   /** 画布左侧面板用：hover 时压在封面上的行动按钮（查看 / 使用）。不传则不渲染。 */
   hoverActions?: ReactNode
 }) {
-  // 副标题：有真实创建时间就显示时间（对齐设计稿），否则退化成类目标签。
-  const subtitle = asset.createdAt ? formatDateTime(asset.createdAt) : CATEGORY_LABEL[asset.category]
-
-  // 多图资产（0803）：候选池 ≥2 张时卡片叠出"卡边"并在右下角标出候选总数。
-  const candidateCount = asset.candidates?.length ?? 0
-  const multiLook = candidateCount >= 2
+  // 副标题（0805 · 规则 19）：不显示时间、也不暴露候选数，只写这份资产的形态标签。
+  const subtitle = formLabel(asset)
 
   // 「其他」类目：按 fields.media 分三种渲染（图片 / 视频 / 文本），并在左上角打一个媒介徽章。
   const otherMedia = asset.category === 'other' ? (asset.fields.media as 'image' | 'video' | 'text' | undefined) ?? 'image' : null
@@ -71,7 +82,6 @@ export function AssetCard({
     <div
       className={[
         styles.card,
-        multiLook ? styles.stacked : '',
         compact ? styles.compact : '',
       ].filter(Boolean).join(' ')}
       onClick={onClick}
@@ -108,27 +118,23 @@ export function AssetCard({
         <div className={styles.badges}>
           {otherMedia && <span className={`${styles.badge} ${styles.badgeMedia}`}>{MEDIA_LABEL[otherMedia]}</span>}
           {asset.masterId && <span className={`${styles.badge} ${styles.badgeCopy}`}>副本</span>}
-          {asset.status !== 'done' && asset.status !== 'empty' && <span className={styles.badge}>{statusLabel(asset.status)}</span>}
+          {asset.status !== 'done' && asset.status !== 'empty' && (
+            <span className={`${styles.badge} ${asset.status === 'pending' ? styles.badgePending : ''}`}>
+              {statusLabel(asset.status)}
+            </span>
+          )}
         </div>
       )}
 
       {/* hover 行动层：压在封面上浮出「查看 / 使用」（仅画布面板传 hoverActions 时出现） */}
       {hoverActions && <div className={styles.hoverActions}>{hoverActions}</div>}
 
-      {/* 底部浮层：渐变 + 名字 / 时间 + 更多 */}
+      {/* 底部浮层：渐变 + 名字 / 形态标签（规则 19：不再叠卡边、不打候选数角标） */}
       <div className={styles.overlay}>
         <div className={styles.info}>
           <div className={styles.name}>{asset.name}</div>
           {!hideSub && <div className={styles.sub}>{subtitle}</div>}
         </div>
-        {multiLook && (
-          <div className={styles.overlayRight}>
-            <span className={styles.lookCount} title={`候选池共 ${candidateCount} 张`}>
-              <img src={assetUrl('assets/icons/multi-angle.svg')} alt="" aria-hidden />
-              {candidateCount}
-            </span>
-          </div>
-        )}
       </div>
     </div>
   )
@@ -146,12 +152,9 @@ function EmptyGlyph() {
 }
 
 function statusLabel(status: Asset['status']): string {
-  return status === 'empty' ? '待生成' : status === 'generating' ? '生成中' : status === 'failed' ? '失败' : '成品'
-}
-
-/** 时间格式对齐设计稿：2026年7月23日 11:08 */
-function formatDateTime(ts: number): string {
-  const d = new Date(ts)
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${p(d.getHours())}:${p(d.getMinutes())}`
+  return status === 'empty' ? '待生成'
+    : status === 'generating' ? '生成中'
+    : status === 'pending' ? '待定稿'
+    : status === 'failed' ? '失败'
+    : '成品'
 }

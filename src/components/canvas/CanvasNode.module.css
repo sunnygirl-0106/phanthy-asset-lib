@@ -87,23 +87,35 @@
 .audioBody { font-size: 15px; color: var(--text-faint); }
 .pending { font-size: 13px; color: var(--text-muted); }
 
-/* 预览按钮：右下角浮层 */
-.previewBtn {
+/* 图卡右上角 hover 才浮出的一排操作图标（规则 17）：放大 / 下载 / 删除节点 */
+.thumbIcons {
   position: absolute;
-  right: 12px;
-  bottom: 12px;
+  top: 10px;
+  right: 10px;
+  z-index: 4;
   display: flex;
-  align-items: center;
   gap: 6px;
-  padding: 7px 12px;
-  border-radius: var(--radius-pill);
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(4px);
-  color: #fff;
-  font-size: 13px;
-  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
 }
-.previewBtn:hover { background: rgba(0, 0, 0, 0.72); }
+.cardWrap:hover .thumbIcons { opacity: 1; transform: none; }
+.thumbBtn {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: transform 0.14s ease, background 0.14s ease, border-color 0.14s ease;
+}
+.thumbBtn:hover { transform: scale(1.08); background: rgba(0, 0, 0, 0.75); border-color: rgba(255, 255, 255, 0.34); }
 
 /* 左右连接手柄（装饰，不参与拖动/连线） */
 .handle {

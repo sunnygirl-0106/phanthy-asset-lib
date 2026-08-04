@@ -8,8 +8,8 @@
  *  ④ 图片新建角色 cover 即定稿；关联已有→追加候选到已有资产候选池
  *  ⑤ 从团队库/广场拖来上传→项目副本且带 masterId；从项目库拖来→无"上传"入口
  *  ⑥ 拖到画布本身不新增 world.assets（只有上传才 +1）
- *  ⑦ 子账号画布上传项目库免审直接进，项目→团队沉淀才生成申请
- *  ⑧ 沉淀时团队库同名→提示改名（被挡下）
+ *  ⑦ 子账号画布上传项目库免审直接进，项目→团队存入才生成申请
+ *  ⑧ 存入时团队库同名→提示改名（被挡下）
  */
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
@@ -230,7 +230,20 @@ beforeAll(async () => {
   const mod = await import('../store/useStore')
   store = mod.useStore
 })
-beforeEach(() => store.getState().resetDemo())
+// 0805：霓虹东京那批资产（a_ajie 等）改由演示脚手架灌入；重置后跑一遍演示动作补回，
+// 让沿用旧演员表（关联 a_ajie 等）的入口一用例照常跑。
+beforeEach(() => {
+  store.getState().resetDemo()
+  store.getState().runDemoAnalyze()
+  store.getState().runDemoGenerate()
+  // 0807：演示生成后基础素材是「待定稿」；沿用旧演员表（关联 / 存入 a_ajie 等）的用例，
+  // 这里把每份待定稿的第一张候选拍成定稿，恢复"成品"初始态。
+  for (const a of store.getState().world.assets) {
+    if (a.scopeId === 'proj_neon' && a.status === 'pending' && a.candidates?.length) {
+      store.getState().runSetFinal(a.id, a.candidates[0].id)
+    }
+  }
+})
 
 const projectAssets = () =>
   store.getState().world.assets.filter((a: { scope: string; scopeId?: string }) => a.scope === 'project' && a.scopeId === 'proj_neon')
@@ -283,7 +296,7 @@ describe('入口一 · store 提交（runSaveToProject）', () => {
     expect(store.getState().world.assets.length).toBe(before + 1)
   })
 
-  it('⑦ 子账号画布上传项目库免审直接进；项目→团队沉淀才生成申请', () => {
+  it('⑦ 子账号画布上传项目库免审直接进；项目→团队存入才生成申请', () => {
     store.getState().setCurrentUser('u_lin') // 小林：团队A 子账号，被分配霓虹东京
     const before = projectAssets().length
     const r = store.getState().runSaveToProject(node(), 'proj_neon', { category: 'prop', mode: 'new', name: '手电筒' })
@@ -291,7 +304,7 @@ describe('入口一 · store 提交（runSaveToProject）', () => {
     expect(projectAssets().length).toBe(before + 1) // 直接进项目库
     expect(store.getState().applications.length).toBe(0) // 免审，没有任何申请
 
-    // 再把这份项目资产往团队沉淀 → 这一步才生成待审批申请
+    // 再把这份项目资产往团队存入 → 这一步才生成待审批申请
     const uploaded = store.getState().world.assets.at(-1)
     const d = store.getState().runDeposit(uploaded.id)
     expect(d.ok).toBe(true)
@@ -327,8 +340,8 @@ describe('入口一 · store 提交（runSaveToProject）', () => {
   })
 })
 
-describe('入口一→沉淀 · 去重（⑧）', () => {
-  it('⑧ 画布上传一份叫"苏晚"的项目资产，沉淀回团队库时因同名被挡下、提示改名', () => {
+describe('入口一→存入 · 去重（⑧）', () => {
+  it('⑧ 画布上传一份叫"苏晚"的项目资产，存入团队库时因同名被挡下、提示改名', () => {
     // Sunny(团队A 主账号) 画布上传一份名为"苏晚"的项目资产（团队库里已有母版"苏晚" a_suwan）
     const up = store.getState().runSaveToProject(node(), 'proj_neon', {
       category: 'character',
@@ -337,13 +350,13 @@ describe('入口一→沉淀 · 去重（⑧）', () => {
     })
     expect(up.ok).toBe(true)
     const uploaded = store.getState().world.assets.at(-1)
-    // 沉淀回团队库 → 团队库已有同名，挡下
+    // 存入团队库 → 团队库已有同名，挡下
     const d = store.getState().runDeposit(uploaded.id)
     expect(d.ok).toBe(false)
     expect(d.message).toContain('改名')
   })
 
-  it('改个不冲突的名字就能沉淀成功', () => {
+  it('改个不冲突的名字就能存入成功', () => {
     store.getState().runSaveToProject(node(), 'proj_neon', {
       category: 'character',
       mode: 'new',
@@ -357,7 +370,7 @@ describe('入口一→沉淀 · 去重（⑧）', () => {
 
 /* ═══ 演示动线自查（阶段 5）：把 README 里那条主线锁成回归用例 ═══ */
 
-describe('演示动线：子账号画布上传 → 沉淀 → 主账号审批 → 团队库 +1', () => {
+describe('演示动线：子账号画布上传 → 存入 → 主账号审批 → 团队库 +1', () => {
   const teamACount = () =>
     store.getState().world.assets.filter(
       (a: { scope: string; scopeId?: string }) => a.scope === 'team' && a.scopeId === 'team_a',
@@ -382,7 +395,7 @@ describe('演示动线：子账号画布上传 → 沉淀 → 主账号审批 �
     expect(store.getState().applications.length).toBe(0) // 上传免审
     expect(teamACount()).toBe(teamBefore) // 还没进团队库
 
-    // ② 子账号把它沉淀 → 生成待审批申请
+    // ② 子账号把它存入 → 生成待审批申请
     const uploaded = store.getState().world.assets.at(-1)
     expect(store.getState().runDeposit(uploaded.id).ok).toBe(true)
     const appl = store.getState().applications.at(-1)
@@ -398,8 +411,8 @@ describe('演示动线：子账号画布上传 → 沉淀 → 主账号审批 �
     ).toBe(1)
   })
 
-  it('子账号沉淀 → 审批后团队库那份只带定稿图、候选池不带（0803）', () => {
-    // 小林（子账号，分配了霓虹东京）沉淀「阿杰」
+  it('子账号存入 → 审批后团队库那份只带定稿图、候选池不带（0803）', () => {
+    // 小林（子账号，分配了霓虹东京）存入「阿杰」
     store.getState().setCurrentUser('u_lin')
     const ajie = store.getState().world.assets.find((a: { id: string }) => a.id === 'a_ajie')
     expect(store.getState().runDeposit('a_ajie').ok).toBe(true)
