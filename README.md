@@ -4,11 +4,6 @@
 先把最重、最容易错的**权限规则**和**资产流转规则**写成干净可测的纯函数（"没有服务器的后端"），
 再在它上面搭界面。
 
-当前进度：
-- ✅ 逻辑内核：领域模型 + 权限/流转纯函数 + 规则测试
-- ✅ 界面里程碑一：状态层 + 右下角人物切换器 + 三层库浏览（作用域切换 + 类目Tab + 视觉网格），已接入真实图片
-- ✅ 界面里程碑二：资产详情弹窗（造型变体 + 字段 + 血缘/跟随）+ 流转动作（直接复用 / 收藏 / 复用 / 沉淀）+ 改名；共 32 条测试
-
 ---
 
 ## 怎么跑起来
@@ -18,63 +13,91 @@
 ```bash
 npm install       # 第一次：装依赖
 npm run dev       # 启动，浏览器打开它给的地址
-npm test          # 看逻辑内核的 27 条规则断言（应全部通过）
+npm test          # 跑规则测试
+npm run typecheck # 只做类型检查
+npm run build     # 生产构建
 ```
 
-打开后，试试**右下角切换不同账号**，看网格里的资产跟着变；顶部切"素材广场 / 团队资产库 / 项目资产库"。
-比如切到子账号「小林」再看"项目资产库"，会发现她只看得到被分配的那个项目——这就是权限规则在界面上活起来。
+打开后，**右下角切换不同账号**，看各层库里的资产跟着变。
+切到子账号「小林」再看项目资产库，会发现她只看得到被分配的那个项目 —— 权限规则在界面上活起来了。
 
-其它命令：`npm run typecheck`（只做类型检查）、`npm run build`（生产构建）。
+---
+
+## 核心概念：三层两世界
+
+| 层 | `Scope` | 是什么 |
+|---|---|---|
+| 素材广场 | `plaza` | 世界一 · 官方货架，全网可见。上架后不可编辑，只能删/下架/重传 |
+| 团队资产库 | `team` | 世界二 · 团队跨项目的常驻母版库。**不能在这里生成**，只能从项目存入 |
+| 项目资产库 | `project` | 世界二 · 单个项目在用的资产池。**唯一能生成图的地方** |
+
+层与层之间是**纯拷贝**：`masterId` 只记录血缘（"我从哪来"），不挂任何同步/跟随行为。
+
+**6 个类目**：`character` 角色 / `costume` 服装 / `scene` 场景 / `prop` 道具 / `audio` 音频 / `other` 其他。
+前 5 类是可复用的生产要素，三层库结构一致；`other`（分镜图/视频/剧本文本）只存在于项目库，不向上流转。
+
+**资产状态机**：`empty` 空壳 → `generating` 生成中 → `pending` 待定稿 → `done` 成品（/ `failed` 失败）。
+红线：**只有 `done` 才能被复用 / 存入 / 贡献**。
 
 ---
 
 ## 代码结构（按"数据 → 服务 → 状态 → 界面"分层）
 
 ```
-public/assets/         真实图片（41 张，按三层库+项目分文件夹）
+public/assets/           图片与音频资源，按三层库 + 项目分文件夹
 src/
-  data/                【数据层】数据长什么样
-    types.ts             所有数据结构的 TS 类型 = 活文档（先读它）
-    seed.ts              完整假数据：7 账号 / 5 项目 / 全部资产，指向真实图片
-  services/            【服务层】模拟后端：规则都在这里，纯函数
-    permission.ts        权限：canSee / canFavorite / depositMode …
-    assetService.ts      流转：直接复用 / 收藏 / 复用 / 沉淀 + 跟随/断链
-  store/               【状态层】全局唯一真相
-    useStore.ts          currentUser + world（Zustand，切账号=改一个指针）
-  components/          【组件层】可复用 UI 块
-    PersonaSwitcher.tsx  右下角人物切换器
-    AssetCard.tsx        一张资产卡片
-    CategoryTabs.tsx     类目筛选
-  pages/               【页面层】
-    LibraryPage.tsx      三层库浏览页（把上面的东西串起来）
-  tests/
-    logic-core.test.ts   用断言证明所有规则成立
+  data/                  【数据层】数据长什么样
+    types.ts               全部 TS 类型 = 活文档（先读它）
+    seed.ts                假数据 World：账号 / 项目 / 画布 / 资产
+    presetVoices.ts        预置音色
+    plazaWorks.ts          广场作品流
+    pricing.ts             计费占位
+    reviewReasons.ts       审核驳回/下架理由
+  services/              【服务层】模拟后端：规则都在这里，纯函数
+    permission.ts          权限：谁能看/能改/能流转
+    assetService.ts        流转：复用 / 存入 / 贡献 / 生成
+    canvasService.ts       画布节点模型
+  store/                 【状态层】
+    useStore.ts            currentUser + world（Zustand，切账号=改一个指针）
+  layout/                  AppShell / TopBar / AvatarMenu
+  pages/                   HomePage / PlazaPage / ProjectsPage / ProjectShell /
+                           TeamLibraryPage / ReviewCenterPage / CanvasShell / WorkflowShell
+  components/              AssetCard / AssetDetail / ProjectAssetLibrary /
+                           各类弹窗 + canvas/ 画布组件
+  tests/                   规则断言（vitest）
+doc/
+  archive/               历史文档与会议逐字稿（只读留档，不代表现行规格）
 ```
 
-**推荐阅读顺序**：`types.ts` → `permission.ts` → `assetService.ts` → `logic-core.test.ts`
-（这四个是"后端逻辑"），再看 `store/useStore.ts` → `pages/LibraryPage.tsx`（界面怎么用逻辑）。
+**推荐阅读顺序**：`types.ts` → `permission.ts` → `assetService.ts` → `tests/logic-core.test.ts`
+（这四个是"后端逻辑"），再看 `store/useStore.ts` → `pages/ProjectShell.tsx`（界面怎么用逻辑）。
 
 ---
 
-## 关于图片
+## 关于素材
 
-真实图片放在 `public/assets/`，共 41 张，来自 `demo所需素材/team-assets-demo/`。
-它们体积较大（约 130MB），若不想让 git 跟踪，可把 `public/assets/` 加进 `.gitignore`。
+图片放在 `public/assets/`，通过 `assetUrl()` 生成 URL，本地根路径与 GitHub Pages 子路径都能访问。
+
+霓虹东京项目正在按「一份资产 4 张候选图」重做，目录结构见
+`doc/霓虹东京-素材需求清单.md`。
+
+`_to_delete/` 是清理时挪进来的孤儿文件暂存区（已 gitignore），确认无误后整个删掉。
 
 ---
 
-## 怎么演流转
+## 当前进度
 
-点任意一张资产卡片打开详情：
-- 广场的资产 → 「直接复用到项目」（选项目，产出独立快照）/「收藏进团队库」（主账号，可选跟随）
-- 团队库的资产 → 「复用到项目」（可选跟随）
-- 项目里的资产 → 「沉淀到团队库」（主账号直接；子账号变成待审批申请）
+- ✅ 逻辑内核：领域模型 + 权限/流转纯函数 + 规则测试
+- ✅ 三层库浏览、资产详情、流转动作（复用 / 存入 / 贡献）、改名
+- ✅ 审核中心：广场投稿审核 + 下架/重新上架；子账号存入审批
+- ✅ 项目工作流外壳 + 无限画布（节点、资产面板、保存回资产库）
+- ✅ 候选池 / 定稿图结构（0803）
+- 🚧 进行中：霓虹东京演示动线重做 —— 三步生成（剧本分析 → 资产生成 → 批量生成造型），
+  每份资产 4 张候选、首张默认定稿、"必须有定稿"不变量
 
-点完切到对应的库，就能看到多出来那份副本（带"副本/跟随中"徽章）。改名只改本地名字，不影响母版。
+## 下一步
 
-## 下一步（还没做）
-
-- 审批中心：主账号处理子账号的沉淀申请（store 里已登记 applications）。
-- 找得到（L1/L2）：搜索、排序、按 fields 自动分面筛选。
-- 断链交互：对跟随中的副本改核心内容时弹"会断开母版关联"确认。
-- 真后端：等逻辑与产品决策落定，把 `services/` 内部换成真实接口调用，页面不用动。
+- 演员表裁到只剩霓虹东京，演示脚手架从 `seed.ts` 剥离
+- 一次生成 4 张候选 + 首张自动定稿
+- 角色造型参考图自动挂载（角色定稿 + 服装定稿）
+- 真后端：把 `services/` 内部换成真实接口调用，页面不用动

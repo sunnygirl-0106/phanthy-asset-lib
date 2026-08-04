@@ -1,8 +1,13 @@
 # 依赖与构建产物：不进仓库，本地 npm install 会重新生成
 node_modules/
 dist/
+tsconfig.tsbuildinfo
 
 # 编辑器 / 系统杂项
 .DS_Store
 *.log
 .vscode/
+.claude/
+
+# 待删除区：清理时挪进来的孤儿文件，确认无误后整个删掉
+_to_delete/
