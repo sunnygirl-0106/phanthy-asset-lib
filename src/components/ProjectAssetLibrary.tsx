@@ -48,6 +48,7 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
   const demoStep = useStore((s) => s.demoStep)
   const runDemoAnalyze = useStore((s) => s.runDemoAnalyze)
   const runDemoGenerate = useStore((s) => s.runDemoGenerate)
+  const runDemoLooks = useStore((s) => s.runDemoLooks)
   const runDemoReset = useStore((s) => s.runDemoReset)
 
   const [category, setCategory] = useState<Category>('character')
@@ -374,13 +375,23 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
             </button>
 
             <button
-              className={`${styles.demoStep} ${demoStep === 'generated' ? styles.demoStepDone : ''}`}
+              className={`${styles.demoStep} ${demoStep === 'generated' || demoStep === 'looked' ? styles.demoStepDone : ''}`}
               disabled={demoStep !== 'analyzed'}
               onClick={() => onDemoStep(runDemoGenerate)}
             >
               <span className={styles.demoStepNo}>②</span>
               <span className={styles.demoStepLabel}>资产生成</span>
-              <span className={styles.demoStepState}>{demoStep === 'generated' ? '✓ 已完成' : '执行'}</span>
+              <span className={styles.demoStepState}>{demoStep === 'generated' || demoStep === 'looked' ? '✓ 已完成' : '执行'}</span>
+            </button>
+
+            <button
+              className={`${styles.demoStep} ${demoStep === 'looked' ? styles.demoStepDone : ''}`}
+              disabled={demoStep !== 'generated'}
+              onClick={() => onDemoStep(runDemoLooks)}
+            >
+              <span className={styles.demoStepNo}>③</span>
+              <span className={styles.demoStepLabel}>批量生成造型</span>
+              <span className={styles.demoStepState}>{demoStep === 'looked' ? '✓ 已完成' : '执行'}</span>
             </button>
 
             <button className={styles.demoReset} onClick={() => onDemoStep(runDemoReset)}>↺ 重置演示</button>

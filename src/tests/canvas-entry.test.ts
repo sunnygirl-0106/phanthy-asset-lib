@@ -71,7 +71,7 @@ describe('入口一 · 出现条件（canUploadToProject）', () => {
   })
 
   it('⑤ 从本项目库拖上来的节点无上传入口（已经是项目资产）', () => {
-    const fromProject = node({ source: { scope: 'project', assetId: 'a_ajie' } })
+    const fromProject = node({ source: { scope: 'project', assetId: 'd_ajie' } })
     expect(canUploadToProject(fromProject)).toBe(false)
     // 团队库/广场来源仍可上传
     expect(canUploadToProject(node({ source: { scope: 'team', assetId: 'a_suwan' } }))).toBe(true)
@@ -81,17 +81,17 @@ describe('入口一 · 出现条件（canUploadToProject）', () => {
 
 describe('入口一 · 产出意图（saveCanvasNodeToProject 纯函数）', () => {
   it('③ 图片选类目（如场景）→ 产出 scope=project、status=done 的资产', () => {
-    const out = saveCanvasNodeToProject(node(), 'proj_neon', { category: 'scene', mode: 'new', name: '新场景' })
+    const out = saveCanvasNodeToProject(node(), 'proj_daily', { category: 'scene', mode: 'new', name: '新场景' })
     expect(out.kind).toBe('add')
     if (out.kind !== 'add') throw new Error('unreachable')
     expect(out.asset.scope).toBe('project')
-    expect(out.asset.scopeId).toBe('proj_neon')
+    expect(out.asset.scopeId).toBe('proj_daily')
     expect(out.asset.status).toBe('done')
     expect(out.asset.category).toBe('scene')
   })
 
   it('④ 图片新建角色：cover 即定稿；关联已有→追加候选到已有资产候选池', () => {
-    const asNew = saveCanvasNodeToProject(node({ cover: '/mei.png' }), 'proj_neon', {
+    const asNew = saveCanvasNodeToProject(node({ cover: '/mei.png' }), 'proj_daily', {
       category: 'character',
       mode: 'new',
       name: '小美',
@@ -101,45 +101,45 @@ describe('入口一 · 产出意图（saveCanvasNodeToProject 纯函数）', () 
     expect(asNew.asset.category).toBe('character')
     expect(asNew.asset.cover).toBe('/mei.png') // 定稿 = 这张图
 
-    const linked = saveCanvasNodeToProject(node({ cover: '/new.png' }), 'proj_neon', {
+    const linked = saveCanvasNodeToProject(node({ cover: '/new.png' }), 'proj_daily', {
       category: 'character',
       mode: 'link',
-      targetId: 'a_ajie',
+      targetId: 'd_ajie',
       name: '阿杰·新候选',
     })
     expect(linked.kind).toBe('link')
     if (linked.kind !== 'link') throw new Error('unreachable')
-    expect(linked.parentId).toBe('a_ajie')
+    expect(linked.parentId).toBe('d_ajie')
     expect(linked.candidate.url).toBe('/new.png') // 追加为候选图
   })
 
   it('⑤ 从团队库拖来上传→副本带 masterId；新生成→原创无 masterId', () => {
     const fromTeam = saveCanvasNodeToProject(
       node({ source: { scope: 'team', assetId: 'a_suwan' } }),
-      'proj_neon',
+      'proj_daily',
       { category: 'scene', mode: 'new', name: '拿来的场景' },
     )
     if (fromTeam.kind !== 'add') throw new Error('unreachable')
     expect(fromTeam.asset.masterId).toBe('a_suwan') // 记血缘
 
-    const original = saveCanvasNodeToProject(node(), 'proj_neon', { category: 'scene', mode: 'new', name: '原创场景' })
+    const original = saveCanvasNodeToProject(node(), 'proj_daily', { category: 'scene', mode: 'new', name: '原创场景' })
     if (original.kind !== 'add') throw new Error('unreachable')
     expect(original.asset.masterId).toBeUndefined() // 原创无血缘
   })
 
   it('文本/视频落非「其他」类目仍被规则挡下（媒介↔类目不相容）', () => {
     expect(() =>
-      saveCanvasNodeToProject(node({ media: 'text' }), 'proj_neon', { category: 'scene', mode: 'new', name: 'x' }),
+      saveCanvasNodeToProject(node({ media: 'text' }), 'proj_daily', { category: 'scene', mode: 'new', name: 'x' }),
     ).toThrow(AssetRuleError)
     expect(() =>
-      saveCanvasNodeToProject(node({ media: 'video' }), 'proj_neon', { category: 'character', mode: 'new', name: 'x' }),
+      saveCanvasNodeToProject(node({ media: 'video' }), 'proj_daily', { category: 'character', mode: 'new', name: 'x' }),
     ).toThrow(AssetRuleError)
   })
 
   it('「其他」：文本落「其他」→ fields 带 media/text；视频 → media/videoUrl；且不支持关联已有', () => {
     const text = saveCanvasNodeToProject(
       node({ media: 'text', content: '第一幕台词…', cover: undefined }),
-      'proj_neon',
+      'proj_daily',
       { category: 'other', mode: 'new', name: '台词', extraFields: { media: 'text', text: '第一幕台词…' } },
     )
     if (text.kind !== 'add') throw new Error('unreachable')
@@ -149,7 +149,7 @@ describe('入口一 · 产出意图（saveCanvasNodeToProject 纯函数）', () 
 
     const video = saveCanvasNodeToProject(
       node({ media: 'video', cover: '/poster.png' }),
-      'proj_neon',
+      'proj_daily',
       { category: 'other', mode: 'new', name: '片段', extraFields: { media: 'video', videoUrl: '' } },
     )
     if (video.kind !== 'add') throw new Error('unreachable')
@@ -158,7 +158,7 @@ describe('入口一 · 产出意图（saveCanvasNodeToProject 纯函数）', () 
 
     // 「其他」不支持关联已有（没有子资产概念）。
     expect(() =>
-      saveCanvasNodeToProject(node({ media: 'image' }), 'proj_neon', {
+      saveCanvasNodeToProject(node({ media: 'image' }), 'proj_daily', {
         category: 'other', mode: 'link', targetId: 'whatever', name: 'x',
       }),
     ).toThrow(AssetRuleError)
@@ -166,14 +166,14 @@ describe('入口一 · 产出意图（saveCanvasNodeToProject 纯函数）', () 
 
   it('音频（R4）：走「关联已有」被 service 层拒绝（语义废弃）', () => {
     expect(() =>
-      saveCanvasNodeToProject(node({ media: 'audio' }), 'proj_neon', {
+      saveCanvasNodeToProject(node({ media: 'audio' }), 'proj_daily', {
         category: 'audio', mode: 'link', targetId: 'whatever', name: 'x',
       }),
     ).toThrow(AssetRuleError)
   })
 
   it('音频（R4 ①）：新建音频素材 → 落 audio 资产、节点音源写进 fields.audioUrl（库里可试听）', () => {
-    const out = saveCanvasNodeToProject(node({ media: 'audio', content: '/a.mp3' }), 'proj_neon', {
+    const out = saveCanvasNodeToProject(node({ media: 'audio', content: '/a.mp3' }), 'proj_daily', {
       category: 'audio', mode: 'new', name: '主角独白',
     })
     if (out.kind !== 'add') throw new Error('unreachable')
@@ -184,7 +184,7 @@ describe('入口一 · 产出意图（saveCanvasNodeToProject 纯函数）', () 
   it('teamHasSameName：团队库同名检测', () => {
     const assets = [
       { id: 'a', scope: 'team', scopeId: 'team_a', name: '苏晚' },
-      { id: 'b', scope: 'project', scopeId: 'proj_neon', name: '苏晚' },
+      { id: 'b', scope: 'project', scopeId: 'proj_daily', name: '苏晚' },
     ] as never[]
     expect(teamHasSameName(assets, 'team_a', '苏晚')).toBe(true)
     expect(teamHasSameName(assets, 'team_a', '别的名字')).toBe(false)
@@ -197,7 +197,7 @@ describe('入口一 · 产出意图（saveCanvasNodeToProject 纯函数）', () 
 describe('「其他」类目不参与向上流转（assetService 守卫）', () => {
   const owner: User = { id: 'u_owner', name: '主账号', avatar: '', role: 'owner', teamId: 'team_a' }
   const otherAsset: Asset = {
-    id: 'a_other', category: 'other', name: '分镜图', scope: 'project', scopeId: 'proj_neon',
+    id: 'a_other', category: 'other', name: '分镜图', scope: 'project', scopeId: 'proj_daily',
     status: 'done', cover: '/board.png', fields: { media: 'image' }, tags: [], createdAt: 0,
   }
 
@@ -230,7 +230,7 @@ beforeAll(async () => {
   const mod = await import('../store/useStore')
   store = mod.useStore
 })
-// 0805：霓虹东京那批资产（a_ajie 等）改由演示脚手架灌入；重置后跑一遍演示动作补回，
+// 0805：都市日常那批资产（a_ajie 等）改由演示脚手架灌入；重置后跑一遍演示动作补回，
 // 让沿用旧演员表（关联 a_ajie 等）的入口一用例照常跑。
 beforeEach(() => {
   store.getState().resetDemo()
@@ -239,19 +239,19 @@ beforeEach(() => {
   // 0807：演示生成后基础素材是「待定稿」；沿用旧演员表（关联 / 存入 a_ajie 等）的用例，
   // 这里把每份待定稿的第一张候选拍成定稿，恢复"成品"初始态。
   for (const a of store.getState().world.assets) {
-    if (a.scopeId === 'proj_neon' && a.status === 'pending' && a.candidates?.length) {
+    if (a.scopeId === 'proj_daily' && a.status === 'pending' && a.candidates?.length) {
       store.getState().runSetFinal(a.id, a.candidates[0].id)
     }
   }
 })
 
 const projectAssets = () =>
-  store.getState().world.assets.filter((a: { scope: string; scopeId?: string }) => a.scope === 'project' && a.scopeId === 'proj_neon')
+  store.getState().world.assets.filter((a: { scope: string; scopeId?: string }) => a.scope === 'project' && a.scopeId === 'proj_daily')
 
 describe('入口一 · store 提交（runSaveToProject）', () => {
   it('③ 上传图片进项目库 → 项目资产 +1 且为 done', () => {
     const before = projectAssets().length
-    const r = store.getState().runSaveToProject(node(), 'proj_neon', { category: 'scene', mode: 'new', name: '雨巷' })
+    const r = store.getState().runSaveToProject(node(), 'proj_daily', { category: 'scene', mode: 'new', name: '雨巷' })
     expect(r.ok).toBe(true)
     const after = projectAssets()
     expect(after.length).toBe(before + 1)
@@ -259,24 +259,24 @@ describe('入口一 · store 提交（runSaveToProject）', () => {
   })
 
   it('④ 关联已有 → 追加候选到已有资产候选池，不新增顶层资产', () => {
-    const ajieBefore = store.getState().world.assets.find((a: { id: string }) => a.id === 'a_ajie')
+    const ajieBefore = store.getState().world.assets.find((a: { id: string }) => a.id === 'd_ajie')
     const candsBefore = ajieBefore.candidates?.length ?? 0
     const totalBefore = store.getState().world.assets.length
-    const r = store.getState().runSaveToProject(node(), 'proj_neon', {
+    const r = store.getState().runSaveToProject(node(), 'proj_daily', {
       category: 'character',
       mode: 'link',
-      targetId: 'a_ajie',
+      targetId: 'd_ajie',
       name: '阿杰·新候选',
     })
     expect(r.ok).toBe(true)
-    const ajieAfter = store.getState().world.assets.find((a: { id: string }) => a.id === 'a_ajie')
+    const ajieAfter = store.getState().world.assets.find((a: { id: string }) => a.id === 'd_ajie')
     expect(ajieAfter.candidates.length).toBe(candsBefore + 1) // 追加进候选池
     expect(store.getState().world.assets.length).toBe(totalBefore) // 顶层资产数不变（候选不是资产）
   })
 
   it('R4 ①：音频存为素材 → 项目库 audio +1，音源写进 fields.audioUrl', () => {
     const before = projectAssets().length
-    const r = store.getState().runSaveToProject(node({ media: 'audio', content: '/a.mp3', cover: undefined }), 'proj_neon', {
+    const r = store.getState().runSaveToProject(node({ media: 'audio', content: '/a.mp3', cover: undefined }), 'proj_daily', {
       category: 'audio', mode: 'new', name: '主角独白',
     })
     expect(r.ok).toBe(true)
@@ -292,14 +292,14 @@ describe('入口一 · store 提交（runSaveToProject）', () => {
     const dragged = node({ source: { scope: 'team', assetId: 'a_suwan' }, name: '苏晚' })
     expect(store.getState().world.assets.length).toBe(before) // 拖拽不 +1
     // 真正上传那一刻才 +1。
-    store.getState().runSaveToProject(dragged, 'proj_neon', { category: 'character', mode: 'new', name: '苏晚（画布版）' })
+    store.getState().runSaveToProject(dragged, 'proj_daily', { category: 'character', mode: 'new', name: '苏晚（画布版）' })
     expect(store.getState().world.assets.length).toBe(before + 1)
   })
 
   it('⑦ 子账号画布上传项目库免审直接进；项目→团队存入才生成申请', () => {
-    store.getState().setCurrentUser('u_lin') // 小林：团队A 子账号，被分配霓虹东京
+    store.getState().setCurrentUser('u_lin') // 小林：团队A 子账号，被分配都市日常
     const before = projectAssets().length
-    const r = store.getState().runSaveToProject(node(), 'proj_neon', { category: 'prop', mode: 'new', name: '手电筒' })
+    const r = store.getState().runSaveToProject(node(), 'proj_daily', { category: 'prop', mode: 'new', name: '手电筒' })
     expect(r.ok).toBe(true)
     expect(projectAssets().length).toBe(before + 1) // 直接进项目库
     expect(store.getState().applications.length).toBe(0) // 免审，没有任何申请
@@ -311,16 +311,16 @@ describe('入口一 · store 提交（runSaveToProject）', () => {
     expect(store.getState().applications.length).toBe(1)
   })
 
-  it('无权限项目挡下：小鹿（团队B）不能往霓虹东京上传', () => {
+  it('无权限项目挡下：小鹿（团队B）不能往都市日常上传', () => {
     store.getState().setCurrentUser('u_lu')
-    const r = store.getState().runSaveToProject(node(), 'proj_neon', { category: 'scene', mode: 'new', name: 'x' })
+    const r = store.getState().runSaveToProject(node(), 'proj_daily', { category: 'scene', mode: 'new', name: 'x' })
     expect(r.ok).toBe(false)
   })
 
   it('去重（v5）：新建顶层资产撞项目库同名 → 被挡；关联已有（link）不受影响', () => {
-    // 霓虹东京已有角色「阿杰」，再新建一个叫「阿杰」的角色 → 被挡
+    // 都市日常已有角色「阿杰」，再新建一个叫「阿杰」的角色 → 被挡
     const before = projectAssets().length
-    const dup = store.getState().runSaveToProject(node(), 'proj_neon', {
+    const dup = store.getState().runSaveToProject(node(), 'proj_daily', {
       category: 'character',
       mode: 'new',
       name: '阿杰',
@@ -330,11 +330,11 @@ describe('入口一 · store 提交（runSaveToProject）', () => {
     expect(projectAssets().length).toBe(before) // 没落库
 
     // 关联到已有角色，即使子资产名和别的顶层资产同名（如「霓虹舞者」）也不受去重影响
-    const ok = store.getState().runSaveToProject(node(), 'proj_neon', {
+    const ok = store.getState().runSaveToProject(node(), 'proj_daily', {
       category: 'character',
       mode: 'link',
-      targetId: 'a_ajie',
-      name: '霓虹舞者',
+      targetId: 'd_ajie',
+      name: '苏可',
     })
     expect(ok.ok).toBe(true)
   })
@@ -343,7 +343,7 @@ describe('入口一 · store 提交（runSaveToProject）', () => {
 describe('入口一→存入 · 去重（⑧）', () => {
   it('⑧ 画布上传一份叫"苏晚"的项目资产，存入团队库时因同名被挡下、提示改名', () => {
     // Sunny(团队A 主账号) 画布上传一份名为"苏晚"的项目资产（团队库里已有母版"苏晚" a_suwan）
-    const up = store.getState().runSaveToProject(node(), 'proj_neon', {
+    const up = store.getState().runSaveToProject(node(), 'proj_daily', {
       category: 'character',
       mode: 'new',
       name: '苏晚',
@@ -357,7 +357,7 @@ describe('入口一→存入 · 去重（⑧）', () => {
   })
 
   it('改个不冲突的名字就能存入成功', () => {
-    store.getState().runSaveToProject(node(), 'proj_neon', {
+    store.getState().runSaveToProject(node(), 'proj_daily', {
       category: 'character',
       mode: 'new',
       name: '苏晚·画布分身',
@@ -386,7 +386,7 @@ describe('演示动线：子账号画布上传 → 存入 → 主账号审批 �
 
     // ① 子账号小林在画布上传一份新角色（免审直接进项目库）
     store.getState().setCurrentUser('u_lin')
-    const up = store.getState().runSaveToProject(node({ cover: '/mei.png' }), 'proj_neon', {
+    const up = store.getState().runSaveToProject(node({ cover: '/mei.png' }), 'proj_daily', {
       category: 'character',
       mode: 'new',
       name: '小美',
@@ -412,10 +412,10 @@ describe('演示动线：子账号画布上传 → 存入 → 主账号审批 �
   })
 
   it('子账号存入 → 审批后团队库那份只带定稿图、候选池不带（0803）', () => {
-    // 小林（子账号，分配了霓虹东京）存入「阿杰」
+    // 小林（子账号，分配了都市日常）存入「阿杰」
     store.getState().setCurrentUser('u_lin')
-    const ajie = store.getState().world.assets.find((a: { id: string }) => a.id === 'a_ajie')
-    expect(store.getState().runDeposit('a_ajie').ok).toBe(true)
+    const ajie = store.getState().world.assets.find((a: { id: string }) => a.id === 'd_ajie')
+    expect(store.getState().runDeposit('d_ajie').ok).toBe(true)
     const appl = store.getState().applications.at(-1)
 
     // 主账号审批通过 → 团队库那份：定稿在、候选池不带

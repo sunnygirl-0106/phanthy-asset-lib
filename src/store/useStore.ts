@@ -20,7 +20,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { World, User, Asset, AssetStatus, Canvas, Category, Notification, NotificationKind, Voice } from '../data/types'
-import { createSeedWorld, IDS, DEMO_NEON_ASSETS, DEMO_NEON_IDS } from '../data/seed'
+import { createSeedWorld, IDS } from '../data/seed'
+import { DEMO_ASSETS, DEMO_IDS, DEMO_LOOK_IDS } from '../data/demoProject'
 import {
   directReuse,
   favorite,
@@ -71,8 +72,14 @@ export interface ActionResult {
   message: string
 }
 
-/** 演示脚手架（0805）：讲解"从无到有"用的两步进度，不参与任何产品规则。 */
-export type DemoStep = 'idle' | 'analyzed' | 'generated'
+/**
+ * 演示脚手架：讲解"从无到有"用的三步进度，不参与任何产品规则。
+ *   idle      未开始
+ *   analyzed  ① 剧本分析完成 —— 8 份空壳已列入，全部只有提示词
+ *   generated ② 资产生成完成 —— 基础 6 份已出图定稿，2 份造型已挂上参考图
+ *   looked    ③ 批量生成造型完成 —— 2 份造型也已出图定稿
+ */
+export type DemoStep = 'idle' | 'analyzed' | 'generated' | 'looked'
 
 interface StoreState {
   world: World
@@ -91,11 +98,13 @@ interface StoreState {
   resetDemo: () => void
 
   // ── 演示脚手架动作（0805 · 项目资产库左下角「演示」控件）──
-  /** ① 剧本分析：idle → analyzed，不动 world（页面内容不变），只推进演示进度。 */
+  /** ① 剧本分析：idle → analyzed，把 8 份**空壳**灌进 world（只有提示词，无图无参考图）。 */
   runDemoAnalyze: () => ActionResult
-  /** ② 资产生成：analyzed → generated，把 DEMO_NEON_ASSETS 灌进 world.assets。 */
+  /** ② 资产生成：analyzed → generated，基础 6 份出 4 张候选、首张定稿；造型挂上参考图。 */
   runDemoGenerate: () => ActionResult
-  /** ↺ 重置演示：→ idle，按 id 过滤掉 DEMO_NEON_ASSETS（不碰音频 /「其他」/别的项目）。 */
+  /** ③ 批量生成造型：generated → looked，2 份造型出 4 张候选、首张定稿。 */
+  runDemoLooks: () => ActionResult
+  /** ↺ 重置演示：→ idle，按 id 过滤掉 DEMO 这一批（不碰音频 /「其他」）。 */
   runDemoReset: () => ActionResult
 
   // ── 流转动作（点按钮时调用）──
@@ -253,17 +262,23 @@ export const useStore = create<StoreState>()(
           demoStep: 'idle',
         }),
 
-      /* ── 演示脚手架（0805）：三个动作只改 demoStep 与 world.assets 里 DEMO 这一批，
-       *    不走任何权限/业务规则，纯讲解用。 ── */
+      /* ── 演示脚手架：四个动作只改 demoStep 与 world.assets 里 DEMO 这一批，
+       *    不走任何权限/业务规则，纯讲解用。定义见 data/demoProject.ts。
+       *
+       *    ① 剧本分析     8 份全部降级为空壳灌入（只有提示词）
+       *    ② 资产生成     基础 6 份恢复完整（4 张候选、首张定稿）+ 造型挂参考图
+       *    ③ 批量生成造型 造型 2 份恢复完整（4 张候选、首张定稿）
+       *    ↺ 重置         按 id 清掉这一批 + 用户手动新增的生产类资产
+       * ── */
+
+      /** 把一份完整定义降级成"只有提示词"的空壳。 */
       runDemoAnalyze: () => {
         if (get().demoStep !== 'idle') return fail('剧本已分析过了')
-        // 拆解剧本：把这一批资产的"坑位"一次性铺进 world，8 份全部是"纯提示词"空壳——
-        // 此刻只有提示词、没有任何图：素模/服装/场景/道具的图还没出，造型要参考的素模/服装
-        // 也还没出，所以连造型的参考图也一并清空。全部等 ② 资产生成。
-        //（幂等：已存在的按 id 跳过。）
+        // 此刻谁都还没出图，造型要参考的角色/服装也还没出，所以参考图一并清空——
+        // 参考图要等 ② 资产生成之后才有意义。（幂等：已存在的按 id 跳过。）
         set((s) => {
           const existing = new Set(s.world.assets.map((a) => a.id))
-          const incoming = DEMO_NEON_ASSETS
+          const incoming: Asset[] = DEMO_ASSETS
             .filter((a) => !existing.has(a.id))
             .map((a) => ({
               ...a,
@@ -275,32 +290,25 @@ export const useStore = create<StoreState>()(
             }))
           return { world: { ...s.world, assets: [...s.world.assets, ...incoming] }, demoStep: 'analyzed' }
         })
-        return ok('已拆解剧本，8 份资产已列入待生成')
+        return ok(`已拆解剧本，${DEMO_ASSETS.length} 份资产已列入待生成`)
       },
 
       runDemoGenerate: () => {
         if (get().demoStep !== 'analyzed') return fail('请先完成「剧本分析」')
-        // 资产生成：
-        //   · 基础素材（素模/服装/场景/道具，没有 referencedFrom）：空壳 → 成品（恢复完整定义，出图）。
-        //   · 造型（有 referencedFrom）：仍留「待生成」，但把参考图挂回去——此刻它要参考的
-        //     素模/服装已经生成，参考图才有意义；由用户在页面上（引导条批量生成 / 详情页）现场生成。
-        const demoById = new Map(DEMO_NEON_ASSETS.map((a) => [a.id, a] as const))
+        // 基础素材（没有 referencedFrom）：空壳 → 成品，一次落 4 张候选、首张自动定稿。
+        // 造型（有 referencedFrom）：仍留空壳，但把参考图挂回去——此刻它要参考的
+        // 角色/服装已经定稿，参考图才有意义。造型本身等 ③ 批量生成。
+        const byId = new Map(DEMO_ASSETS.map((a) => [a.id, a] as const))
+        const baseCount = DEMO_ASSETS.length - DEMO_LOOK_IDS.size
         set((s) => ({
           world: {
             ...s.world,
-            assets: s.world.assets.map((a) => {
-              const def = demoById.get(a.id)
+            assets: s.world.assets.map((a): Asset => {
+              const def = byId.get(a.id)
               if (!def) return a
-              if (!def.referencedFrom) {
-                // 基础素材：空壳 → 成品（一份一张、自动定稿）。
-                // 必须是成品，否则第二轮造型在参考图选择器里挑不到它们。
+              if (!DEMO_LOOK_IDS.has(def.id)) {
                 if (a.status !== 'empty') return a
-                // 0808：默认把自己的定稿图挂成参考图（标签直接用资产名）——
-                // 这批已定稿的成品重新生成时理应以自己为底，进详情页预览动作条也直接显示「✓ 已是参考图」。
-                // 存不带 ?g=N 后缀的裸地址（与参考图既有格式一致，isCenterInRefs 按 baseUrl 比对）。
-                return def.cover
-                  ? { ...def, referenceImages: [def.cover.split('?')[0]], referenceLabels: [def.name] }
-                  : def
+                return { ...def } // 完整定义：cover=1.png、candidates=1..4、参考图=自己
               }
               // 造型：留待生成，仅把参考图 / 标签挂回
               return { ...a, referenceImages: def.referenceImages, referenceLabels: def.referenceLabels }
@@ -308,22 +316,40 @@ export const useStore = create<StoreState>()(
           },
           demoStep: 'generated',
         }))
-        return ok('已生成 5 份基础素材，3 份造型待你在页面上生成')
+        return ok(`已生成 ${baseCount} 份基础素材，${DEMO_LOOK_IDS.size} 份造型的参考图已挂好`)
+      },
+
+      runDemoLooks: () => {
+        if (get().demoStep !== 'generated') return fail('请先完成「资产生成」')
+        // 造型：空壳 → 成品，同样 4 张候选、首张自动定稿。
+        const byId = new Map(DEMO_ASSETS.map((a) => [a.id, a] as const))
+        set((s) => ({
+          world: {
+            ...s.world,
+            assets: s.world.assets.map((a): Asset => {
+              if (!DEMO_LOOK_IDS.has(a.id) || a.status !== 'empty') return a
+              const def = byId.get(a.id)
+              return def ? { ...def } : a
+            }),
+          },
+          demoStep: 'looked',
+        }))
+        return ok(`已生成 ${DEMO_LOOK_IDS.size} 份角色造型`)
       },
 
       runDemoReset: () => {
-        // 按 id 过滤掉 DEMO 这一批；音频、「其他」留存物、别的项目都不属于这条线，原样保留。
-        // 另外把霓虹东京里【手动新增】的生产类资产也一并清掉——它们的 id 不在 DEMO_NEON_IDS 里，
+        // 按 id 过滤掉 DEMO 这一批；音频、「其他」留存物不属于这条线，原样保留。
+        // 另外把项目里【手动新增】的生产类资产也一并清掉——它们的 id 不在 DEMO_IDS 里，
         // 不清的话演示每重讲一遍就多留一批「未命名角色」，讲第三遍时库里已经是脏的。
-        // 霓虹东京的角色/服装/场景/道具四类初始为空（种子只留音频与「其他」），所以整类清掉即可。
-        const NEON_PRODUCTION: Category[] = ['character', 'costume', 'scene', 'prop']
+        // 项目的角色/服装/场景/道具四类初始为空（种子只留音频与「其他」），所以整类清掉即可。
+        const PRODUCTION: Category[] = ['character', 'costume', 'scene', 'prop']
         set((s) => ({
           world: {
             ...s.world,
             assets: s.world.assets.filter(
               (a) =>
-                !DEMO_NEON_IDS.has(a.id) &&
-                !(a.scope === 'project' && a.scopeId === IDS.projNeon && NEON_PRODUCTION.includes(a.category)),
+                !DEMO_IDS.has(a.id) &&
+                !(a.scope === 'project' && a.scopeId === IDS.projDaily && PRODUCTION.includes(a.category)),
             ),
           },
           demoStep: 'idle',

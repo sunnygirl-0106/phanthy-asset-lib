@@ -31,7 +31,7 @@ beforeAll(async () => {
   storeMod = mod
 })
 
-// 每个用例从干净的种子出发；再跑一遍演示脚手架（0805），把霓虹东京那批资产
+// 每个用例从干净的种子出发；再跑一遍演示脚手架（0805），把都市日常那批资产
 // （a_ajie / a_neon_dancer / a_mech_exo / 三份造型空壳…）灌回 world，让沿用旧演员表的用例照常跑。
 beforeEach(() => {
   store.getState().resetDemo()
@@ -40,7 +40,7 @@ beforeEach(() => {
   // 0808：演示生成后基础素材直接落成品（一份一张、自动定稿），初始态就是"5 份成品 + 3 份空壳"。
   // 这个循环在 0808 下是空转（proj_neon 里没有 pending 基础素材），保留作兜底安全网。
   for (const a of store.getState().world.assets) {
-    if (a.scopeId === 'proj_neon' && a.status === 'pending' && a.candidates?.length) {
+    if (a.scopeId === 'proj_daily' && a.status === 'pending' && a.candidates?.length) {
       store.getState().runSetFinal(a.id, a.candidates[0].id)
     }
   }
@@ -50,15 +50,15 @@ describe('演示脚手架（0805 · demoStep + 三个 action）', () => {
   const neonCore = () =>
     store.getState().world.assets.filter(
       (a: { scope: string; scopeId?: string; category: string }) =>
-        a.scope === 'project' && a.scopeId === 'proj_neon' &&
+        a.scope === 'project' && a.scopeId === 'proj_daily' &&
         ['character', 'costume', 'scene', 'prop'].includes(a.category),
     ).length
   const neonBy = (category: string) =>
     store.getState().world.assets.filter(
-      (a: { scopeId?: string; category: string }) => a.scopeId === 'proj_neon' && a.category === category,
+      (a: { scopeId?: string; category: string }) => a.scopeId === 'proj_daily' && a.category === category,
     ).length
 
-  it('生成后霓虹东京四类多出 8 份（5 成品 + 3 空壳），音频 /「其他」不被带入', () => {
+  it('生成后都市日常四类多出 8 份（6 成品 + 2 造型空壳），音频 /「其他」不被带入', () => {
     store.getState().resetDemo() // beforeEach 已生成过，这里回到干净初始态
     expect(neonCore()).toBe(0)
     const audioBefore = neonBy('audio')
@@ -67,14 +67,14 @@ describe('演示脚手架（0805 · demoStep + 三个 action）', () => {
     expect(store.getState().runDemoGenerate().ok).toBe(true)
     expect(neonCore()).toBe(8)
     const shells = store.getState().world.assets.filter(
-      (a: { scopeId?: string; status: string }) => a.scopeId === 'proj_neon' && a.status === 'empty',
+      (a: { scopeId?: string; status: string }) => a.scopeId === 'proj_daily' && a.status === 'empty',
     )
-    expect(shells.length).toBe(3)
+    expect(shells.length).toBe(2) // 两份造型等第三步
     expect(neonBy('audio')).toBe(audioBefore) // 音频没被带走
     expect(neonBy('other')).toBe(otherBefore) // 「其他」没被带走
   })
 
-  it('重置后霓虹东京四类回到 0，音频 /「其他」原样保留', () => {
+  it('重置后都市日常四类回到 0，音频 /「其他」原样保留', () => {
     const audioBefore = neonBy('audio') // beforeEach 已生成
     const otherBefore = neonBy('other')
     expect(neonCore()).toBe(8)
@@ -102,13 +102,13 @@ describe('演示脚手架（0805 · demoStep + 三个 action）', () => {
 describe('store 流转动作', () => {
   it('直接复用：把独立快照加入 world（默认账号 Sunny 是主账号）', () => {
     const before = store.getState().world.assets.length
-    const r = store.getState().runDirectReuse('a_cyber_police', 'proj_neon')
+    const r = store.getState().runDirectReuse('a_cyber_police', 'proj_daily')
     expect(r.ok).toBe(true)
     const assets = store.getState().world.assets
     expect(assets.length).toBe(before + 1)
     const copy = assets[assets.length - 1]
     expect(copy.scope).toBe('project')
-    expect(copy.scopeId).toBe('proj_neon')
+    expect(copy.scopeId).toBe('proj_daily')
     expect(copy.masterId).toBe('a_cyber_police')
   })
 
@@ -121,7 +121,7 @@ describe('store 流转动作', () => {
   it('子账号存入 → 生成待审批申请，团队库不增加', () => {
     store.getState().setCurrentUser('u_lin')
     const teamBefore = store.getState().world.assets.filter((a: { scope: string }) => a.scope === 'team').length
-    const r = store.getState().runDeposit('a_ajie') // 阿杰在霓虹东京，小林被分配
+    const r = store.getState().runDeposit('d_ajie') // 阿杰在都市日常，小林被分配
     expect(r.ok).toBe(true)
     expect(store.getState().applications.length).toBe(1)
     expect(store.getState().world.assets.filter((a: { scope: string }) => a.scope === 'team').length).toBe(teamBefore)
@@ -129,13 +129,13 @@ describe('store 流转动作', () => {
 
   it('主账号存入 → 团队库多一份母版', () => {
     const teamBefore = store.getState().world.assets.filter((a: { scope: string }) => a.scope === 'team').length
-    const r = store.getState().runDeposit('a_ajie')
+    const r = store.getState().runDeposit('d_ajie')
     expect(r.ok).toBe(true)
     expect(store.getState().world.assets.filter((a: { scope: string }) => a.scope === 'team').length).toBe(teamBefore + 1)
   })
 
   it('改名只改本地名字，不影响血缘', () => {
-    store.getState().runReuse('a_suwan', 'proj_neon') // 复用出一份独立副本
+    store.getState().runReuse('a_suwan', 'proj_daily') // 复用出一份独立副本
     const copy = store.getState().world.assets.at(-1)
     store.getState().renameAsset(copy.id, '苏晚·北京版')
     const after = store.getState().world.assets.find((a: { id: string }) => a.id === copy.id)
@@ -145,13 +145,13 @@ describe('store 流转动作', () => {
 
   it('设封面：把定稿换成候选池里的某张图，只改 cover、别的不动', () => {
     // 项目库阿杰候选池恒 1（0805 · 只展示定稿）：先生成保留一张，池子涨到 2，再换定稿。
-    store.getState().appendCandidates('a_ajie', ['/extra.png?g=99'])
-    const ajie = store.getState().world.assets.find((a: { id: string }) => a.id === 'a_ajie')
+    store.getState().appendCandidates('d_ajie', ['/extra.png?g=99'])
+    const ajie = store.getState().world.assets.find((a: { id: string }) => a.id === 'd_ajie')
     // 挑一个不是当前定稿的候选图
     const target = ajie.candidates.find((c: { url: string }) => c.url !== ajie.cover)
     expect(target).toBeTruthy()
-    store.getState().setCover('a_ajie', target.url)
-    const after = store.getState().world.assets.find((a: { id: string }) => a.id === 'a_ajie')
+    store.getState().setCover('d_ajie', target.url)
+    const after = store.getState().world.assets.find((a: { id: string }) => a.id === 'd_ajie')
     expect(after.cover).toBe(target.url) // 定稿换了
     expect(after.name).toBe(ajie.name) // 名字没动
     expect(after.candidates.length).toBe(ajie.candidates.length) // 候选池没动
@@ -164,42 +164,42 @@ describe('候选池动作（0803：appendCandidates / setFinal / removeCandidate
 
   it('appendCandidates（0807）：把图并入候选池；空壳追加后 → 待定稿、不自动定稿', () => {
     // 阿杰·风衣造型是项目库空壳（Sunny 主账号可生成）
-    const before = byId('a_ajie_trench')
+    const before = byId('d_ajie_suit')
     expect(before.status).toBe('empty')
-    const r = store.getState().appendCandidates('a_ajie_trench', ['/p1.png', '/p2.png'])
+    const r = store.getState().appendCandidates('d_ajie_suit', ['/p1.png', '/p2.png'])
     expect(r.ok).toBe(true)
-    const after = byId('a_ajie_trench')
+    const after = byId('d_ajie_suit')
     expect(after.status).toBe('pending') // 空壳 → 待定稿
     expect(after.candidates.length).toBe(2)
     expect(after.cover).toBe('') // 不自动定稿
   })
 
   it('setFinal：把候选池里的某张设为定稿（待定稿 → 成品）', () => {
-    store.getState().appendCandidates('a_ajie_trench', ['/p1.png', '/p2.png'])
-    const cand = byId('a_ajie_trench').candidates.find((c: { url: string }) => c.url === '/p2.png')
-    const r = store.getState().runSetFinal('a_ajie_trench', cand.id)
+    store.getState().appendCandidates('d_ajie_suit', ['/p1.png', '/p2.png'])
+    const cand = byId('d_ajie_suit').candidates.find((c: { url: string }) => c.url === '/p2.png')
+    const r = store.getState().runSetFinal('d_ajie_suit', cand.id)
     expect(r.ok).toBe(true)
-    expect(byId('a_ajie_trench').cover).toBe('/p2.png')
+    expect(byId('d_ajie_suit').cover).toBe('/p2.png')
   })
 
   it('removeCandidate：删定稿顶一张上来（先定稿再删）', () => {
-    store.getState().appendCandidates('a_ajie_trench', ['/p1.png', '/p2.png'])
+    store.getState().appendCandidates('d_ajie_suit', ['/p1.png', '/p2.png'])
     // 待定稿态没有定稿，先设一张为定稿
-    const first = byId('a_ajie_trench').candidates[0]
-    store.getState().runSetFinal('a_ajie_trench', first.id)
-    const a = byId('a_ajie_trench')
+    const first = byId('d_ajie_suit').candidates[0]
+    store.getState().runSetFinal('d_ajie_suit', first.id)
+    const a = byId('d_ajie_suit')
     const finalCand = a.candidates.find((c: { url: string }) => c.url === a.cover)
-    const r = store.getState().runRemoveCandidate('a_ajie_trench', finalCand.id)
+    const r = store.getState().runRemoveCandidate('d_ajie_suit', finalCand.id)
     expect(r.ok).toBe(true)
-    const after = byId('a_ajie_trench')
+    const after = byId('d_ajie_suit')
     expect(after.candidates.length).toBe(1)
     expect(after.cover).toBe(after.candidates[0].url) // 顶了一张上来
   })
 
   it('setPrompt：改项目库资产的提示词（主账号可改）', () => {
-    const r = store.getState().setPrompt('a_ajie', '新的定稿提示词')
+    const r = store.getState().setPrompt('d_ajie', '新的定稿提示词')
     expect(r.ok).toBe(true)
-    expect(byId('a_ajie').prompt).toBe('新的定稿提示词')
+    expect(byId('d_ajie').prompt).toBe('新的定稿提示词')
   })
 
   it('权限：团队库提示词只读（改动五：主账号也不能改）；广场恒挡', () => {
@@ -219,29 +219,29 @@ describe('参考图删除（阶段二：removeReferenceImage · 0804 同步 refe
 
   it('删一张参考图时同步删掉对应下标的 label（下标对齐）', () => {
     // a_ajie_trench 空壳：DEMO 预置 2 张参考图，标签写被参考资产真名（规则 20）
-    const before = byId('a_ajie_trench')
+    const before = byId('d_ajie_suit')
     expect(before.referenceImages.length).toBe(2)
-    expect(before.referenceLabels).toEqual(['阿杰', '机甲外骨骼'])
-    // 删下标 0（阿杰）→ 只剩机甲外骨骼，label 也收缩成 ['机甲外骨骼']
-    const r = store.getState().removeReferenceImage('a_ajie_trench', 0)
+    expect(before.referenceLabels).toEqual(['阿杰', '西装'])
+    // 删下标 0（阿杰）→ 只剩机甲外骨骼，label 也收缩成 ['西装']
+    const r = store.getState().removeReferenceImage('d_ajie_suit', 0)
     expect(r.ok).toBe(true)
-    const after = byId('a_ajie_trench')
+    const after = byId('d_ajie_suit')
     expect(after.referenceImages).toEqual([before.referenceImages[1]])
-    expect(after.referenceLabels).toEqual(['机甲外骨骼'])
+    expect(after.referenceLabels).toEqual(['西装'])
   })
 
   it('删光后 referenceImages / referenceLabels 都变 undefined', () => {
-    store.getState().removeReferenceImage('a_ajie_trench', 0)
-    store.getState().removeReferenceImage('a_ajie_trench', 0)
-    const after = byId('a_ajie_trench')
+    store.getState().removeReferenceImage('d_ajie_suit', 0)
+    store.getState().removeReferenceImage('d_ajie_suit', 0)
+    const after = byId('d_ajie_suit')
     expect(after.referenceImages).toBeUndefined()
     expect(after.referenceLabels).toBeUndefined()
   })
 
   it('越界下标被挡；无生成权者不能改参考图', () => {
-    expect(store.getState().removeReferenceImage('a_ajie_trench', 9).ok).toBe(false) // 越界
+    expect(store.getState().removeReferenceImage('d_ajie_suit', 9).ok).toBe(false) // 越界
     store.getState().setCurrentUser('u_admin') // admin 恒无生成权
-    expect(store.getState().removeReferenceImage('a_ajie_trench', 0).ok).toBe(false)
+    expect(store.getState().removeReferenceImage('d_ajie_suit', 0).ok).toBe(false)
   })
 })
 
@@ -250,18 +250,18 @@ describe('参考图追加（0804：addReferenceImages · 参考图选择器落�
     store.getState().world.assets.find((a: { id: string }) => a.id === id)
 
   it('把选中的图并入 referenceImages + referenceLabels；原有血缘不被覆盖', () => {
-    const before = byId('a_ajie_trench') // referencedFrom 已是 a_ajie
+    const before = byId('d_ajie_suit') // referencedFrom 已是 a_ajie
     const r = store.getState().addReferenceImages(
-      'a_ajie_trench',
+      'd_ajie_suit',
       [{ url: '/x.png', label: '服装' }],
-      'a_mech_exo', // 传了来源，但原本已有血缘 → 不覆盖
+      'd_suit', // 传了来源，但原本已有血缘 → 不覆盖
     )
     expect(r.ok).toBe(true)
-    const after = byId('a_ajie_trench')
+    const after = byId('d_ajie_suit')
     expect(after.referenceImages.length).toBe(before.referenceImages.length + 1)
     expect(after.referenceImages.at(-1)).toBe('/x.png')
     expect(after.referenceLabels.at(-1)).toBe('服装')
-    expect(after.referencedFrom).toBe('a_ajie') // 原有血缘保留，不被 a_mech_exo 覆盖
+    expect(after.referencedFrom).toBe('d_ajie') // 原有血缘保留，不被 a_mech_exo 覆盖
   })
 
   it('权限守卫：广场资产恒失败；子账号对团队库资产失败', () => {
@@ -280,40 +280,40 @@ describe('批量生成（阶段三：batchGenerate）', () => {
 
   it('空壳批量生成各 1 张、自动定稿（0808）；已有成品被跳过', () => {
     // a_ajie_trench / a_ajie_battle 是项目库空壳；a_ajie 是成品 → 混选
-    expect(byId('a_ajie_trench').status).toBe('empty')
-    const r = store.getState().batchGenerate(['a_ajie_trench', 'a_ajie_battle', 'a_ajie'], P)
+    expect(byId('d_ajie_suit').status).toBe('empty')
+    const r = store.getState().batchGenerate(['d_ajie_suit', 'd_suke_pajamas', 'd_ajie'], P)
     expect(r.ok).toBe(true)
     expect(r.message).toContain('已生成 2 份')
     expect(r.message).toContain('跳过 1 份')
-    const trench = byId('a_ajie_trench')
+    const trench = byId('d_ajie_suit')
     // 0808：本批 1 张 + 空壳（原本无定稿、池空）→ 自动定稿成成品。
     expect(trench.status).toBe('done')
     expect(trench.cover).toBe(trench.candidates[0].url)
     // 造型带 lookUrl（真实造型图替身）→ 生成图用它出图，不是素模、也不是通用占位图 P。
-    expect(trench.candidates[0].url).toContain('ajie_role.png')
+    expect(trench.candidates[0].url).toContain('ajie-suit')
     expect(trench.candidates[0].url).not.toBe(P)
     expect(trench.candidates.length).toBe(1) // 默认每份 1 张
     // 造型自动定稿后，把定稿图追加进自己的参考图（素模 + 服装保留，末尾多一张造型图、标签=资产名）。
-    expect(trench.referenceImages).toContain('/assets/proj-neon-tokyo/ajie_role.png')
-    expect(trench.referenceLabels?.[trench.referenceLabels.length - 1]).toBe('阿杰·风衣造型')
-    expect(byId('a_ajie_battle').status).toBe('done')
+    expect(trench.referenceImages).toContain('/assets/proj-daily/ajie-suit/1.png')
+    expect(trench.referenceLabels?.[trench.referenceLabels.length - 1]).toBe('阿杰·西装造型')
+    expect(byId('d_suke_pajamas').status).toBe('done')
   })
 
   it('子账号对被分配项目的空壳有权 → 生成并自动定稿；未分配项目 → 跳过', () => {
-    store.getState().setCurrentUser('u_lin') // 子账号，分配了霓虹东京
-    const r = store.getState().batchGenerate(['a_ajie_trench'], P)
+    store.getState().setCurrentUser('u_lin') // 子账号，分配了都市日常
+    const r = store.getState().batchGenerate(['d_ajie_suit'], P)
     expect(r.message).toContain('已生成 1 份')
-    expect(byId('a_ajie_trench').status).toBe('done') // 项目库子账号可生成，1 张自动定稿
+    expect(byId('d_ajie_suit').status).toBe('done') // 项目库子账号可生成，1 张自动定稿
   })
 })
 
 describe('音色（听觉身份锚点，随角色走 · 恒 1 个）', () => {
   it('setVoice 后资产 .voice 更新；clearVoice 后为 undefined', () => {
     const voice = { id: 'preset_voice_m01', type: 'preset' as const, name: '沉稳男声', gender: '男', previewUrl: '/assets/voices/preset_voice_male.mp3' }
-    store.getState().setVoice('a_ajie', voice)
-    expect(store.getState().world.assets.find((a: { id: string }) => a.id === 'a_ajie').voice.name).toBe('沉稳男声')
-    store.getState().clearVoice('a_ajie')
-    expect(store.getState().world.assets.find((a: { id: string }) => a.id === 'a_ajie').voice).toBeUndefined()
+    store.getState().setVoice('d_ajie', voice)
+    expect(store.getState().world.assets.find((a: { id: string }) => a.id === 'd_ajie').voice.name).toBe('沉稳男声')
+    store.getState().clearVoice('d_ajie')
+    expect(store.getState().world.assets.find((a: { id: string }) => a.id === 'd_ajie').voice).toBeUndefined()
   })
 
   it('带音色的角色流转 → 副本带着音色，且是深拷贝（独立引用）', () => {
@@ -321,10 +321,10 @@ describe('音色（听觉身份锚点，随角色走 · 恒 1 个）', () => {
     expect(suwan.voice).toBeTruthy() // 种子里苏晚已配音色
 
     // 四条流转线都走 cloneForCopy，都应带上音色且不共享引用
-    store.getState().runReuse('a_suwan', 'proj_neon')            // 团队→项目
-    store.getState().runDirectReuse('a_cyber_police', 'proj_neon') // 广场→项目（赛博女警也有音色）
+    store.getState().runReuse('a_suwan', 'proj_daily')            // 团队→项目
+    store.getState().runDirectReuse('a_cyber_police', 'proj_daily') // 广场→项目（赛博女警也有音色）
     store.getState().runFavorite('a_cyber_police')               // 广场→团队库
-    store.getState().runDeposit('a_ajie')                        // 项目→团队（阿杰无音色，验不炸）
+    store.getState().runDeposit('d_ajie')                        // 项目→团队（阿杰无音色，验不炸）
 
     const reuseCopy = store.getState().world.assets.filter((a: { masterId?: string }) => a.masterId === 'a_suwan').at(-1)
     expect(reuseCopy.voice).toBeTruthy()
@@ -340,44 +340,45 @@ describe('库内顶层资产名唯一（v5：改名 / 复用 / 直接复用去�
     store.getState().world.assets.filter((a: { scope: string; scopeId?: string }) => a.scope === 'project' && a.scopeId === pid).length
 
   it('改名撞同库已有顶层名 → 被挡、提示改名', () => {
-    // 霓虹东京里已有「霓虹舞者」，把「阿杰」改成「霓虹舞者」应被挡
-    const r = store.getState().renameAsset('a_ajie', '霓虹舞者')
+    // 都市日常里已有「霓虹舞者」，把「阿杰」改成「霓虹舞者」应被挡
+    const r = store.getState().renameAsset('d_ajie', '苏可')
     expect(r.ok).toBe(false)
     expect(r.message).toContain('改名')
-    expect(byId('a_ajie').name).toBe('阿杰') // 没改成
+    expect(byId('d_ajie').name).toBe('阿杰') // 没改成
   })
 
   it('改成不冲突的名字 → 成功', () => {
-    const r = store.getState().renameAsset('a_ajie', '阿杰·改')
+    const r = store.getState().renameAsset('d_ajie', '阿杰·改')
     expect(r.ok).toBe(true)
-    expect(byId('a_ajie').name).toBe('阿杰·改')
+    expect(byId('d_ajie').name).toBe('阿杰·改')
   })
 
   it('跨库同名允许：改成另一个项目已有的名字 → 成功', () => {
-    // 山鬼在山海志（proj_shanhai），把霓虹东京的阿杰改成「山鬼」应成功（不同项目各论各的）
-    const r = store.getState().renameAsset('a_ajie', '山鬼')
+    // 山鬼在山海志（proj_shanhai），把都市日常的阿杰改成「山鬼」应成功（不同项目各论各的）
+    const r = store.getState().renameAsset('d_ajie', '山鬼')
     expect(r.ok).toBe(true)
-    expect(byId('a_ajie').name).toBe('山鬼')
+    expect(byId('d_ajie').name).toBe('山鬼')
   })
 
   it('复用进已有同名顶层资产的项目 → 被挡；换个项目 → 成功', () => {
-    // 先把团队库「苏晚」复用进霓虹东京（此前没有苏晚）→ 成功
-    expect(store.getState().runReuse('a_suwan', 'proj_neon').ok).toBe(true)
-    const before = projCount('proj_neon')
+    // 先把团队库「苏晚」复用进都市日常（此前没有苏晚）→ 成功
+    expect(store.getState().runReuse('a_suwan', 'proj_daily').ok).toBe(true)
+    const before = projCount('proj_daily')
     // 再复用一次同名进同项目 → 被挡
-    const r = store.getState().runReuse('a_suwan', 'proj_neon')
+    const r = store.getState().runReuse('a_suwan', 'proj_daily')
     expect(r.ok).toBe(false)
     expect(r.message).toContain('改名')
-    expect(projCount('proj_neon')).toBe(before) // 没落库
-    // 复用进没有苏晚的另一个项目（山海志）→ 成功
-    expect(store.getState().runReuse('a_suwan', 'proj_shanhai').ok).toBe(true)
+    expect(projCount('proj_daily')).toBe(before) // 没落库
+    // 改个名再复用进同一项目 → 成功（演示只保留一个项目，用改名验"去重是按名字"）
+    expect(store.getState().renameAsset('a_suwan', '苏晚·备份').ok).toBe(true)
+    expect(store.getState().runReuse('a_suwan', 'proj_daily').ok).toBe(true)
   })
 
   it('直接复用进已有同名的项目 → 被挡', () => {
-    // 广场「赛博女警」先直接复用进霓虹东京 → 成功
-    expect(store.getState().runDirectReuse('a_cyber_police', 'proj_neon').ok).toBe(true)
+    // 广场「赛博女警」先直接复用进都市日常 → 成功
+    expect(store.getState().runDirectReuse('a_cyber_police', 'proj_daily').ok).toBe(true)
     // 再直接复用同名进同项目 → 被挡
-    const r = store.getState().runDirectReuse('a_cyber_police', 'proj_neon')
+    const r = store.getState().runDirectReuse('a_cyber_police', 'proj_daily')
     expect(r.ok).toBe(false)
     expect(r.message).toContain('改名')
   })
@@ -411,10 +412,10 @@ describe('审批中心（子账号存入 → 主账号审批）', () => {
   const teamCount = () =>
     store.getState().world.assets.filter((a: { scope: string }) => a.scope === 'team').length
 
-  // 让小林（子账号，分配了霓虹东京）提交一条资产存入申请，返回申请 id
+  // 让小林（子账号，分配了都市日常）提交一条资产存入申请，返回申请 id
   function subApplies() {
     store.getState().setCurrentUser('u_lin')
-    store.getState().runDeposit('a_ajie') // 阿杰在霓虹东京
+    store.getState().runDeposit('d_ajie') // 阿杰在都市日常
     const appl = store.getState().applications.at(-1)
     return appl.id as string
   }
@@ -476,15 +477,15 @@ describe('广场投稿（主/子账号发起 → admin 审核）', () => {
   })
 
   it('子账号也能发起广场投稿（被分配项目里的资产）', () => {
-    store.getState().setCurrentUser('u_lin') // 小林，分配了霓虹东京
-    const r = store.getState().runContribute('a_ajie') // 阿杰在霓虹东京
+    store.getState().setCurrentUser('u_lin') // 小林，分配了都市日常
+    const r = store.getState().runContribute('d_ajie') // 阿杰在都市日常
     expect(r.ok).toBe(true)
     expect(store.getState().plazaSubmissions[0].submitterId).toBe('u_lin')
   })
 
   it('admin 通过投稿 → 广场 +1、投稿变 approved、投稿人收到通知', () => {
     store.getState().setCurrentUser('u_lin')
-    store.getState().runContribute('a_ajie')
+    store.getState().runContribute('d_ajie')
     const sid = store.getState().plazaSubmissions.at(-1).id
     const before = plazaCount()
     store.getState().setCurrentUser('u_admin') // 切到 admin 审核
@@ -531,7 +532,7 @@ describe('广场素材下架 / 删除（admin 下架 · 作者删除；不影响
   // 小林投稿 a_ajie → admin 通过上架，返回这份广场素材的 id（contributedBy = 小林）
   function contributeAndPublish() {
     store.getState().setCurrentUser('u_lin')
-    store.getState().runContribute('a_ajie')
+    store.getState().runContribute('d_ajie')
     const sid = store.getState().plazaSubmissions.at(-1).id
     store.getState().setCurrentUser('u_admin')
     store.getState().approvePlazaSubmission(sid)
@@ -541,7 +542,7 @@ describe('广场素材下架 / 删除（admin 下架 · 作者删除；不影响
   }
 
   it('admin 下架官方素材 → 数据仍在但状态变 delisted；已直接复用出去的副本仍在（下架 ≠ 删除）', () => {
-    store.getState().runDirectReuse('a_cyber_police', 'proj_neon') // Sunny 先复用一份出去
+    store.getState().runDirectReuse('a_cyber_police', 'proj_daily') // Sunny 先复用一份出去
     const copyId = store.getState().world.assets.at(-1).id
     const before = plazaCount()
     store.getState().setCurrentUser('u_admin')
@@ -602,7 +603,7 @@ describe('下架 → 重新上架往返（审核中心改造）', () => {
   // 小林投稿 a_ajie → admin 上架，返回这份广场素材 id（contributedBy = 小林）
   function publishAjie(): string {
     store.getState().setCurrentUser('u_lin')
-    store.getState().runContribute('a_ajie')
+    store.getState().runContribute('d_ajie')
     const sid = store.getState().plazaSubmissions.at(-1).id
     store.getState().setCurrentUser('u_admin')
     store.getState().approvePlazaSubmission(sid)
@@ -668,7 +669,7 @@ describe('审核中心通知补齐（deposit_submitted / plaza_submit_notice）'
   it('子账号 runDeposit → 主账号收到 deposit_submitted', () => {
     store.getState().setCurrentUser('u_lin')
     const before = parentNotis('deposit_submitted').length
-    store.getState().runDeposit('a_ajie') // 阿杰在霓虹东京，小林被分配
+    store.getState().runDeposit('d_ajie') // 阿杰在都市日常，小林被分配
     expect(parentNotis('deposit_submitted').length).toBe(before + 1)
     // v2：点通知直接弹开团队库上的存入申请抽屉，不再跳 #/review。
     expect(parentNotis('deposit_submitted').at(-1).link).toBe('#/team/deposits')
@@ -677,7 +678,7 @@ describe('审核中心通知补齐（deposit_submitted / plaza_submit_notice）'
   it('子账号 runContribute → 主账号收到 plaza_submit_notice（知会，不拦截、不可点）', () => {
     store.getState().setCurrentUser('u_lin')
     const before = parentNotis('plaza_submit_notice').length
-    const r = store.getState().runContribute('a_ajie')
+    const r = store.getState().runContribute('d_ajie')
     expect(r.ok).toBe(true) // 不拦截，投稿照常成立
     expect(parentNotis('plaza_submit_notice').length).toBe(before + 1)
     // v2：知会型通知没有可执行动作，link 不填。
@@ -689,7 +690,7 @@ describe('审核中心行数据（selectPlazaReviewRows）', () => {
   it('一份通过并上架的投稿只出一行（不重复）；官方素材投稿人显示「官方」', () => {
     // 小林投稿 a_ajie → admin 通过上架
     store.getState().setCurrentUser('u_lin')
-    store.getState().runContribute('a_ajie')
+    store.getState().runContribute('d_ajie')
     const sid = store.getState().plazaSubmissions.at(-1).id
     store.getState().setCurrentUser('u_admin')
     store.getState().approvePlazaSubmission(sid)
@@ -730,13 +731,13 @@ describe('删除分层（R1：项目库归零 → 空壳；团队库归零 → �
   const find = (id: string) => store.getState().world.assets.find((a: { id: string }) => a.id === id)
 
   it('clearAssetImages：清空图片、降级空壳，但保留 name / prompt / voice', () => {
-    // 给阿杰（项目·霓虹东京）设一个音色，记下提示词与名字
-    store.getState().setVoice('a_ajie', { id: 'v_test', type: 'preset', name: '测试音色', previewUrl: 'x' })
-    const before = find('a_ajie')
+    // 给阿杰（项目·都市日常）设一个音色，记下提示词与名字
+    store.getState().setVoice('d_ajie', { id: 'v_test', type: 'preset', name: '测试音色', previewUrl: 'x' })
+    const before = find('d_ajie')
     const { prompt, name } = before
-    const r = store.getState().clearAssetImages('a_ajie')
+    const r = store.getState().clearAssetImages('d_ajie')
     expect(r.ok).toBe(true)
-    const after = find('a_ajie')
+    const after = find('d_ajie')
     expect(after.status).toBe('empty')
     expect(after.cover).toBe('')
     expect(after.candidates).toBeUndefined()
@@ -746,16 +747,16 @@ describe('删除分层（R1：项目库归零 → 空壳；团队库归零 → �
   })
 
   it('空壳不可流转：存入 / 贡献被 assertDone 红线挡下', () => {
-    store.getState().clearAssetImages('a_ajie')
-    expect(store.getState().runDeposit('a_ajie').ok).toBe(false)
-    expect(store.getState().runContribute('a_ajie').ok).toBe(false)
+    store.getState().clearAssetImages('d_ajie')
+    expect(store.getState().runDeposit('d_ajie').ok).toBe(false)
+    expect(store.getState().runContribute('d_ajie').ok).toBe(false)
   })
 
   it('空壳生成 1 张 →（0808）自动定稿：status done + cover = 那张 + 池中 1 张', () => {
-    store.getState().clearAssetImages('a_ajie')
-    const r = store.getState().appendCandidates('a_ajie', ['/gen.png'])
+    store.getState().clearAssetImages('d_ajie')
+    const r = store.getState().appendCandidates('d_ajie', ['/gen.png'])
     expect(r.ok).toBe(true)
-    const after = find('a_ajie')
+    const after = find('d_ajie')
     // 0808：本批 1 张 + 原本无定稿 + 原本池空 → 自动定稿。
     expect(after.status).toBe('done')
     expect(after.candidates.length).toBe(1)
@@ -772,6 +773,6 @@ describe('删除分层（R1：项目库归零 → 空壳；团队库归零 → �
 
   it('权限：admin 不能清空项目资产（canDeleteLibraryAsset 挡）', () => {
     store.getState().setCurrentUser('u_admin')
-    expect(store.getState().clearAssetImages('a_ajie').ok).toBe(false)
+    expect(store.getState().clearAssetImages('d_ajie').ok).toBe(false)
   })
 })

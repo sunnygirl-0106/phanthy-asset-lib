@@ -17,9 +17,12 @@
 
 import { describe, it, expect } from 'vitest'
 import { createSeedWorld } from '../data/seed'
+import { DEMO_ASSETS } from '../data/demoProject'
 
 describe('资产状态机不变式（0807 · §1.2）', () => {
   const world = createSeedWorld()
+  // 项目层的生成类资产不在种子里（演示时才灌入），这里补进来才有东西可校验。
+  world.assets.push(...DEMO_ASSETS)
   // 只校验"应当有候选池"的资产：项目层、非「其他」、非音频。
   const pooled = world.assets.filter(
     (a) => a.scope === 'project' && a.category !== 'other' && a.category !== 'audio',

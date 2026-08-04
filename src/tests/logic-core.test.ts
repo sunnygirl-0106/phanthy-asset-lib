@@ -15,8 +15,9 @@
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { parseHash, routeToHash } from '../hooks/useHashRoute'
-import type { World, Asset } from '../data/types'
-import { createSeedWorld, userById, assetById, projectById, IDS, DEMO_NEON_ASSETS } from '../data/seed'
+import type { World, Asset, User } from '../data/types'
+import { createSeedWorld, userById, assetById, projectById, IDS } from '../data/seed'
+import { DEMO_ASSETS } from '../data/demoProject'
 import {
   canBrowsePlaza,
   canBrowseTeamLibrary,
@@ -51,9 +52,9 @@ import {
 let world: World
 beforeEach(() => {
   world = createSeedWorld()
-  // 0805：霓虹东京那批资产（a_ajie 等）从种子挪进了 DEMO_NEON_ASSETS（演示时才灌入）。
-  // 这些沿用旧演员表的权限/流转用例，先把它们（深拷贝，防跨用例污染）补回 world 再断言。
-  world.assets.push(...DEMO_NEON_ASSETS.map((a) => JSON.parse(JSON.stringify(a)) as Asset))
+  // 项目里那批资产（d_ajie 等）不在种子里，演示时才灌入（见 data/demoProject.ts）。
+  // 权限/流转用例需要项目层的资产做样本，先把它们（深拷贝，防跨用例污染）补回 world 再断言。
+  world.assets.push(...DEMO_ASSETS.map((a) => JSON.parse(JSON.stringify(a)) as Asset))
 })
 
 /* ═══════════════ 一、权限矩阵 · 广场 ═══════════════ */
@@ -71,7 +72,7 @@ describe('广场权限', () => {
 
   it('贡献到广场按层收口（v6）：主账号团队库/项目库都行；子账号仅项目库；admin 不投', () => {
     const teamAsset = assetById(world, 'a_suwan') // 团队库
-    const projAsset = assetById(world, 'a_ajie') // 项目库
+    const projAsset = assetById(world, 'd_ajie') // 项目库
     const plazaAsset = assetById(world, 'a_cyber_police') // 广场
     const sunny = userById(world, IDS.sunny)
     const lin = userById(world, IDS.lin)
@@ -109,33 +110,38 @@ describe('团队库门A（子账号默认可浏览，主账号可单独关）', 
   })
 
   it('主账号看不到别的团队的团队库', () => {
-    const teamB = getTeam(world, IDS.teamB)!
-    expect(canBrowseTeamLibrary(userById(world, IDS.sunny), teamB)).toBe(false)
+    // 演示只保留一个团队，这里造一个"别人的团队"来验规则本身。
+    const otherTeam = { id: 'team_other', ownerId: 'u_other' }
+    expect(canBrowseTeamLibrary(userById(world, IDS.sunny), otherTeam)).toBe(false)
   })
 })
 
 /* ═══════════════ 三、项目隔离（v4：门 B 已砍，子账号只看被分配项目）═══════════════ */
 describe('项目隔离（别人项目一律不可见，没有"看全部项目"的口子）', () => {
-  it('主账号能看本团队所有项目资产，但看不到别团队的', () => {
+  /** 造一份"别的团队的项目资产"：world 里只剩一个团队，用它验跨团队不可见。 */
+  function foreignAsset(w: World): Asset {
+    return { ...assetById(w, 'd_ajie'), id: 'tmp_foreign', scopeId: 'proj_of_another_team' }
+  }
+
+  it('主账号能看本团队的项目资产，但看不到别团队的', () => {
     const sunny = userById(world, IDS.sunny)
-    expect(canSee(world, sunny, assetById(world, 'a_ajie'))).toBe(true) // 霓虹东京·本团队
-    expect(canSee(world, sunny, assetById(world, 'a_shangui'))).toBe(true) // 山海志·本团队
-    expect(canSee(world, sunny, assetById(world, 'a_captain'))).toBe(false) // 星际公约·团队B
+    expect(canSee(world, sunny, assetById(world, 'd_ajie'))).toBe(true) // 都市日常·本团队
+    expect(canSee(world, sunny, foreignAsset(world))).toBe(false) // 别团队的项目
   })
 
   it('子账号只看到被分配的项目资产，没分配的一律看不到', () => {
-    const lin = userById(world, IDS.lin) // 分配到霓虹东京
-    const may = userById(world, IDS.may) // 分配到都市迷案
-    expect(canSee(world, lin, assetById(world, 'a_ajie'))).toBe(true) // 分配了 → 看得到
-    expect(canSee(world, lin, assetById(world, 'a_linjingguan'))).toBe(false) // 没分配都市迷案 → 看不到
-    expect(canSee(world, may, assetById(world, 'a_linjingguan'))).toBe(true) // 分配了都市迷案
-    expect(canSee(world, may, assetById(world, 'a_ajie'))).toBe(false) // 没分配霓虹东京
+    const lin = userById(world, IDS.lin) // 分配到都市日常
+    const may = userById(world, IDS.may) // 没被分配任何项目
+    expect(canSee(world, lin, assetById(world, 'd_ajie'))).toBe(true) // 分配了 → 看得到
+    expect(canSee(world, may, assetById(world, 'd_ajie'))).toBe(false) // 没分配 → 看不到
+    expect(canSee(world, lin, foreignAsset(world))).toBe(false) // 别团队的更看不到
   })
 
   it('admin 能看到所有项目的资产（治理视角）', () => {
     const admin = userById(world, IDS.admin)
-    expect(canSee(world, admin, assetById(world, 'a_captain'))).toBe(true)
-    expect(canSee(world, admin, assetById(world, 'a_ajie'))).toBe(true)
+    expect(canSee(world, admin, assetById(world, 'd_ajie'))).toBe(true) // 项目层
+    expect(canSee(world, admin, assetById(world, 'a_suwan'))).toBe(true) // 团队库
+    expect(canSee(world, admin, assetById(world, 'a_cyber_police'))).toBe(true) // 广场
   })
 })
 
@@ -143,30 +149,30 @@ describe('项目隔离（别人项目一律不可见，没有"看全部项目"�
 describe('直接复用（广场→项目·产生独立副本）', () => {
   it('产生独立副本：新 id、进目标项目、记录血缘', () => {
     const src = assetById(world, 'a_cyber_police')
-    const copy = directReuse(src, IDS.projNeon)
+    const copy = directReuse(src, IDS.projDaily)
     expect(copy.id).not.toBe(src.id)
     expect(copy.scope).toBe('project')
-    expect(copy.scopeId).toBe(IDS.projNeon)
+    expect(copy.scopeId).toBe(IDS.projDaily)
     expect(copy.masterId).toBe(src.id)
   })
 
   it('改副本名字不影响母版（名字是本地的）', () => {
     const src = assetById(world, 'a_cyber_police')
-    const copy = directReuse(src, IDS.projNeon)
+    const copy = directReuse(src, IDS.projDaily)
     copy.name = '林警官'
     expect(src.name).toBe('赛博女警')
   })
 
   it('音色默认带入，也可以在直接复用时取消', () => {
     const src = assetById(world, 'a_cyber_police')
-    expect(directReuse(src, IDS.projNeon).voice).toBeTruthy()
-    expect(directReuse(src, IDS.projNeon, false).voice).toBeUndefined()
+    expect(directReuse(src, IDS.projDaily).voice).toBeTruthy()
+    expect(directReuse(src, IDS.projDaily, false).voice).toBeUndefined()
   })
 
   it('副本只带定稿图，候选池不跟着走（0803 流转口径）', () => {
     // 候选池只属于项目层（0804 · 规则 14）。0805 起种子里项目库候选池恒 1，
     // 这里手造一份多候选的项目库源，验证副本不带候选。
-    const base = assetById(world, 'a_ajie')
+    const base = assetById(world, 'd_ajie')
     const src = {
       ...base,
       cover: `${base.cover.split('?')[0]}?g=1`,
@@ -176,18 +182,17 @@ describe('直接复用（广场→项目·产生独立副本）', () => {
       ],
     }
     expect(src.candidates.length).toBeGreaterThan(1)
-    const copy = directReuse(src, IDS.projNeon)
+    const copy = directReuse(src, IDS.projDaily)
     expect(copy.cover).toBe(src.cover) // 定稿带上
     expect(copy.candidates).toBeUndefined() // 候选池不带
   })
 
   it('权限：主账号可在本团队项目直接复用；子账号仅限被分配的项目', () => {
-    const neon = projectById(world, IDS.projNeon)
-    const urban = projectById(world, IDS.projUrban)
-    expect(canDirectReuse(userById(world, IDS.sunny), neon)).toBe(true)
-    expect(canDirectReuse(userById(world, IDS.lin), neon)).toBe(true) // 小林分配了霓虹东京
-    expect(canDirectReuse(userById(world, IDS.lin), urban)).toBe(false) // 但没分配都市迷案
-    expect(canDirectReuse(userById(world, IDS.admin), neon)).toBe(false)
+    const daily = projectById(world, IDS.projDaily)
+    expect(canDirectReuse(userById(world, IDS.sunny), daily)).toBe(true)
+    expect(canDirectReuse(userById(world, IDS.lin), daily)).toBe(true) // 小林分配了都市日常
+    expect(canDirectReuse(userById(world, IDS.may), daily)).toBe(false) // 阿May 没分配
+    expect(canDirectReuse(userById(world, IDS.admin), daily)).toBe(false)
   })
 })
 
@@ -203,25 +208,25 @@ describe('收藏与复用（拉一份就是独立副本，不再有跟随选项�
 
   it('从团队库复用进项目：独立副本，只带定稿图、候选池不带', () => {
     const suwan = assetById(world, 'a_suwan')
-    const copy = reuse(suwan, IDS.projNeon)
+    const copy = reuse(suwan, IDS.projDaily)
     expect(copy.scope).toBe('project')
-    expect(copy.scopeId).toBe(IDS.projNeon)
+    expect(copy.scopeId).toBe(IDS.projDaily)
     expect(copy.masterId).toBe(suwan.id)
     expect(copy.cover).toBe(suwan.cover) // 定稿 = 原素模图
     expect(copy.candidates).toBeUndefined() // 候选池不跟着走
   })
 
   it('权限：复用（团队库→项目）主账号本团队任意项目，子账号仅被分配项目', () => {
-    const neon = projectById(world, IDS.projNeon)
+    const neon = projectById(world, IDS.projDaily)
     expect(canReuseFromTeam(userById(world, IDS.sunny), neon)).toBe(true)
-    expect(canReuseFromTeam(userById(world, IDS.may), neon)).toBe(false) // 阿May 没分配霓虹东京
+    expect(canReuseFromTeam(userById(world, IDS.may), neon)).toBe(false) // 阿May 没分配都市日常
   })
 })
 
 /* ═══════════════ 六、流转 · 存入 ═══════════════ */
 describe('存入（项目→团队库）', () => {
   it('主账号直接存入为团队母版（新母版：无 masterId）', () => {
-    const src = assetById(world, 'a_ajie')
+    const src = assetById(world, 'd_ajie')
     const res = deposit(src, IDS.teamA, userById(world, IDS.sunny))
     expect(res.kind).toBe('asset')
     if (res.kind === 'asset') {
@@ -232,7 +237,7 @@ describe('存入（项目→团队库）', () => {
   })
 
   it('子账号存入只生成"待审批申请"，不直接写团队库', () => {
-    const src = assetById(world, 'a_ajie')
+    const src = assetById(world, 'd_ajie')
     const res = deposit(src, IDS.teamA, userById(world, IDS.lin))
     expect(res.kind).toBe('application')
     if (res.kind === 'application') {
@@ -242,7 +247,7 @@ describe('存入（项目→团队库）', () => {
   })
 
   it('admin 不参与存入，会被拦下', () => {
-    const src = assetById(world, 'a_ajie')
+    const src = assetById(world, 'd_ajie')
     expect(() => deposit(src, IDS.teamA, userById(world, IDS.admin))).toThrow(AssetRuleError)
   })
 
@@ -264,8 +269,9 @@ describe('存入（项目→团队库）', () => {
 
   it('只有该子账号的主账号能批他的资产存入申请', () => {
     const lin = userById(world, IDS.lin)
+    const otherOwner: User = { id: 'u_other', name: '别团队主账号', avatar: '', role: 'owner', teamId: 'team_other' }
     expect(canApproveDeposit(userById(world, IDS.sunny), lin)).toBe(true)
-    expect(canApproveDeposit(userById(world, IDS.ze), lin)).toBe(false) // 别团队主账号无权
+    expect(canApproveDeposit(otherOwner, lin)).toBe(false) // 别团队主账号无权
   })
 })
 
@@ -277,7 +283,7 @@ describe('红线：非成品不能被复用/存入/贡献', () => {
   }
 
   it('对"生成中"的资产做直接复用会抛错', () => {
-    expect(() => directReuse(makeGenerating(world), IDS.projNeon)).toThrow(AssetRuleError)
+    expect(() => directReuse(makeGenerating(world), IDS.projDaily)).toThrow(AssetRuleError)
   })
 
   it('对"生成中"的资产做收藏也会抛错', () => {
@@ -289,25 +295,25 @@ describe('红线：非成品不能被复用/存入/贡献', () => {
 describe('canRegenerate（重新生成 / 新增造型权限 · 0803：只有项目库能生成）', () => {
   it('主账号：只有项目库能生成，团队库不能', () => {
     const sunny = userById(world, IDS.sunny)
-    expect(canRegenerate(sunny, assetById(world, 'a_ajie'))).toBe(true) // 项目库
+    expect(canRegenerate(sunny, assetById(world, 'd_ajie'))).toBe(true) // 项目库
     expect(canRegenerate(sunny, assetById(world, 'a_suwan'))).toBe(false) // 团队库（改动五：生产只在项目里）
   })
   it('子账号：项目库能、团队库不能', () => {
     const lin = userById(world, IDS.lin)
-    expect(canRegenerate(lin, assetById(world, 'a_ajie'))).toBe(true) // 项目库
+    expect(canRegenerate(lin, assetById(world, 'd_ajie'))).toBe(true) // 项目库
     expect(canRegenerate(lin, assetById(world, 'a_suwan'))).toBe(false) // 团队库
   })
   it('广场恒 false；admin 恒 false', () => {
     const plaza = assetById(world, 'a_cyber_police')
     expect(canRegenerate(userById(world, IDS.sunny), plaza)).toBe(false) // 广场对谁都不行
-    expect(canRegenerate(userById(world, IDS.admin), assetById(world, 'a_ajie'))).toBe(false) // admin 恒不行
+    expect(canRegenerate(userById(world, IDS.admin), assetById(world, 'd_ajie'))).toBe(false) // admin 恒不行
     expect(canRegenerate(userById(world, IDS.admin), plaza)).toBe(false)
   })
 })
 
 describe('canViewPrompt（提示词可见性）', () => {
   it('项目库/团队库可看；广场本期不给看', () => {
-    expect(canViewPrompt(assetById(world, 'a_ajie'))).toBe(true) // 项目库
+    expect(canViewPrompt(assetById(world, 'd_ajie'))).toBe(true) // 项目库
     expect(canViewPrompt(assetById(world, 'a_suwan'))).toBe(true) // 团队库
     expect(canViewPrompt(assetById(world, 'a_cyber_police'))).toBe(false) // 广场
   })
@@ -319,30 +325,30 @@ describe('提示词随副本走（cloneForCopy 带上 prompt）', () => {
     const cyber = assetById(world, 'a_cyber_police') // 广场角色，带 prompt
     expect(cyber.prompt).toBeTruthy() // 种子已按类目补上提示词
 
-    expect(directReuse(cyber, IDS.projNeon).prompt).toBe(cyber.prompt)
+    expect(directReuse(cyber, IDS.projDaily).prompt).toBe(cyber.prompt)
 
     const suwan = assetById(world, 'a_suwan')
-    expect(reuse(suwan, IDS.projNeon).prompt).toBe(suwan.prompt)
+    expect(reuse(suwan, IDS.projDaily).prompt).toBe(suwan.prompt)
     expect(favorite(cyber, IDS.teamA).prompt).toBe(cyber.prompt)
 
-    const ajie = assetById(world, 'a_ajie')
+    const ajie = assetById(world, 'd_ajie')
     expect(materializeDeposit(ajie, IDS.teamA).prompt).toBe(ajie.prompt)
   })
 })
 
 /* ═══════════════ 九、种子不变式（0803 修订：空壳归位 + 团队库无候选池）═══════════════ */
 describe('种子不变式', () => {
-  it('createSeedWorld 里霓虹东京 character/costume/scene/prop 四类资产数为 0（0805 · 初始态清零）', () => {
+  it('createSeedWorld 里项目 character/costume/scene/prop 四类资产数为 0（0805 · 初始态清零）', () => {
     // 注意：这条验的是"原始种子"（不含 beforeEach 补进来的 DEMO），所以直接 createSeedWorld()。
     const w = createSeedWorld()
     const core = w.assets.filter(
-      (a) => a.scope === 'project' && a.scopeId === IDS.projNeon &&
+      (a) => a.scope === 'project' && a.scopeId === IDS.projDaily &&
         ['character', 'costume', 'scene', 'prop'].includes(a.category),
     )
     expect(core.length).toBe(0)
-    // 音频 /「其他」不清零：霓虹东京仍有音频与留存物。
-    expect(w.assets.some((a) => a.scopeId === IDS.projNeon && a.category === 'audio')).toBe(true)
-    expect(w.assets.some((a) => a.scopeId === IDS.projNeon && a.category === 'other')).toBe(true)
+    // 音频 /「其他」不清零：项目里仍有音频与留存物。
+    expect(w.assets.some((a) => a.scopeId === IDS.projDaily && a.category === 'audio')).toBe(true)
+    expect(w.assets.some((a) => a.scopeId === IDS.projDaily && a.category === 'other')).toBe(true)
   })
 
   it('团队库永不出现空壳（空壳只在项目里）', () => {
@@ -357,14 +363,20 @@ describe('种子不变式', () => {
     }
   })
 
-  it('所有项目库成品资产候选池恒 1，且 candidates[0].url === cover（0805 · 只展示定稿）', () => {
+  it('项目库成品：候选池 4 张，首张即定稿（一次生成出 4 张候选，第 1 张自动定稿）', () => {
     // 只针对四类"生成资产"（角色/服装/场景/道具）；音频与「其他」留存物没有候选池、不在此列。
     const gen = ['character', 'costume', 'scene', 'prop']
     const dones = world.assets.filter((a) => a.scope === 'project' && a.status === 'done' && gen.includes(a.category))
     expect(dones.length).toBeGreaterThan(0)
     for (const a of dones) {
-      expect(a.candidates?.length).toBe(1)
-      expect(a.candidates![0].url).toBe(a.cover)
+      expect(a.candidates?.length).toBe(4)
+      expect(a.candidates![0].url).toBe(a.cover) // 首张 = 定稿
+    }
+  })
+
+  it('★不变量：候选池非空的资产必有定稿（不允许"有图无定稿"）', () => {
+    for (const a of world.assets) {
+      if (a.candidates?.length) expect(a.cover).toBeTruthy()
     }
   })
 
@@ -376,12 +388,13 @@ describe('种子不变式', () => {
     }
   })
 
-  it('项目库空壳都有参考图与来源资产（含 DEMO 补入的三份造型）', () => {
-    const shells = world.assets.filter((a) => a.scope === 'project' && a.status === 'empty')
-    expect(shells.length).toBeGreaterThanOrEqual(4) // 霓虹东京 3 份造型 + 山海志 1 份
-    for (const s of shells) {
-      expect(s.referenceImages?.length).toBeGreaterThan(0)
-      expect(s.referencedFrom).toBeTruthy()
+  it('项目库造型资产都有来源与参考图（角色定稿 + 服装定稿，规则 16）', () => {
+    const looks = world.assets.filter((a) => a.scope === 'project' && a.referencedFrom)
+    expect(looks.length).toBeGreaterThanOrEqual(2) // 阿杰·西装造型 / 苏可·睡衣造型
+    for (const l of looks) {
+      expect(l.referenceImages?.length).toBe(2) // 第 1 张角色、第 2 张服装
+      expect(l.referenceLabels?.length).toBe(2)
+      expect(l.referencedFrom).toBeTruthy()
     }
   })
 
@@ -416,7 +429,7 @@ describe('removeCandidate / setFinal：候选池增删与设定稿', () => {
   // 0805：种子里项目库候选池恒 1（只展示定稿）。这几条验的是"多候选时的增删"纯函数逻辑，
   // 手造一份多候选的项目库源（定稿=第一张）。
   const multiCand = (): Asset => ({
-    ...assetById(world, 'a_ajie'),
+    ...assetById(world, 'd_ajie'),
     cover: '/x.png?g=1',
     candidates: [
       { id: 'c1', url: '/x.png?g=1', createdAt: 0 },
