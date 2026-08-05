@@ -41,6 +41,34 @@
   font-size: 12px;
 }
 
+/* 空壳卡片：有提示词时把提示词当封面预览（两行截断，前后加中文引号）。 */
+.promptPreview {
+  margin: 0;
+  padding: 14px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.55);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.promptPreview::before { content: '“'; }
+.promptPreview::after { content: '”'; }
+
+/* 空壳右下角小标：深色半透明底。 */
+.emptyTag {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--text-main);
+  backdrop-filter: blur(2px);
+}
+
 /* 左上角徽章 */
 .badges {
   position: absolute;
@@ -61,9 +89,6 @@
 }
 
 .badgeCopy { background: rgba(180, 83, 9, 0.85); }
-
-/* 「待定稿」角标：青绿描边（与详情页徽章同源），跟其它状态区分开。 */
-.badgePending { color: var(--accent); border: 1px solid rgba(var(--accent-rgb), 0.45); background: rgba(0, 0, 0, 0.62); }
 
 /* 「其他」媒介徽章：中性青灰底，和副本(橙)/状态(黑)区分开 */
 .badgeMedia { background: rgba(37, 99, 120, 0.9); }

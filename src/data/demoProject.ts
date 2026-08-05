@@ -17,8 +17,8 @@
  * 每份资产一个目录，`1.png` 恒为默认定稿，`2~4.png` 为候选：
  *   public/assets/proj-daily/<slug>/1.png … 4.png
  *
- * ── 不变量 ────────────────────────────────────────────────────────────
- * 候选池非空的资产必有且仅有一张定稿。取消定稿后不许退出详情页；新建资产强制选定稿。
+ * ── 不变量（0810）────────────────────────────────────────────────────
+ * 图片列表非空 ⇔ 有且仅有一张定稿。有图必有定稿，不存在"有图没定稿"的中间态。
  * ═══════════════════════════════════════════════════════════════════════ */
 
 import type { Asset, Category } from './types'
@@ -46,8 +46,7 @@ function made(
   return {
     id, category, name, scope: 'project', scopeId: IDS.projDaily,
     status: 'done', cover: p[0], candidates: cands(p),
-    // 素模/服装/场景/道具的参考图就是它自己的定稿图：重新生成时以自己为底。
-    referenceImages: [p[0]], referenceLabels: [name],
+    // 0810 自参考不入库：素模自己的定稿由详情页在渲染时派生成参考图第一槽，不写进数据。
     prompt: PROMPT[category], fields, tags: [], createdAt,
   }
 }

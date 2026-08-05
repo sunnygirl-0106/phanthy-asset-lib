@@ -15,13 +15,14 @@
  * ─────────────────────────────────────────────────────────────────────── */
 
 import { useEffect, useState } from 'react'
-import type { Category, Voice } from '../data/types'
+import type { Category, Voice, Scope } from '../data/types'
 import { useStore, useCurrentUser, type ActionResult } from '../store/useStore'
-import { canDirectReuse, canFavorite, canReuseFromTeam, canRemovePlazaAsset, canDeleteLibraryAsset, canContributeToPlaza, canViewPrompt, canRegenerate, isAdmin } from '../services/permission'
+import { canDirectReuse, canFavorite, canReuseFromTeam, canRemovePlazaAsset, canDeleteLibraryAsset, canViewPrompt, canRegenerate, isAdmin } from '../services/permission'
 import { coverOf } from '../services/assetService'
 import { COST_PER_IMAGE } from '../data/pricing'
 import { PRESET_VOICES } from '../data/presetVoices'
 import { CanvasAssetPanel, type PickedRef } from './canvas/CanvasAssetPanel'
+import { AssetSaveModal, type SaveIntent } from './AssetSaveModal'
 import { assetUrl } from '../utils/assets'
 import styles from './AssetDetail.module.css'
 
@@ -58,7 +59,7 @@ const QUALITY_OPTS = ['2K', '1K', '4K']
 const MODEL_OPTS = ['即梦 5.0', '即梦 4.0', 'Seedream 3.0']
 
 // 弹出的"目标选择"面板处于哪种模式
-type PickerMode = 'directReuse' | 'reuse' | 'favorite' | 'contribute' | 'deposit' | 'voice' | null
+type PickerMode = 'directReuse' | 'reuse' | 'favorite' | 'voice' | null
 
 /** 极简"提示词"角标图标。 */
 function PromptIcon() {
@@ -202,13 +203,11 @@ export function AssetDetail({
   const runDirectReuse = useStore((s) => s.runDirectReuse)
   const runFavorite = useStore((s) => s.runFavorite)
   const runReuse = useStore((s) => s.runReuse)
-  const runDeposit = useStore((s) => s.runDeposit)
-  const runContribute = useStore((s) => s.runContribute)
+  const runSendImage = useStore((s) => s.runSendImage)
   const runRemovePlaza = useStore((s) => s.runRemovePlaza)
   const runDeleteAsset = useStore((s) => s.runDeleteAsset)
   const runRemoveCandidate = useStore((s) => s.runRemoveCandidate)
   const runSetFinal = useStore((s) => s.runSetFinal)
-  const runUnsetFinal = useStore((s) => s.runUnsetFinal)
   const appendCandidates = useStore((s) => s.appendCandidates)
   const setPrompt = useStore((s) => s.setPrompt)
   const removeReferenceImage = useStore((s) => s.removeReferenceImage)
@@ -228,6 +227,8 @@ export function AssetDetail({
   const [renameResult, setRenameResult] = useState<ActionResult | null>(null)
   const [renaming, setRenaming] = useState(false)
   const [nameDraft, setNameDraft] = useState(asset?.name ?? '')
+  // 左栏「资产名称」字段（对齐 Figma）：常驻可编辑，失焦 / 回车即提交，改名失败回滚到原名。
+  const [nameField, setNameField] = useState(asset?.name ?? '')
   // 音色设置面板的两条路：挑预置 / 复刻
   const [voiceTab, setVoiceTab] = useState<'preset' | 'clone'>('preset')
   const [includeVoice, setIncludeVoice] = useState(true)
@@ -249,12 +250,20 @@ export function AssetDetail({
   const [genCount, setGenCount] = useState(4)
   // 参考图选择器（0804）：null=关；'menu'=二选一；'library'=从素材库多选。
   const [refPicker, setRefPicker] = useState<'menu' | 'library' | null>(null)
+  // 图片级流转（0810）：选中一张图送出 → 打开统一上传弹窗（只出一层）。
+  const [sendImg, setSendImg] = useState<{ url: string; scope: 'team' | 'plaza' } | null>(null)
+  // 图片列表加号（0810）：null=关；'menu'=从素材库/本地二选一；'library'=从素材库挑图。
+  const [addPicker, setAddPicker] = useState<'menu' | 'library' | null>(null)
+  // 参考图第一槽：本次生成要不要以当前定稿为底（派生，不入库）。切换资产时重置为 true。
+  const [useSelfRef, setUseSelfRef] = useState(true)
 
   // Esc：先收子面板 / 改名，再关整扇弹窗
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      if (preview) setPreview(null)
+      if (sendImg) setSendImg(null)
+      else if (addPicker) setAddPicker(null)
+      else if (preview) setPreview(null)
       else if (refPicker) setRefPicker(null)
       else if (promptOpen) setPromptOpen(false)
       else if (picker) setPicker(null)
@@ -263,14 +272,17 @@ export function AssetDetail({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [preview, refPicker, promptOpen, picker, renaming, onClose])
+  }, [sendImg, addPicker, preview, refPicker, promptOpen, picker, renaming, onClose])
 
   // 切换到另一份资产时，清掉三栏面板的本地态（生成中 / 中栏选中 / 提示词草稿）。
   useEffect(() => {
     setGenerating(null)
     setCenterKeptId(null)
     setRefPicker(null)
+    setAddPicker(null)
+    setUseSelfRef(true)
     setPromptDraft(asset?.prompt ?? '')
+    setNameField(asset?.name ?? '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assetId])
 
@@ -330,7 +342,7 @@ export function AssetDetail({
     if (isOther) return setConfirmKind('whole') // 「其他」是成品留存物，删就是删
     if (canRemovePlaza) return setConfirmKind('whole') // 广场下架/删投稿
     // 池里还有别的图 → 交给 removeCandidate 处理（它会顶一张上来或降级空壳）。
-    // 待定稿态 cover === ''，找不到定稿时兜底删第一张，别错走归零分流。
+    // 有图必有定稿，正常能按 cover 找到定稿；兜底删第一张，别错走归零分流。
     if (candidates.length > 1) {
       const target = (asset!.cover && candidates.find((c) => c.url === asset!.cover)) || candidates[0]
       return setResult(runRemoveCandidate(asset!.id, target.id))
@@ -357,9 +369,9 @@ export function AssetDetail({
   const hasGenPanel = canRegen && !isOther
   // 弹窗加宽：出左栏 或 出右栏（全部图片）时都用宽版布局。
   const wide = hasGenPanel || hasCandidatePool
-  // 定稿是按 url 认的候选；待定稿时 cover 为空 → finalCandId 为 undefined。
+  // 定稿是按 url 认的候选；空壳时 cover 为空 → finalCandId 为 undefined。
   const finalCandId = asset.cover ? candidates.find((c) => c.url === asset.cover)?.id : undefined
-  // 中栏预览：优先用户点选的那张 → 定稿 → 池里第一张（待定稿态的默认预览）。
+  // 中栏预览：优先用户点选的那张 → 定稿 → 池里第一张兜底。
   const centerCand =
     (centerKeptId ? candidates.find((c) => c.id === centerKeptId) : undefined) ||
     (finalCandId ? candidates.find((c) => c.id === finalCandId) : undefined) ||
@@ -370,10 +382,20 @@ export function AssetDetail({
   const centerIsFinal = centerCand ? centerCand.id === finalCandId : !!coverImg
   // 定稿是项目层的生产概念：团队库 / 广场里每一张都已经是定稿，标了等于没标。
   const showFinalBadge = asset.scope === 'project'
+  // 当前预览的这张，是不是就是"当前定稿"（= 参考图第一槽 selfRef 派生的那张）。
+  const isCenterCover = !!centerCand && baseUrl(centerCand.url) === baseUrl(asset.cover ?? '')
   // 当前预览的这张，是不是已经在参考图里了。
   // ⚠️ 必须按 baseUrl 比：候选池的 url 带 ?g=N 去重后缀，参考图存的是不带后缀的裸地址
   //    （见 seed.ts 里素模的 cover 与 referenceImages），裸字符串比较永远不相等。
-  const isCenterInRefs = !!centerCand && referenceImages.some((u) => baseUrl(u) === baseUrl(centerCand.url))
+  // 两条路径都算"已是参考图"：① 已写进存量 referenceImages；② 它就是当前定稿、且自参考第一槽开着
+  //    （素模自己的定稿不入库、由 selfRef 派生成第一槽——只查 referenceImages 会漏判，按钮就一直显示"添加"）。
+  const isCenterInRefs =
+    !!centerCand &&
+    (referenceImages.some((u) => baseUrl(u) === baseUrl(centerCand.url)) || (isCenterCover && useSelfRef))
+
+  // 参考图第一槽（0810）：资产自己的当前定稿，渲染时派生、不写进 referenceImages。
+  // 定稿一换第一槽自动跟着换（因为是派生的）；关掉只影响本次生成，退出重进恢复。
+  const selfRef = asset.cover && useSelfRef ? { url: baseUrl(asset.cover), label: '当前定稿' } : null
 
   /** 生成：先进「生成中」骨架态，1.2s 后把 genCount 张直接并入候选池，并自动预览第一张。 */
   function doGenerate() {
@@ -401,14 +423,28 @@ export function AssetDetail({
   }
 
   /**
-   * 上传本地图片作为这份资产的图（不是参考图）：并入候选池，进待定稿等用户拍板。
-   * 传 allowAutoFinal=false——上传是用户主动放进来的探索行为，即便是第一张也不代他定稿。
+   * 上传本地图片作为这份资产的图（不是参考图）：并入图片列表。
+   * 0810：资产原本没图时，这张自动成为定稿（有图必有定稿）。
    */
   function uploadLocalImage(file: File | null) {
     if (!file) return
     const url = URL.createObjectURL(file)
-    const r = appendCandidates(asset!.id, [url], false)
-    setResult(r.ok ? { ok: true, message: '已上传，挑一张点「设为定稿」' } : r)
+    setResult(appendCandidates(asset!.id, [url]))
+  }
+
+  /** 图片列表加号：从素材库挑一张图并入这份资产。 */
+  function confirmAddFromLibrary(pickedItems: PickedRef[]) {
+    if (pickedItems.length === 0) return setAddPicker(null)
+    setResult(appendCandidates(asset!.id, [pickedItems[0].cover]))
+    setAddPicker(null)
+  }
+
+  /** 图片级流转：把选中的这张图送出去（存入团队库 / 贡献广场）。 */
+  function confirmSend(intent: SaveIntent) {
+    if (intent.kind === 'flat') {
+      setResult(runSendImage({ target: intent.target, payload: intent.payload, sourceAssetId: intent.sourceAssetId }))
+    }
+    setSendImg(null)
   }
 
   /**
@@ -419,6 +455,12 @@ export function AssetDetail({
    */
   function toggleAsReference(cand: { url: string }) {
     const key = baseUrl(cand.url)
+    // 当前定稿走"自参考第一槽"这条派生路径：加/移只翻 useSelfRef，不往 referenceImages 里塞一份重复的
+    //    （与第一槽上那个 ✕ 同一个开关，行为对称）。
+    if (key === baseUrl(asset!.cover ?? '')) {
+      setUseSelfRef((v) => !v)
+      return
+    }
     const i = referenceImages.findIndex((u) => baseUrl(u) === key)
     if (i >= 0) {
       setResult(removeReferenceImage(asset!.id, i))
@@ -490,6 +532,7 @@ export function AssetDetail({
               onUse={() => {}}
               onPick={confirmRefPick}
               onClose={() => setRefPicker(null)}
+              alreadyPickedUrls={referenceImages.map(baseUrl)}
             />
           </div>
         </div>
@@ -519,11 +562,55 @@ export function AssetDetail({
     )
   }
 
+  /** 图片列表加号（0810）：从素材库添加 / 上传本地图片 二选一 —— 加入这份资产的图片列表。 */
+  function renderAddPicker() {
+    if (!addPicker) return null
+    if (addPicker === 'library') {
+      return (
+        <div className={styles.refPickRoot}>
+          <div className={styles.sscrim} onClick={() => setAddPicker(null)} />
+          <div className={styles.refPickPanel}>
+            <CanvasAssetPanel
+              pid={asset!.scopeId ?? ''}
+              projectName={refProject?.name ?? '当前项目'}
+              mode="pick"
+              onUse={() => {}}
+              onPick={confirmAddFromLibrary}
+              onClose={() => setAddPicker(null)}
+            />
+          </div>
+        </div>
+      )
+    }
+    return (
+      <div className={styles.msubroot}>
+        <div className={styles.sscrim} onClick={() => setAddPicker(null)} />
+        <div className={styles.msub}>
+          <h4 className={styles.subH}>添加图片</h4>
+          <div className={styles.refChoices}>
+            <button className={styles.refChoice} onClick={() => setAddPicker('library')}>
+              <b>从素材库添加</b>
+              <span>选一张已有资产的图，加入这份资产</span>
+            </button>
+            <label className={styles.refChoice} title="本地预览，接后端后落对象存储">
+              <b>上传本地图片</b>
+              <span>从本地选一张图，加入这份资产</span>
+              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { uploadLocalImage(e.target.files?.[0] ?? null); setAddPicker(null) }} />
+            </label>
+          </div>
+          <div className={styles.inlActions}>
+            <button className={styles.btnGhost} onClick={() => setAddPicker(null)}>取消</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   /** 音色块（角色专用）：中栏定稿下方展示，读写权限由 canEditVoice 决定。 */
   function renderVoice() {
     return (
       <div className={styles.voiceWrap}>
-        <div className={styles.lbl}>音色</div>
+        {/* 对齐 Figma：音色栏直接坐落在预览下方，栏内已写「音色 · 未设置」，不再单列「音色」小标题。 */}
         {asset!.voice ? (
           <div className={styles.vbar}>
             <div className={styles.vi}><MicIcon /></div>
@@ -649,6 +736,15 @@ export function AssetDetail({
     if (r.ok) setRenaming(false)
   }
 
+  /** 左栏「资产名称」字段提交：空 / 未变直接还原；改名失败回滚到原名并弹提示。 */
+  function commitNameField() {
+    const v = nameField.trim()
+    if (!v || v === asset!.name) { setNameField(asset!.name); return }
+    const r = renameAsset(asset!.id, v)
+    setResult(r)
+    if (!r.ok) setNameField(asset!.name)
+  }
+
   function renderLightbox() {
     if (!preview) return null
     return (
@@ -657,6 +753,13 @@ export function AssetDetail({
           <img className={styles.lbImg} src={preview.src} alt={preview.name} />
           <div className={styles.lbBar}>
             <span className={styles.lbName}>{preview.name}</span>
+            {/* 放大看清楚了才决定要不要送出去（0810）：灯箱里也给图片级流转入口。 */}
+            {!onUse && asset!.scope === 'project' && canRegen && !isOther && (
+              <>
+                <button className={styles.lbDownload} onClick={() => { const u = preview!.src; setPreview(null); setSendImg({ url: u, scope: 'team' }) }}>存入团队库</button>
+                <button className={styles.lbDownload} onClick={() => { const u = preview!.src; setPreview(null); setSendImg({ url: u, scope: 'plaza' }) }}>贡献到素材广场</button>
+              </>
+            )}
             <button className={styles.lbDownload} onClick={() => downloadImage(preview.src, `${asset!.name}·${preview.name}`)}>
               <DownloadIcon /> 下载原图
             </button>
@@ -683,18 +786,7 @@ export function AssetDetail({
         {asset!.scope === 'team' && (
           <button className={`${styles.btn} ${styles.btnLead}`} onClick={() => openPicker('reuse')}>复用到项目</button>
         )}
-        {/* 存入团队库：直接执行（0803 不再勾选造型）。同名先挡。「其他」不参与流转。 */}
-        {asset!.scope === 'project' && !isOther && (
-          <button className={`${styles.btn} ${styles.btnLead}`} onClick={() => done(runDeposit(asset!.id))}>
-            存入团队库
-          </button>
-        )}
-        {/* 贡献到广场（scope-aware）：直接执行。「其他」不参与流转。 */}
-        {(asset!.scope === 'team' || asset!.scope === 'project') && !isOther && canContributeToPlaza(user, asset!) && (
-          <button className={styles.btn} onClick={() => done(runContribute(asset!.id))}>
-            贡献到素材广场
-          </button>
-        )}
+        {/* 0810：项目库的「存入团队库 / 贡献到素材广场」下沉到中栏预览动作条——按单张图送出，不再是资产级动作。 */}
       </>
     )
   }
@@ -707,7 +799,7 @@ export function AssetDetail({
     if (picker === 'directReuse') {
       inner = (
         <>
-          <h4 className={styles.subH}>直接复用到项目</h4>
+          <h4 className={styles.subH}>用到我的项目</h4>
           {asset!.voice && (
             <button
               type="button"
@@ -720,7 +812,7 @@ export function AssetDetail({
               <span className={styles.voicePickCheck}>{includeVoice ? '✓' : ''}</span>
             </button>
           )}
-          <p className={styles.subD}>选一个项目（拷一份独立副本，只带定稿图）：</p>
+          <p className={styles.subD}>放到哪个项目？</p>
           <ProjectChips
             projects={projectsForDirect}
             onPick={(pid) => done(runDirectReuse(asset!.id, pid, includeVoice))}
@@ -730,8 +822,8 @@ export function AssetDetail({
     } else if (picker === 'reuse') {
       inner = (
         <>
-          <h4 className={styles.subH}>复用到项目</h4>
-          <p className={styles.subD}>选一个项目（拷一份独立副本，只带定稿图）：</p>
+          <h4 className={styles.subH}>用到我的项目</h4>
+          <p className={styles.subD}>放到哪个项目？</p>
           <ProjectChips projects={projectsForReuse} onPick={(pid) => done(runReuse(asset!.id, pid))} />
         </>
       )
@@ -957,9 +1049,7 @@ export function AssetDetail({
               <>
                 <div className={styles.mtitleRow}>
                   <span className={styles.mtitle}>{asset.name}</span>
-                  {asset.scope !== 'plaza' && (
-                    <button className={styles.pencil} title="改名" onClick={() => { setNameDraft(asset.name); setRenameResult(null); setRenaming(true) }}>✎</button>
-                  )}
+                  {/* 头部小铅笔已去掉：可编辑资产在左栏有「资产名称」字段改名，不再重复给一个图标。 */}
                 </div>
                 <div className={styles.chips}>
                   <span className={styles.chip}>{CATEGORY_LABEL[asset.category]}</span>
@@ -1001,6 +1091,19 @@ export function AssetDetail({
           {/* ═══ 左栏：生成面板（有生成能力才出）═══ */}
           {hasGenPanel && (
             <div className={styles.genLeft}>
+              {/* 资产名称（对齐 Figma）：把名字单独列成一个可编辑字段，比头部小铅笔更好找。 */}
+              <div className={styles.gfield}>
+                <div className={styles.flabel}>资产名称 <span className={styles.req}>*</span></div>
+                <input
+                  className={styles.nameField}
+                  value={nameField}
+                  onChange={(e) => setNameField(e.target.value)}
+                  onBlur={commitNameField}
+                  onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                  placeholder="给这份资产起个名字"
+                />
+              </div>
+
               <div className={`${styles.gfield} ${styles.gfieldGrow}`}>
                 <div className={styles.flabel}>提示词 <span className={styles.req}>*</span></div>
                 <textarea
@@ -1015,20 +1118,35 @@ export function AssetDetail({
               <div className={styles.gfield}>
                 <div className={styles.flabel}>参考图</div>
                 <div className={styles.refRow}>
+                  {/* 派生的第一槽：当前定稿。✕ 只关掉本次自参考，不动 referenceImages。 */}
+                  {selfRef && (
+                    <div className={styles.refItem}>
+                      <div className={styles.refSlot}>
+                        <img src={selfRef.url} alt="当前定稿" loading="lazy" />
+                        <button className={styles.refZoom} title="放大查看" onClick={() => setPreview({ src: selfRef.url, name: selfRef.label })}><ZoomIcon /></button>
+                        <button className={styles.refRemove} title="本次生成不以当前定稿为底" onClick={() => setUseSelfRef(false)}>✕</button>
+                      </div>
+                      <span className={styles.refLabel}>{selfRef.label}</span>
+                    </div>
+                  )}
                   {referenceImages.map((src, i) => (
                     <div key={i} className={styles.refItem}>
                       <div className={styles.refSlot}>
-                        <img src={src} alt="参考图" loading="lazy" />
+                        {/* 来源标签（素模/服装/用户挂图）移到 title，不再常驻占视觉；派生的「当前定稿」槽才留常驻标签。 */}
+                        <img src={src} alt={referenceLabels[i] || '参考图'} title={referenceLabels[i] || undefined} loading="lazy" />
                         <button className={styles.refZoom} title="放大查看" onClick={() => setPreview({ src, name: referenceLabels[i] || '参考图' })}><ZoomIcon /></button>
                         <button className={styles.refRemove} title="移除参考图" onClick={() => setResult(removeReferenceImage(asset.id, i))}>✕</button>
                       </div>
-                      {referenceLabels[i] && <span className={styles.refLabel}>{referenceLabels[i]}</span>}
                     </div>
                   ))}
                   <button className={styles.refAdd} onClick={() => setRefPicker('menu')} title="从素材库添加 / 上传临时参考">
                     <span className={styles.refPlus}>＋</span>
                     <span>添加参考图</span>
                   </button>
+                  {/* 关掉自参考后，给一个恢复入口 */}
+                  {asset.cover && !useSelfRef && (
+                    <button className={styles.refRestore} onClick={() => setUseSelfRef(true)}>恢复当前定稿</button>
+                  )}
                 </div>
               </div>
 
@@ -1092,24 +1210,16 @@ export function AssetDetail({
                   <span>正在生成 {generating} 张…</span>
                 </div>
               ) : isEmpty ? (
-                /* 空态（改动三）：大片留白 + 一行灰字 + 上传本地图片，不放占位方框。 */
+                /* 空态：只留一行占位灰字。添加图片走最右栏「＋ 添加图片」，这里不再重复给上传入口。 */
                 <div className={styles.emptyResult}>
                   <span className={styles.emptyResultText}>{EMPTY_HINT_BY_CATEGORY[asset.category] || '你的图将会在这里展示'}</span>
-                  {canRegen && (
-                    <label className={styles.emptyUpload}>
-                      上传本地图片
-                      <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => uploadLocalImage(e.target.files?.[0] ?? null)} />
-                    </label>
-                  )}
                 </div>
               ) : (
                 <div className={styles.bigImgWrap}>
                   <img src={centerUrl} alt={asset.name} />
 
-                  {/* 定稿徽章：半透明黑底 + 青绿字。待定稿态显示灰底「待定稿」。只在项目库出（规则 25）。 */}
-                  {showFinalBadge && (centerIsFinal
-                    ? <span className={styles.finalBadge}>★ 定稿</span>
-                    : !asset.cover && <span className={styles.pendingBadge}>待定稿</span>)}
+                  {/* 定稿徽章：半透明黑底 + 青绿字。有图必有定稿，只在项目库出（规则 25）。 */}
+                  {showFinalBadge && centerIsFinal && <span className={styles.finalBadge}>★ 定稿</span>}
 
                   {/* 图片自身的操作一律 hover 浮在图上（规则 17）。 */}
                   <div className={styles.thumbIcons}>
@@ -1135,7 +1245,7 @@ export function AssetDetail({
               )}
             </div>
 
-            {/* ── 预览动作条（0808）：改变资产状态的动作用实体按钮（规则 17）── */}
+            {/* ── 预览动作条（0810）：参考图 · 定稿 · 图片级流转（存入团队库 / 贡献广场）── */}
             {!isOther && !isEmpty && centerCand && canRegen && (
               <div className={styles.previewActs}>
                 <button
@@ -1145,9 +1255,8 @@ export function AssetDetail({
                   {isCenterInRefs ? '✓ 已是参考图' : '＋ 添加至参考图'}
                 </button>
                 {centerIsFinal ? (
-                  <button className={styles.pvBtn} onClick={() => setResult(runUnsetFinal(asset.id))}>
-                    取消定稿
-                  </button>
+                  // 当前定稿：不可点的状态标（0810：换定稿只能"换"，不能"取消"）。
+                  <span className={styles.pvCurrent}>★ 当前定稿</span>
                 ) : (
                   <button
                     className={`${styles.pvBtn} ${styles.pvBtnPri}`}
@@ -1156,6 +1265,12 @@ export function AssetDetail({
                     ★ 设为定稿
                   </button>
                 )}
+                <button className={styles.pvBtn} onClick={() => setSendImg({ url: centerCand.url, scope: 'team' })}>
+                  存入团队库
+                </button>
+                <button className={styles.pvBtn} onClick={() => setSendImg({ url: centerCand.url, scope: 'plaza' })}>
+                  贡献到素材广场
+                </button>
               </div>
             )}
 
@@ -1191,12 +1306,6 @@ export function AssetDetail({
             <div className={styles.genRight}>
               <div className={styles.rsecHead}>
                 <div className={styles.rsecT}>全部图片 <b>（{candidates.length}）</b></div>
-                {canRegen && (
-                  <label className={styles.rUpload} title="从本地上传一张图，直接进这份资产">
-                    ＋ 上传
-                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => uploadLocalImage(e.target.files?.[0] ?? null)} />
-                  </label>
-                )}
               </div>
               {/* 生成中：右栏铺 genCount 个流光骨架格，与中栏骨架同步。 */}
               {generating !== null ? (
@@ -1205,8 +1314,15 @@ export function AssetDetail({
                     <div key={i} className={styles.thumbSkeleton} />
                   ))}
                 </div>
-              ) : candidates.length > 0 ? (
+              ) : (
                 <div className={styles.thumbsGrid}>
+                  {/* 加号格固定排第一位（新图往末尾追加，加号放末尾会每次跳位）。 */}
+                  {canRegen && (
+                    <button className={styles.addTile} onClick={() => setAddPicker('menu')}>
+                      <span className={styles.addPlus}>＋</span>
+                      <span className={styles.addText}>添加图片</span>
+                    </button>
+                  )}
                   {candidates.map((c) => {
                     const isFinal = c.id === finalCandId
                     const isCur = centerCand?.id === c.id
@@ -1223,17 +1339,10 @@ export function AssetDetail({
                             <TrashIcon />
                           </button>
                         )}
-                        {canRegen && !isFinal && (
-                          <div className={styles.lookOv}>
-                            <button className={styles.tbtn} onClick={(e) => { e.stopPropagation(); setResult(runSetFinal(asset.id, c.id)) }}>设为定稿</button>
-                          </div>
-                        )}
                       </div>
                     )
                   })}
                 </div>
-              ) : (
-                <div className={styles.rempty}>生成，或从本地上传一张</div>
               )}
             </div>
           )}
@@ -1250,8 +1359,25 @@ export function AssetDetail({
         {renderPromptPanel()}
         {renderDeleteConfirm()}
         {renderRefPicker()}
+        {renderAddPicker()}
       </div>
       {renderLightbox()}
+      {/* 图片级流转（0810）：把选中的这张图送出去。只出一层（团队库 / 广场），不出保存方式段。 */}
+      {sendImg && (
+        <AssetSaveModal
+          source={{ kind: 'libraryImage', assetId: asset.id, url: sendImg.url, category: asset.category, defaultName: asset.name, prompt: asset.prompt, voice: asset.voice }}
+          projectId={asset.scopeId ?? ''}
+          projectName={refProject?.name ?? '当前项目'}
+          allowedScopes={[sendImg.scope] as Scope[]}
+          projectAssets={[]}
+          characters={[]}
+          allAssets={world.assets}
+          currentUser={user}
+          currentTeamId={user.teamId}
+          onConfirm={confirmSend}
+          onClose={() => setSendImg(null)}
+        />
+      )}
     </div>
   )
 }
@@ -1261,15 +1387,20 @@ function ProjectChips({
   projects,
   onPick,
 }: {
-  projects: { id: string; name: string }[]
+  projects: { id: string; name: string; cover?: string; tag?: string }[]
   onPick: (projectId: string) => void
 }) {
-  if (projects.length === 0) return <p className={styles.note}>当前账号没有可作为目标的项目。</p>
+  if (projects.length === 0) return <p className={styles.note}>当前账号没有可用的项目。</p>
   return (
-    <div className={styles.projChips}>
+    <div className={styles.projList}>
       {projects.map((p) => (
-        <button key={p.id} className={styles.pchip} onClick={() => onPick(p.id)}>
-          {p.name}
+        <button key={p.id} className={styles.projItem} onClick={() => onPick(p.id)}>
+          <img className={styles.projCover} src={p.cover} alt="" aria-hidden />
+          <span className={styles.projMeta}>
+            <span className={styles.projName}>{p.name}</span>
+            {p.tag && <span className={styles.projTag}>{p.tag}</span>}
+          </span>
+          <span className={styles.projGo}>›</span>
         </button>
       ))}
     </div>

@@ -7,7 +7,7 @@
  *
  * 画布 = 草稿台（技术规划 §2、红线 3）：拖到画布不入库、不产副本；右键成品节点才上传。
  * 两入口不变：
- *   · 入口一：右键成品节点 →「保存到资产库」→ SaveToLibraryModal（统一弹窗）→ runSaveToProject / setVoice
+ *   · 入口一：右键成品节点 →「保存到资产库」→ AssetSaveModal（统一上传弹窗）→ runSaveToProject / setVoice
  *   · 入口二：资产面板三层可拖 → 拖到 CanvasStage → 造一个带来源的节点
  */
 
@@ -16,11 +16,12 @@ import type { Route } from '../hooks/useHashRoute'
 import type { Media, CanvasNode as Node } from '../services/canvasService'
 import { useStore, useCurrentUser } from '../store/useStore'
 import { getProject, getTeam, canSeeProjectAssets } from '../services/permission'
+import { scopesForNode } from '../services/canvasService'
 import { CanvasStage } from '../components/canvas/CanvasStage'
 import { CanvasSidebar } from '../components/canvas/CanvasSidebar'
 import { CanvasAssetPanel, type DragPayload } from '../components/canvas/CanvasAssetPanel'
 import { NodeContextMenu } from '../components/canvas/NodeContextMenu'
-import { SaveToLibraryModal, type SaveIntent } from '../components/SaveToLibraryModal'
+import { AssetSaveModal, type SaveIntent } from '../components/AssetSaveModal'
 import { assetUrl } from '../utils/assets'
 import styles from './CanvasShell.module.css'
 
@@ -63,6 +64,7 @@ export function CanvasShell({
   const world = useStore((s) => s.world)
   const user = useCurrentUser()
   const runSaveToProject = useStore((s) => s.runSaveToProject)
+  const runSendImage = useStore((s) => s.runSendImage)
   const setVoice = useStore((s) => s.setVoice)
 
   const project = getProject(world, pid)
@@ -187,6 +189,14 @@ export function CanvasShell({
       return
     }
 
+    // 送一张图出去（存入团队库 / 贡献广场）：不落项目库、不把节点标成 project。
+    if (intent.kind === 'flat') {
+      const r = runSendImage({ target: intent.target, payload: intent.payload, sourceAssetId: intent.sourceAssetId })
+      showToast(r.ok, r.message)
+      setSaveNode(null)
+      return
+    }
+
     // 资产：落项目库。
     const r = runSaveToProject(saveNode, pid, intent.spec)
     showToast(r.ok, r.message)
@@ -203,7 +213,7 @@ export function CanvasShell({
 
   /**
    * 入口一的统一入口（方案二）：不再按媒介分流——右键菜单与节点上的「上传」按钮
-   * 共用这一个口子，四种媒介都进同一个 SaveToLibraryModal。
+   * 共用这一个口子，四种媒介都进同一个 AssetSaveModal。
    */
   function openSaveFor(node: Node) {
     setSaveNode(node)
@@ -305,12 +315,18 @@ export function CanvasShell({
         />
       )}
 
-      {/* 统一保存弹窗（入口一 · 方案二）：四种媒介共用，名称 + 去处瓷砖 + 挂载目标 */}
+      {/* 统一上传弹窗（0810）：层 → 类目 → 名称 →（仅项目库）保存方式 */}
       {saveNode && (
-        <SaveToLibraryModal
-          node={saveNode}
+        <AssetSaveModal
+          source={{ kind: 'canvasNode', node: saveNode }}
+          projectId={pid}
+          projectName={project.name}
+          allowedScopes={scopesForNode(saveNode)}
           projectAssets={projectAssets}
           characters={projectCharacters}
+          allAssets={world.assets}
+          currentUser={user}
+          currentTeamId={user.teamId}
           onConfirm={confirmSave}
           onClose={() => setSaveNode(null)}
         />

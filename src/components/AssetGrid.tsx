@@ -17,13 +17,21 @@
  * ─────────────────────────────────────────────────────────────────────── */
 
 import { useState } from 'react'
-import type { Scope } from '../data/types'
+import type { Category, Scope } from '../data/types'
 import { useStore, useCurrentUser } from '../store/useStore'
 import { canSee } from '../services/permission'
 import { AssetCard } from './AssetCard'
 import { CategoryTabs, type CategoryFilter } from './CategoryTabs'
 import { AssetDetail } from './AssetDetail'
 import styles from './AssetGrid.module.css'
+
+/**
+ * 「全部」视图的稳定排序：先按类目（角色 → 服装 → 场景 → 道具 → 音频 → 其他），
+ * 「其他」内部再按媒介（图片 → 视频 → 文本），同组内新的在前。
+ * 不排序就会按 world.assets 插入顺序，把「其他」冒到最前面——用户视角很乱。
+ */
+const CAT_RANK: Record<Category, number> = { character: 0, costume: 1, scene: 2, prop: 3, audio: 4, other: 5 }
+const OTHER_MEDIA_RANK: Record<string, number> = { image: 0, video: 1, text: 2 }
 
 export function AssetGrid({ scope, projectId }: { scope: Scope; projectId?: string }) {
   const world = useStore((s) => s.world)
@@ -43,6 +51,16 @@ export function AssetGrid({ scope, projectId }: { scope: Scope; projectId?: stri
       return a.scope === 'project' && a.scopeId === projectId
     })
     .filter((a) => category === 'all' || a.category === category) // ③ 最后按类目筛
+    // ④ 稳定排序：类目优先，「其他」内部按媒介，同组新的在前（否则「其他」会按插入序冒到最前）。
+    .sort((a, b) => {
+      const byCat = CAT_RANK[a.category] - CAT_RANK[b.category]
+      if (byCat !== 0) return byCat
+      if (a.category === 'other') {
+        const byMedia = (OTHER_MEDIA_RANK[a.fields.media ?? 'image'] ?? 0) - (OTHER_MEDIA_RANK[b.fields.media ?? 'image'] ?? 0)
+        if (byMedia !== 0) return byMedia
+      }
+      return b.createdAt - a.createdAt
+    })
 
   return (
     <div>

@@ -14,11 +14,14 @@
  *   1. 底层是「拷贝」：往下拉一层，得到一个独立副本；用 masterId 记录血缘。
  *   2. 副本天然独立：拿到手就是自己的，母版之后被删/下架都不影响它。
  *
- * 还有一条贯穿所有动作的红线：
- *   ★ 只有 status === 'done'（成品）才能被复用 / 存入 / 贡献。★
+ * 【0810 流转下沉到图】上行（存入团队库 / 贡献广场）不再是"整份资产出库"，
+ * 而是某一张图的动作：调用方选一张图、起个名字，打包成 FlatImagePayload 送出去。
+ *   · 下行三动作（directReuse / favorite / reuse）仍是"整份资产拷贝"，守卫是 assertHasImage。
+ *   · 上行两动作（deposit / contributeToPlaza）吃 FlatImagePayload，守卫是 assertPayload。
+ * 旧红线"只有 done 才能流转"随 pending 一起退场——"这张图存不存在"由调用方选图时就保证了。
  * ─────────────────────────────────────────────────────────────────────── */
 
-import type { Asset, AssetStatus, Candidate, User } from '../data/types'
+import type { Asset, Candidate, FlatImagePayload, User } from '../data/types'
 import { depositMode } from './permission'
 
 /* ─── 一、一个专门的错误类型：违反业务规则时抛它 ───
@@ -70,7 +73,7 @@ function cloneForCopy(source: Asset, overrides: Partial<Asset>): Asset {
   return copy
 }
 
-/** 取一份资产对外展示的图：定稿优先；待定稿（还没拍板）先拿候选池第一张顶上。 */
+/** 取一份资产对外展示的图：定稿优先；有图必有定稿，兜底再取候选池第一张。 */
 export function coverOf(asset: Pick<Asset, 'cover' | 'candidates'>): string {
   return asset.cover || asset.candidates?.[0]?.url || ''
 }
@@ -97,8 +100,8 @@ export function removeCandidate(source: Asset, candidateId: string): Asset {
 }
 
 /**
- * 把候选池里的某张设为定稿（不可变）。0807：设定稿 = 拍板成品，
- * 待定稿（pending）随之跃迁到 done；已是成品的只换定稿图、status 不变。
+ * 把候选池里的某张设为定稿（不可变）。0810：设定稿 = 换 cover 指向、恒 done。
+ * 有图必有定稿，所以这里永远是"换定稿"，不存在从"无定稿"跃迁的情况。
  */
 export function setFinal(source: Asset, candidateId: string): Asset {
   const target = source.candidates?.find((c) => c.id === candidateId)
@@ -106,69 +109,75 @@ export function setFinal(source: Asset, candidateId: string): Asset {
   return { ...source, cover: target.url, status: 'done' }
 }
 
-/**
- * 取消定稿（0808）：资产从成品退回待定稿，图都还在池子里，只是撤回"可被引用"这个授权。
- * 撤回后这份资产：不能被选作参考图、不能存入团队库 / 贡献到广场、卡片打「待定稿」。
- * 已经被别的资产挂为参考图的 url 快照、以及已经拷出去的副本，都不受影响。
- */
-export function unsetFinal(source: Asset): Asset {
-  if (!source.cover) throw new AssetRuleError('这份资产还没有定稿')
-  if (!source.candidates?.length) throw new AssetRuleError('候选池为空，无法取消定稿')
-  return { ...source, cover: '', status: 'pending' }
-}
-
 /** 造一个候选图（自增 id，够 Demo 用且可预测）。 */
 export function makeCandidate(url: string, prompt?: string): Candidate {
   return { id: makeId('cand'), url, prompt, createdAt: Date.now() }
 }
 
-/**
- * 造型（有 referencedFrom）定稿后，把定稿图追加进自己的参考图（标签=资产名）——
- * 新生成的成品以自己为底，重新生成才保持一致；原有素模/服装参考图保留、顺序不变。
- * 定稿图已在参考图里（按去后缀的裸地址判重）就原样返回，不重复加。
- * 只对造型生效：基础素材在演示里已预置自己为参考，普通资产不挂。
- */
-export function withSelfReference(a: Asset): Asset {
-  if (!a.referencedFrom || !a.cover) return a
-  const base = a.cover.split('?')[0]
-  const refs = a.referenceImages ?? []
-  if (refs.some((u) => u.split('?')[0] === base)) return a
-  // 标签补齐到与图等长（历史数据可能没写全 label），再追加资产名。
-  const labels = [...(a.referenceLabels ?? [])]
-  while (labels.length < refs.length) labels.push('参考')
-  return {
-    ...a,
-    referenceImages: [...refs, base],
-    referenceLabels: [...labels, a.name],
-  }
-}
-
-const STATUS_CN: Record<AssetStatus, string> = {
-  empty: '待生成', generating: '生成中', pending: '待定稿', done: '成品', failed: '失败',
-}
-
-/** 红线校验：不是成品就不许流转。 */
-function assertDone(source: Asset, action: string): void {
-  if (source.status !== 'done') {
-    throw new AssetRuleError(
-      source.status === 'pending'
-        ? `资产「${source.name}」还没有定稿，先在详情页选一张设为定稿，才能${action}。`
-        : `资产「${source.name}」当前是「${STATUS_CN[source.status]}」，只有成品才能${action}。`,
-    )
-  }
-}
-
-/**
- * 类目能力校验：「其他」类目仅存在于项目资产库，不参与任何向上流转（技术规划 §五）。
- * 在服务层挡死，而不是只靠界面隐藏按钮——存入 / 收藏入团队库 / 贡献到广场都先过这一关。
- */
-function assertNotOther(source: Asset, target: '团队库' | '素材广场'): void {
-  if (source.category === 'other') {
+/** 校验一张图的出库载荷是否合法（0810）。 */
+function assertPayload(p: FlatImagePayload, target: '团队库' | '素材广场'): void {
+  if (!p.url) throw new AssetRuleError('没有可提交的图片。')
+  if (!p.name.trim()) throw new AssetRuleError('请先给这张素材起个名字。')
+  if (p.category === 'other') {
     throw new AssetRuleError(
       target === '素材广场'
         ? '「其他」类目不能贡献到素材广场。'
         : '「其他」类目仅存在于项目资产库，不能存入团队库。',
     )
+  }
+}
+
+/** 下行动作（直接复用 / 收藏 / 复用）的朴素守卫：没有图就不能整份拷走。 */
+function assertHasImage(source: Asset, action: string): void {
+  if (!source.cover) {
+    throw new AssetRuleError(`资产「${source.name}」还没有图片，不能${action}。`)
+  }
+}
+
+/** 这个 url 是不是这份资产的图（定稿或图片列表里的任意一张，按去后缀的裸地址比）。 */
+export function imageBelongsTo(asset: Asset, url: string): boolean {
+  const bare = (u: string) => u.split('?')[0]
+  const k = bare(url)
+  if (asset.cover && bare(asset.cover) === k) return true
+  return (asset.candidates ?? []).some((c) => bare(c.url) === k)
+}
+
+/**
+ * 扁平化落库（0810）：把一张图落成团队库 / 广场里的一份独立素材。
+ *
+ * 【丢掉】图片列表(candidates) / 参考图(referenceImages,referenceLabels) /
+ *         来源(referencedFrom) / 血缘(masterId) / 状态机（永远 done）
+ * 【带走】图、名称、类目、提示词、音色（角色）
+ *
+ * 为什么提示词一定要带走：它是这张图作为"可复用素材"最值钱的部分——
+ * 别人复用回项目库时能直接照着重新生成。进广场后随图一起冻结、不可编辑。
+ */
+export function flattenToLibrary(
+  payload: FlatImagePayload,
+  target:
+    | { scope: 'team'; scopeId: string }
+    | { scope: 'plaza'; contributedBy: string },
+): Asset {
+  return {
+    id: makeId('asset'),
+    category: payload.category,
+    name: payload.name.trim(),
+    scope: target.scope,
+    scopeId: target.scope === 'team' ? target.scopeId : undefined,
+    status: 'done',
+    masterId: undefined,          // 它自己就是这一层的母版
+    prompt: payload.prompt,
+    cover: payload.url,
+    candidates: undefined,        // ← 扁平：没有图片列表
+    referenceImages: undefined,   // ← 扁平：没有参考图
+    referenceLabels: undefined,
+    referencedFrom: undefined,
+    fields: {},
+    tags: [],
+    voice: payload.voice ? { ...payload.voice } : undefined,
+    contributedBy: target.scope === 'plaza' ? target.contributedBy : undefined,
+    shelfStatus: target.scope === 'plaza' ? 'listed' : undefined,
+    createdAt: Date.now(),
   }
 }
 
@@ -183,7 +192,7 @@ export function directReuse(
   targetProjectId: string,
   includeVoice = true,
 ): Asset {
-  assertDone(source, '直接复用')
+  assertHasImage(source, '直接复用')
   return cloneForCopy(source, {
     scope: 'project',
     scopeId: targetProjectId,
@@ -196,7 +205,7 @@ export function directReuse(
  * （v4：收藏 = 直接拷进团队库，不再有"跟随/不跟随"的选择。）
  */
 export function favorite(source: Asset, targetTeamId: string): Asset {
-  assertDone(source, '收藏')
+  assertHasImage(source, '收藏')
   return cloneForCopy(source, {
     scope: 'team',
     scopeId: targetTeamId,
@@ -207,7 +216,7 @@ export function favorite(source: Asset, targetTeamId: string): Asset {
  * 复用：团队库 → 项目。同样是一份独立副本（只带定稿图）。
  */
 export function reuse(source: Asset, targetProjectId: string): Asset {
-  assertDone(source, '复用')
+  assertHasImage(source, '复用')
   return cloneForCopy(source, {
     scope: 'project',
     scopeId: targetProjectId,
@@ -215,25 +224,24 @@ export function reuse(source: Asset, targetProjectId: string): Asset {
 }
 
 /**
- * 存入：项目 → 团队库。把项目里的好资产升级为团队母版。
- *
- * 这里用一个「联合返回类型」表达 owner 和 sub 的关键差异：
- *   - 主账号：直接存入一份团队母版 → 返回 { kind: 'asset', asset }
- *   - 子账号：不能直接写团队库，要走"申请 → 主账号批" → 返回 { kind: 'application', ... }
- *   - admin ：不参与创作/存入 → 抛错
+ * 存入团队库（0810 · 按图）：把一张图送进团队资产库。
+ *   · 主账号 → 直接落一份团队素材 { kind:'asset', asset }
+ *   · 子账号 → 只生成一条待审批申请 { kind:'application', ... }
+ *   · admin  → 抛错
  * 调用方拿到结果后，用 result.kind 判断该"入库"还是"进待审批列表"。
  */
 /**
- * 一条"子账号资产存入申请"。
+ * 一条"子账号资产存入申请"（0810 · 携带图片快照）。
  * status 会随审批走：pending（待批）→ approved（通过）/ rejected（驳回）。
- * assetName 是申请那刻的资产名快照，纯为界面/通知显示用（不跟后续改名联动）。
  */
 export interface DepositApplication {
   kind: 'application'
   id: string
-  assetId: string
-  assetName: string
-  fromScopeId: string | undefined // 来自哪个项目
+  /** 0810：申请携带图片快照，审批落库直接用它，不再回查源资产。 */
+  payload: FlatImagePayload
+  /** 纯记录：这张图当初来自哪份资产 / 哪个项目（可为空——画布或本地文件直传时没有源资产）。 */
+  sourceAssetId?: string
+  fromScopeId?: string
   toTeamId: string
   applicantId: string
   status: 'pending' | 'approved' | 'rejected'
@@ -245,9 +253,13 @@ export interface DepositApplication {
 
 export type DepositResult = { kind: 'asset'; asset: Asset } | DepositApplication
 
-export function deposit(source: Asset, targetTeamId: string, actor: User): DepositResult {
-  assertDone(source, '存入')
-  assertNotOther(source, '团队库')
+export function deposit(
+  payload: FlatImagePayload,
+  targetTeamId: string,
+  actor: User,
+  source?: { assetId?: string; scopeId?: string },
+): DepositResult {
+  assertPayload(payload, '团队库')
   const mode = depositMode(actor)
 
   if (mode === 'none') {
@@ -259,9 +271,9 @@ export function deposit(source: Asset, targetTeamId: string, actor: User): Depos
     return {
       kind: 'application',
       id: makeId('appl'),
-      assetId: source.id,
-      assetName: source.name,
-      fromScopeId: source.scopeId,
+      payload,
+      sourceAssetId: source?.assetId,
+      fromScopeId: source?.scopeId,
       toTeamId: targetTeamId,
       applicantId: actor.id,
       status: 'pending',
@@ -269,24 +281,17 @@ export function deposit(source: Asset, targetTeamId: string, actor: User): Depos
     }
   }
 
-  // 主账号：直接产生一份团队母版。
-  // 注意：存入出来的是"新母版"，不是某个母版的副本，所以不设 masterId。
-  return { kind: 'asset', asset: materializeDeposit(source, targetTeamId) }
+  // 主账号：直接产生一份团队母版（扁平的单图）。
+  return { kind: 'asset', asset: materializeDeposit(payload, targetTeamId) }
 }
 
 /**
- * 把一份资产真正"落成"团队母版（存入团队库的那一下）。
- * 主账号直接存入、以及主账号审批通过子账号的申请，最终都走这里——
+ * 审批通过时落库：主账号直接存入、以及批准子账号申请，最终都走这里——
  * 保证"入库"这一步只有一处实现，行为一致。
  */
-export function materializeDeposit(source: Asset, targetTeamId: string): Asset {
-  assertDone(source, '存入团队库')
-  assertNotOther(source, '团队库')
-  return cloneForCopy(source, {
-    scope: 'team',
-    scopeId: targetTeamId,
-    masterId: undefined, // ← 它自己就是团队母版
-  })
+export function materializeDeposit(payload: FlatImagePayload, targetTeamId: string): Asset {
+  assertPayload(payload, '团队库')
+  return flattenToLibrary(payload, { scope: 'team', scopeId: targetTeamId })
 }
 
 /* ─── 五、贡献到素材广场（公开层，admin 审核）────────────────────────
@@ -296,16 +301,15 @@ export function materializeDeposit(source: Asset, targetTeamId: string): Asset {
  * 主账号、子账号都能发起广场投稿，一律进 admin 审核队列（谁投都一样）。 */
 
 /**
- * 一条"广场投稿申请"。
+ * 一条"广场投稿申请"（0810 · 携带图片快照）。
  * status：pending（待 admin 审）→ approved（已上架）/ rejected（驳回）。
- * assetName / fromScope 是投稿那刻的快照，纯为界面/通知显示用。
  */
 export interface PlazaSubmission {
   id: string
-  assetId: string
-  assetName: string
-  fromScope: 'team' | 'project' // 从团队库还是项目里投的
-  fromScopeId: string | undefined
+  payload: FlatImagePayload
+  sourceAssetId?: string
+  fromScope?: 'team' | 'project'
+  fromScopeId?: string
   submitterId: string
   status: 'pending' | 'approved' | 'rejected'
   createdAt: number
@@ -321,40 +325,31 @@ export interface PlazaSubmission {
 }
 
 /**
- * 发起广场投稿：把自己团队库/项目里的一份成品资产，提交到 admin 审核队列。
- * 只生成一条 pending 申请，并不真的上架——上架要等 admin 点头。
+ * 贡献到素材广场（0810 · 按图）：把一张图提交到 admin 审核队列。
+ * 主账号 / 子账号都能发起，一律进队列。
  */
-export function contributeToPlaza(source: Asset, submitter: User): PlazaSubmission {
-  assertDone(source, '贡献到广场')
-  assertNotOther(source, '素材广场')
-  if (source.scope !== 'team' && source.scope !== 'project') {
-    throw new AssetRuleError('只有团队库 / 项目里的资产能投稿到素材广场。')
-  }
+export function contributeToPlaza(
+  payload: FlatImagePayload,
+  submitter: User,
+  source?: { assetId?: string; scope?: 'team' | 'project'; scopeId?: string },
+): PlazaSubmission {
+  assertPayload(payload, '素材广场')
   return {
     id: makeId('psub'),
-    assetId: source.id,
-    assetName: source.name,
-    fromScope: source.scope,
-    fromScopeId: source.scopeId,
+    payload,
+    sourceAssetId: source?.assetId,
+    fromScope: source?.scope,
+    fromScopeId: source?.scopeId,
     submitterId: submitter.id,
     status: 'pending',
     createdAt: Date.now(),
   }
 }
 
-/**
- * admin 审核通过后，把资产"上架"成一份广场官方母版（只带定稿图）。
- * 上架后就是官方母版（不设 masterId），且按 v4 规则：上架后不可编辑、只能删/下架。
- * contributedBy 记录是谁投稿的——作者本人日后可以删自己投的这份。
- */
-export function materializePlaza(source: Asset, contributedBy: string): Asset {
-  assertDone(source, '上架到广场')
-  return cloneForCopy(source, {
-    scope: 'plaza',
-    scopeId: undefined,
-    masterId: undefined, // ← 上架后它自己就是官方母版
-    contributedBy, // ← 记住投稿人
-  })
+/** admin 审核通过后上架成广场母版。 */
+export function materializePlaza(payload: FlatImagePayload, contributedBy: string): Asset {
+  assertPayload(payload, '素材广场')
+  return flattenToLibrary(payload, { scope: 'plaza', contributedBy })
 }
 
 /* ─── 四、（已删除）跟随线 · 断链 · 母版消失 ─────────────────────────

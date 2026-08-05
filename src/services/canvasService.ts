@@ -18,7 +18,7 @@
  *   · 从本项目库拖上来的节点 → 已经是项目资产，不再给"上传"入口。
  * ─────────────────────────────────────────────────────────────────────── */
 
-import type { Asset, AssetFields, Candidate, Category } from '../data/types'
+import type { Asset, AssetFields, Candidate, Category, Scope } from '../data/types'
 import { AssetRuleError, makeCandidate } from './assetService'
 
 /** 媒介 = 画布节点类型（与类目正交）。 */
@@ -83,14 +83,33 @@ export function destinationsForMedia(media: Media): Destination[] {
 }
 
 /**
- * 入口一的出现条件（技术规划 §2.1，稳定性检查 ①②⑤）：
- * 「上传到项目资产库」只对"成品 + 可入库媒介 + 尚未是项目资产"的节点显示。
+ * 能不能把这个节点存进**资产库**（任意一层）——统一上传弹窗的入口出现条件。
+ * 0810 放宽 ⑤：从本项目库拖来的节点仍可上传，因为现在还能往团队库 / 广场送；
+ * 「再存一次项目库」这个无意义选项由界面在弹窗层选择里禁用（见 scopesForNode）。
  */
 export function canUploadToProject(node: CanvasNode): boolean {
   if (node.status !== 'done') return false // ① 空壳 / 生成中不给
-  if (categoriesForMedia(node.media).length === 0) return false // ② 文本 / 视频不给
-  if (node.source && node.source.scope === 'project') return false // ⑤ 已是本项目资产，无需重复入库
+  if (categoriesForMedia(node.media).length === 0) return false // ② 文本 / 视频不给（仅指落项目库的可入库媒介判定）
   return true
+}
+
+/** 这个节点还能存到哪几层（0810 · 统一上传弹窗的层选项来源）。 */
+export function scopesForNode(node: CanvasNode): Scope[] {
+  const all: Scope[] = ['project', 'team', 'plaza']
+  // 已经是本项目资产的节点，不给"再存一次项目库"。
+  const noProject = node.source?.scope === 'project'
+  // 视频 / 文本 / 音频都只能待在项目库：
+  //   · 视频 / 文本是「其他」型留存物，跟着项目走；
+  //   · 音频（0811）——团队库 / 广场的音频形态尚未定义，这一期只落项目库。
+  if (node.media === 'video' || node.media === 'text' || node.media === 'audio') return ['project']
+  return noProject ? all.filter((s) => s !== 'project') : all
+}
+
+/** 某个媒介在某一层可选的去处（0810）。团队库 / 广场没有「其他」、没有「角色音色」。 */
+export function destinationsForScope(media: Media, scope: Scope): Destination[] {
+  const base = destinationsForMedia(media)
+  if (scope === 'project') return base
+  return base.filter((d) => d !== 'other' && d !== 'voice')
 }
 
 /**
@@ -227,4 +246,28 @@ export function teamHasSameName(
   excludeId?: string,
 ): boolean {
   return libraryHasSameName(assets, 'team', teamId, name, excludeId)
+}
+
+/**
+ * 广场同名检测（0810）：**按投稿人维度**唯一，而不是全网唯一。
+ *
+ * 为什么不做全网唯一：广场是全网货架，第一个投「西装」的人就会把这个名字占死，
+ * 后面所有人再也不能叫「西装」——用户会觉得莫名其妙。所以只保证"你自己不能投两张同名的"，
+ * 不同投稿人之间允许重名，展示时靠投稿人区分。
+ *
+ * 官方素材（无 contributedBy）不参与个人维度校验。
+ */
+export function plazaHasSameNameBySubmitter(
+  assets: Asset[],
+  submitterId: string,
+  name: string,
+  excludeId?: string,
+): boolean {
+  return assets.some(
+    (a) =>
+      a.scope === 'plaza' &&
+      a.contributedBy === submitterId &&
+      a.name === name.trim() &&
+      a.id !== excludeId,
+  )
 }

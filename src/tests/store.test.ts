@@ -32,19 +32,27 @@ beforeAll(async () => {
 })
 
 // 每个用例从干净的种子出发；再跑一遍演示脚手架（0805），把都市日常那批资产
-// （a_ajie / a_neon_dancer / a_mech_exo / 三份造型空壳…）灌回 world，让沿用旧演员表的用例照常跑。
+// （d_ajie / d_suke / 造型空壳…）灌回 world，让沿用旧演员表的用例照常跑。
+// 0810：演示生成后基础 6 份直接落成品（有图必自动定稿），无需再补定稿。
 beforeEach(() => {
   store.getState().resetDemo()
   store.getState().runDemoAnalyze()
   store.getState().runDemoGenerate()
-  // 0808：演示生成后基础素材直接落成品（一份一张、自动定稿），初始态就是"5 份成品 + 3 份空壳"。
-  // 这个循环在 0808 下是空转（proj_neon 里没有 pending 基础素材），保留作兜底安全网。
-  for (const a of store.getState().world.assets) {
-    if (a.scopeId === 'proj_daily' && a.status === 'pending' && a.candidates?.length) {
-      store.getState().runSetFinal(a.id, a.candidates[0].id)
-    }
-  }
 })
+
+/* 0810：流转下沉到图后，「存入团队库 / 贡献广场」都走 runSendImage（按单张图）。
+ * 这两个薄封装照旧演员表按 id 取源资产的定稿图打包成 payload，替代已删除的 runDeposit / runContribute。 */
+function assetById(id: string) {
+  return store.getState().world.assets.find((a: { id: string }) => a.id === id)
+}
+function sendTeam(id: string) {
+  const a = assetById(id)
+  return store.getState().runSendImage({ target: 'team', payload: { url: a.cover, name: a.name, category: a.category }, sourceAssetId: id })
+}
+function sendPlaza(id: string) {
+  const a = assetById(id)
+  return store.getState().runSendImage({ target: 'plaza', payload: { url: a.cover, name: a.name, category: a.category }, sourceAssetId: id })
+}
 
 describe('演示脚手架（0805 · demoStep + 三个 action）', () => {
   const neonCore = () =>
@@ -120,16 +128,18 @@ describe('store 流转动作', () => {
 
   it('子账号存入 → 生成待审批申请，团队库不增加', () => {
     store.getState().setCurrentUser('u_lin')
+    const ajie = store.getState().world.assets.find((a: { id: string }) => a.id === 'd_ajie')
     const teamBefore = store.getState().world.assets.filter((a: { scope: string }) => a.scope === 'team').length
-    const r = store.getState().runDeposit('d_ajie') // 阿杰在都市日常，小林被分配
+    const r = store.getState().runSendImage({ target: 'team', payload: { url: ajie.cover, name: '阿杰', category: 'character' }, sourceAssetId: 'd_ajie' })
     expect(r.ok).toBe(true)
     expect(store.getState().applications.length).toBe(1)
     expect(store.getState().world.assets.filter((a: { scope: string }) => a.scope === 'team').length).toBe(teamBefore)
   })
 
   it('主账号存入 → 团队库多一份母版', () => {
+    const ajie = store.getState().world.assets.find((a: { id: string }) => a.id === 'd_ajie')
     const teamBefore = store.getState().world.assets.filter((a: { scope: string }) => a.scope === 'team').length
-    const r = store.getState().runDeposit('d_ajie')
+    const r = store.getState().runSendImage({ target: 'team', payload: { url: ajie.cover, name: '阿杰', category: 'character' }, sourceAssetId: 'd_ajie' })
     expect(r.ok).toBe(true)
     expect(store.getState().world.assets.filter((a: { scope: string }) => a.scope === 'team').length).toBe(teamBefore + 1)
   })
@@ -162,31 +172,28 @@ describe('候选池动作（0803：appendCandidates / setFinal / removeCandidate
   const byId = (id: string) =>
     store.getState().world.assets.find((a: { id: string }) => a.id === id)
 
-  it('appendCandidates（0807）：把图并入候选池；空壳追加后 → 待定稿、不自动定稿', () => {
-    // 阿杰·风衣造型是项目库空壳（Sunny 主账号可生成）
+  it('appendCandidates（0810）：空壳追加多张 → 首张自动定稿', () => {
+    // 阿杰·西装造型是项目库空壳（Sunny 主账号可生成）
     const before = byId('d_ajie_suit')
     expect(before.status).toBe('empty')
     const r = store.getState().appendCandidates('d_ajie_suit', ['/p1.png', '/p2.png'])
     expect(r.ok).toBe(true)
     const after = byId('d_ajie_suit')
-    expect(after.status).toBe('pending') // 空壳 → 待定稿
+    expect(after.status).toBe('done') // 有图必成品
     expect(after.candidates.length).toBe(2)
-    expect(after.cover).toBe('') // 不自动定稿
+    expect(after.cover).toBe('/p1.png') // 首张自动定稿
   })
 
-  it('setFinal：把候选池里的某张设为定稿（待定稿 → 成品）', () => {
-    store.getState().appendCandidates('d_ajie_suit', ['/p1.png', '/p2.png'])
+  it('setFinal：把候选池里的某张设为定稿（换定稿）', () => {
+    store.getState().appendCandidates('d_ajie_suit', ['/p1.png', '/p2.png']) // 首张自动定稿
     const cand = byId('d_ajie_suit').candidates.find((c: { url: string }) => c.url === '/p2.png')
     const r = store.getState().runSetFinal('d_ajie_suit', cand.id)
     expect(r.ok).toBe(true)
     expect(byId('d_ajie_suit').cover).toBe('/p2.png')
   })
 
-  it('removeCandidate：删定稿顶一张上来（先定稿再删）', () => {
-    store.getState().appendCandidates('d_ajie_suit', ['/p1.png', '/p2.png'])
-    // 待定稿态没有定稿，先设一张为定稿
-    const first = byId('d_ajie_suit').candidates[0]
-    store.getState().runSetFinal('d_ajie_suit', first.id)
+  it('removeCandidate：删定稿顶一张上来', () => {
+    store.getState().appendCandidates('d_ajie_suit', ['/p1.png', '/p2.png']) // 天然有定稿（/p1.png）
     const a = byId('d_ajie_suit')
     const finalCand = a.candidates.find((c: { url: string }) => c.url === a.cover)
     const r = store.getState().runRemoveCandidate('d_ajie_suit', finalCand.id)
@@ -278,24 +285,23 @@ describe('批量生成（阶段三：batchGenerate）', () => {
     store.getState().world.assets.find((a: { id: string }) => a.id === id)
   const P = '/placeholder.png'
 
-  it('空壳批量生成各 1 张、自动定稿（0808）；已有成品被跳过', () => {
-    // a_ajie_trench / a_ajie_battle 是项目库空壳；a_ajie 是成品 → 混选
+  it('空壳批量生成各 1 张、自动定稿（0810）；已有成品被跳过', () => {
+    // d_ajie_suit / d_suke_pajamas 是项目库造型空壳；d_ajie 是成品 → 混选
     expect(byId('d_ajie_suit').status).toBe('empty')
     const r = store.getState().batchGenerate(['d_ajie_suit', 'd_suke_pajamas', 'd_ajie'], P)
     expect(r.ok).toBe(true)
     expect(r.message).toContain('已生成 2 份')
     expect(r.message).toContain('跳过 1 份')
     const trench = byId('d_ajie_suit')
-    // 0808：本批 1 张 + 空壳（原本无定稿、池空）→ 自动定稿成成品。
+    // 0810：空壳生成后有图必成品、首张自动定稿。
     expect(trench.status).toBe('done')
     expect(trench.cover).toBe(trench.candidates[0].url)
     // 造型带 lookUrl（真实造型图替身）→ 生成图用它出图，不是素模、也不是通用占位图 P。
     expect(trench.candidates[0].url).toContain('ajie-suit')
     expect(trench.candidates[0].url).not.toBe(P)
     expect(trench.candidates.length).toBe(1) // 默认每份 1 张
-    // 造型自动定稿后，把定稿图追加进自己的参考图（素模 + 服装保留，末尾多一张造型图、标签=资产名）。
-    expect(trench.referenceImages).toContain('/assets/proj-daily/ajie-suit/1.png')
-    expect(trench.referenceLabels?.[trench.referenceLabels.length - 1]).toBe('阿杰·西装造型')
+    // 0810 自参考不入库：造型定稿不再写进 referenceImages，参考图仍是原有的素模 + 服装两张。
+    expect(trench.referenceImages?.length).toBe(2)
     expect(byId('d_suke_pajamas').status).toBe('done')
   })
 
@@ -324,7 +330,7 @@ describe('音色（听觉身份锚点，随角色走 · 恒 1 个）', () => {
     store.getState().runReuse('a_suwan', 'proj_daily')            // 团队→项目
     store.getState().runDirectReuse('a_cyber_police', 'proj_daily') // 广场→项目（赛博女警也有音色）
     store.getState().runFavorite('a_cyber_police')               // 广场→团队库
-    store.getState().runDeposit('d_ajie')                        // 项目→团队（阿杰无音色，验不炸）
+    sendTeam('d_ajie')                                           // 项目→团队（阿杰无音色，验不炸）
 
     const reuseCopy = store.getState().world.assets.filter((a: { masterId?: string }) => a.masterId === 'a_suwan').at(-1)
     expect(reuseCopy.voice).toBeTruthy()
@@ -415,7 +421,7 @@ describe('审批中心（子账号存入 → 主账号审批）', () => {
   // 让小林（子账号，分配了都市日常）提交一条资产存入申请，返回申请 id
   function subApplies() {
     store.getState().setCurrentUser('u_lin')
-    store.getState().runDeposit('d_ajie') // 阿杰在都市日常
+    sendTeam('d_ajie') // 阿杰在都市日常
     const appl = store.getState().applications.at(-1)
     return appl.id as string
   }
@@ -469,23 +475,24 @@ describe('广场投稿（主/子账号发起 → admin 审核）', () => {
 
   it('主账号能把团队库资产投稿到广场，生成待审投稿、广场不立即增加', () => {
     const before = plazaCount()
-    const r = store.getState().runContribute('a_suwan') // 苏晚在团队A团队库
+    const r = sendPlaza('a_suwan') // 苏晚在团队A团队库
     expect(r.ok).toBe(true)
     expect(store.getState().plazaSubmissions.length).toBe(1)
     expect(store.getState().plazaSubmissions[0].status).toBe('pending')
+    expect(store.getState().plazaSubmissions[0].payload.name).toBe('苏晚')
     expect(plazaCount()).toBe(before) // 还没上架
   })
 
   it('子账号也能发起广场投稿（被分配项目里的资产）', () => {
     store.getState().setCurrentUser('u_lin') // 小林，分配了都市日常
-    const r = store.getState().runContribute('d_ajie') // 阿杰在都市日常
+    const r = sendPlaza('d_ajie') // 阿杰在都市日常
     expect(r.ok).toBe(true)
     expect(store.getState().plazaSubmissions[0].submitterId).toBe('u_lin')
   })
 
   it('admin 通过投稿 → 广场 +1、投稿变 approved、投稿人收到通知', () => {
     store.getState().setCurrentUser('u_lin')
-    store.getState().runContribute('d_ajie')
+    sendPlaza('d_ajie')
     const sid = store.getState().plazaSubmissions.at(-1).id
     const before = plazaCount()
     store.getState().setCurrentUser('u_admin') // 切到 admin 审核
@@ -497,7 +504,7 @@ describe('广场投稿（主/子账号发起 → admin 审核）', () => {
   })
 
   it('主账号无权审核广场投稿（只有 admin 能）', () => {
-    store.getState().runContribute('a_suwan') // Sunny 投稿
+    sendPlaza('a_suwan') // Sunny 投稿
     const sid = store.getState().plazaSubmissions.at(-1).id
     store.getState().setCurrentUser('u_ze') // 另一个主账号
     const r = store.getState().approvePlazaSubmission(sid)
@@ -506,7 +513,7 @@ describe('广场投稿（主/子账号发起 → admin 审核）', () => {
   })
 
   it('admin 驳回投稿 → 广场不变、投稿变 rejected、投稿人收到通知', () => {
-    store.getState().runContribute('a_suwan')
+    sendPlaza('a_suwan')
     const sid = store.getState().plazaSubmissions.at(-1).id
     const before = plazaCount()
     store.getState().setCurrentUser('u_admin')
@@ -517,8 +524,10 @@ describe('广场投稿（主/子账号发起 → admin 审核）', () => {
     expect(store.getState().notifications.filter((n: { toUserId: string }) => n.toUserId === 'u_sunny').length).toBe(1)
   })
 
-  it('广场资产不能再投稿到广场（只有团队库/项目资产能投）', () => {
-    const r = store.getState().runContribute('a_cyber_police') // 这本来就在广场
+  it('广场资产不能再投稿到广场（发起层校验：只有团队库/项目资产能投）', () => {
+    // 0810：发起层校验由 runSendImage 负责。主账号也只能从团队库/项目库发起，
+    // 从广场资产（a_cyber_police）发起会被挡。
+    const r = sendPlaza('a_cyber_police') // 默认 Sunny 主账号
     expect(r.ok).toBe(false)
   })
 })
@@ -532,7 +541,7 @@ describe('广场素材下架 / 删除（admin 下架 · 作者删除；不影响
   // 小林投稿 a_ajie → admin 通过上架，返回这份广场素材的 id（contributedBy = 小林）
   function contributeAndPublish() {
     store.getState().setCurrentUser('u_lin')
-    store.getState().runContribute('d_ajie')
+    sendPlaza('d_ajie')
     const sid = store.getState().plazaSubmissions.at(-1).id
     store.getState().setCurrentUser('u_admin')
     store.getState().approvePlazaSubmission(sid)
@@ -603,7 +612,7 @@ describe('下架 → 重新上架往返（审核中心改造）', () => {
   // 小林投稿 a_ajie → admin 上架，返回这份广场素材 id（contributedBy = 小林）
   function publishAjie(): string {
     store.getState().setCurrentUser('u_lin')
-    store.getState().runContribute('d_ajie')
+    sendPlaza('d_ajie')
     const sid = store.getState().plazaSubmissions.at(-1).id
     store.getState().setCurrentUser('u_admin')
     store.getState().approvePlazaSubmission(sid)
@@ -666,19 +675,19 @@ describe('审核中心通知补齐（deposit_submitted / plaza_submit_notice）'
       (n: { toUserId: string; kind?: string }) => n.toUserId === 'u_sunny' && n.kind === kind,
     )
 
-  it('子账号 runDeposit → 主账号收到 deposit_submitted', () => {
+  it('子账号存入 → 主账号收到 deposit_submitted', () => {
     store.getState().setCurrentUser('u_lin')
     const before = parentNotis('deposit_submitted').length
-    store.getState().runDeposit('d_ajie') // 阿杰在都市日常，小林被分配
+    sendTeam('d_ajie') // 阿杰在都市日常，小林被分配
     expect(parentNotis('deposit_submitted').length).toBe(before + 1)
     // v2：点通知直接弹开团队库上的存入申请抽屉，不再跳 #/review。
     expect(parentNotis('deposit_submitted').at(-1).link).toBe('#/team/deposits')
   })
 
-  it('子账号 runContribute → 主账号收到 plaza_submit_notice（知会，不拦截、不可点）', () => {
+  it('子账号投稿广场 → 主账号收到 plaza_submit_notice（知会，不拦截、不可点）', () => {
     store.getState().setCurrentUser('u_lin')
     const before = parentNotis('plaza_submit_notice').length
-    const r = store.getState().runContribute('d_ajie')
+    const r = sendPlaza('d_ajie')
     expect(r.ok).toBe(true) // 不拦截，投稿照常成立
     expect(parentNotis('plaza_submit_notice').length).toBe(before + 1)
     // v2：知会型通知没有可执行动作，link 不填。
@@ -690,7 +699,7 @@ describe('审核中心行数据（selectPlazaReviewRows）', () => {
   it('一份通过并上架的投稿只出一行（不重复）；官方素材投稿人显示「官方」', () => {
     // 小林投稿 a_ajie → admin 通过上架
     store.getState().setCurrentUser('u_lin')
-    store.getState().runContribute('d_ajie')
+    sendPlaza('d_ajie')
     const sid = store.getState().plazaSubmissions.at(-1).id
     store.getState().setCurrentUser('u_admin')
     store.getState().approvePlazaSubmission(sid)
@@ -712,18 +721,109 @@ describe('审核中心行数据（selectPlazaReviewRows）', () => {
   })
 })
 
-describe('广场投稿 · 只带定稿图（0803）', () => {
-  it('上架的广场母版只带定稿图、候选池不带', () => {
+describe('0810 · 送一张图出去（runSendImage）', () => {
+  const teamCount = () =>
+    store.getState().world.assets.filter((a: { scope: string }) => a.scope === 'team').length
+
+  it('主账号送图进团队库 → 团队库 +1，且是扁平的单图（无图片列表 / 无参考图）', () => {
+    const before = teamCount()
+    const r = store.getState().runSendImage({ target: 'team', payload: { url: '/x.png', name: '风衣', category: 'costume' } })
+    expect(r.ok).toBe(true)
+    expect(teamCount()).toBe(before + 1)
+    const added = store.getState().world.assets.at(-1)
+    expect(added.scope).toBe('team')
+    expect(added.cover).toBe('/x.png')
+    expect(added.candidates).toBeUndefined()
+    expect(added.referenceImages).toBeUndefined()
+  })
+
+  it('提示词随图走：送出去的团队素材 prompt 与传入一致', () => {
+    store.getState().runSendImage({ target: 'team', payload: { url: '/y.png', name: '皮衣', category: 'costume', prompt: '黑色机车皮衣' } })
+    expect(store.getState().world.assets.at(-1).prompt).toBe('黑色机车皮衣')
+  })
+
+  it('团队库重名 → 被挡，提示换名字', () => {
+    store.getState().runSendImage({ target: 'team', payload: { url: '/a.png', name: '重名素材', category: 'prop' } })
+    const before = teamCount()
+    const r = store.getState().runSendImage({ target: 'team', payload: { url: '/b.png', name: '重名素材', category: 'prop' } })
+    expect(r.ok).toBe(false)
+    expect(r.message).toContain('换个名字')
+    expect(teamCount()).toBe(before)
+  })
+
+  it('广场按投稿人维度查重：同一人投两张同名 → 第二张被挡；换个人投同名 → 放行', () => {
+    // Sunny 投两张同名
+    store.getState().runSendImage({ target: 'plaza', payload: { url: '/p1.png', name: '通用道具', category: 'prop' }, sourceAssetId: 'd_phone' })
+    const s1 = store.getState().plazaSubmissions.at(-1).id
+    store.getState().setCurrentUser('u_admin')
+    store.getState().approvePlazaSubmission(s1)
+    store.getState().setCurrentUser('u_sunny')
+    const dup = store.getState().runSendImage({ target: 'plaza', payload: { url: '/p2.png', name: '通用道具', category: 'prop' }, sourceAssetId: 'd_phone' })
+    expect(dup.ok).toBe(false)
+    expect(dup.message).toContain('换个名字')
+    // 换个投稿人（小林，从项目库发起）投同名 → 放行
+    store.getState().setCurrentUser('u_lin')
+    const other = store.getState().runSendImage({ target: 'plaza', payload: { url: '/p3.png', name: '通用道具', category: 'prop' }, sourceAssetId: 'd_phone' })
+    expect(other.ok).toBe(true)
+  })
+
+  it('子账号送图进团队库 → 只生成申请，团队库不变；审批通过后 +1', () => {
+    store.getState().setCurrentUser('u_lin')
+    const before = teamCount()
+    const r = store.getState().runSendImage({ target: 'team', payload: { url: '/c.png', name: '子账号素材', category: 'scene' }, sourceAssetId: 'd_living_room' })
+    expect(r.ok).toBe(true)
+    expect(teamCount()).toBe(before)
+    const appl = store.getState().applications.at(-1)
+    store.getState().setCurrentUser('u_sunny')
+    expect(store.getState().approveApplication(appl.id).ok).toBe(true)
+    expect(teamCount()).toBe(before + 1)
+  })
+
+  it('审批期间团队库出现同名 → 审批落库时被挡，提示改名', () => {
+    // 子账号提交一份「撞名」，在途期间主账号自己先存了个同名
+    store.getState().setCurrentUser('u_lin')
+    store.getState().runSendImage({ target: 'team', payload: { url: '/d.png', name: '撞名', category: 'prop' }, sourceAssetId: 'd_phone' })
+    const appl = store.getState().applications.at(-1)
+    store.getState().setCurrentUser('u_sunny')
+    store.getState().runSendImage({ target: 'team', payload: { url: '/e.png', name: '撞名', category: 'prop' } }) // 主账号先占了名字
+    const r = store.getState().approveApplication(appl.id)
+    expect(r.ok).toBe(false)
+    expect(r.message).toContain('改名')
+  })
+
+  it('「其他」类目不能送出（assertPayload 抛错，文案含「团队库」/「素材广场」）', () => {
+    const t = store.getState().runSendImage({ target: 'team', payload: { url: '/o.png', name: '分镜', category: 'other' } })
+    expect(t.ok).toBe(false)
+    expect(t.message).toContain('团队库')
+    const p = store.getState().runSendImage({ target: 'plaza', payload: { url: '/o.png', name: '分镜', category: 'other' }, sourceAssetId: 'd_phone' })
+    expect(p.ok).toBe(false)
+    expect(p.message).toContain('素材广场')
+  })
+
+  it('送出不影响源资产：源资产的图片列表 / 定稿原样不动', () => {
+    const before = store.getState().world.assets.find((a: { id: string }) => a.id === 'd_ajie')
+    const candsBefore = before.candidates.length
+    const coverBefore = before.cover
+    store.getState().runSendImage({ target: 'team', payload: { url: before.cover, name: '阿杰副本', category: 'character' }, sourceAssetId: 'd_ajie' })
+    const after = store.getState().world.assets.find((a: { id: string }) => a.id === 'd_ajie')
+    expect(after.candidates.length).toBe(candsBefore)
+    expect(after.cover).toBe(coverBefore)
+  })
+})
+
+describe('广场投稿 · 扁平化单图（0810）', () => {
+  it('上架的广场母版是扁平的单图（无图片列表 / 无参考图）', () => {
     // Sunny(主账号) 贡献苏晚，admin 通过上架
-    store.getState().runContribute('a_suwan')
+    const suwan = store.getState().world.assets.find((a: { id: string }) => a.id === 'a_suwan')
+    sendPlaza('a_suwan')
     const sid = store.getState().plazaSubmissions.at(-1).id
     store.getState().setCurrentUser('u_admin')
     store.getState().approvePlazaSubmission(sid)
-    const suwan = store.getState().world.assets.find((a: { id: string }) => a.id === 'a_suwan')
     const p = store.getState().world.assets.at(-1)
     expect(p.scope).toBe('plaza')
     expect(p.cover).toBe(suwan.cover) // 定稿带上
-    expect(p.candidates).toBeUndefined() // 候选池不带
+    expect(p.candidates).toBeUndefined() // 无图片列表
+    expect(p.referenceImages).toBeUndefined() // 无参考图
   })
 })
 
@@ -746,13 +846,14 @@ describe('删除分层（R1：项目库归零 → 空壳；团队库归零 → �
     expect(after.voice?.name).toBe('测试音色') // 音色保留
   })
 
-  it('空壳不可流转：存入 / 贡献被 assertDone 红线挡下', () => {
+  it('空壳无图可送：runSendImage 传空 url 被 assertPayload 挡下', () => {
     store.getState().clearAssetImages('d_ajie')
-    expect(store.getState().runDeposit('d_ajie').ok).toBe(false)
-    expect(store.getState().runContribute('d_ajie').ok).toBe(false)
+    // 界面不会给空壳出送出入口；服务层再兜一层：空 url 直接挡。
+    expect(store.getState().runSendImage({ target: 'team', payload: { url: '', name: '阿杰', category: 'character' }, sourceAssetId: 'd_ajie' }).ok).toBe(false)
+    expect(store.getState().runSendImage({ target: 'plaza', payload: { url: '', name: '阿杰', category: 'character' }, sourceAssetId: 'd_ajie' }).ok).toBe(false)
   })
 
-  it('空壳生成 1 张 →（0808）自动定稿：status done + cover = 那张 + 池中 1 张', () => {
+  it('空壳生成 1 张 →（0810）自动定稿：status done + cover = 那张 + 池中 1 张', () => {
     store.getState().clearAssetImages('d_ajie')
     const r = store.getState().appendCandidates('d_ajie', ['/gen.png'])
     expect(r.ok).toBe(true)

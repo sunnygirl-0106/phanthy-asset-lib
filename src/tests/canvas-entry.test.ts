@@ -17,13 +17,16 @@ import {
   canUploadToProject,
   categoriesForMedia,
   destinationsForMedia,
+  destinationsForScope,
+  scopesForNode,
   saveCanvasNodeToProject,
   teamHasSameName,
+  plazaHasSameNameBySubmitter,
   type CanvasNode,
   type Media,
 } from '../services/canvasService'
 import { AssetRuleError, deposit, contributeToPlaza } from '../services/assetService'
-import type { Asset, User } from '../data/types'
+import type { User } from '../data/types'
 
 /* ── 造一个画布节点的小工具 ── */
 function node(over: Partial<CanvasNode> = {}): CanvasNode {
@@ -70,12 +73,18 @@ describe('入口一 · 出现条件（canUploadToProject）', () => {
     expect(destinationsForMedia('audio')).toContain('voice')
   })
 
-  it('⑤ 从本项目库拖上来的节点无上传入口（已经是项目资产）', () => {
+  it('⑤ 从本项目库拖上来的节点：不再给"存项目库"，但仍能送团队库/广场（0810 放宽）', () => {
     const fromProject = node({ source: { scope: 'project', assetId: 'd_ajie' } })
-    expect(canUploadToProject(fromProject)).toBe(false)
-    // 团队库/广场来源仍可上传
-    expect(canUploadToProject(node({ source: { scope: 'team', assetId: 'a_suwan' } }))).toBe(true)
-    expect(canUploadToProject(node({ source: { scope: 'plaza', assetId: 'a_cyber_police' } }))).toBe(true)
+    // 0810：条件 ⑤ 放宽——上传入口仍在（还能往上送），只是层选项里不含项目库。
+    expect(scopesForNode(fromProject)).not.toContain('project')
+    expect(scopesForNode(fromProject)).toContain('team')
+    expect(scopesForNode(fromProject)).toContain('plaza')
+    // 团队库/广场来源：三层都能存（含"另存一份项目库"）。
+    expect(scopesForNode(node({ source: { scope: 'team', assetId: 'a_suwan' } }))).toEqual(['project', 'team', 'plaza'])
+    // 视频 / 文本 / 音频媒介只能待在项目库（音频：0811 收口）。
+    expect(scopesForNode(node({ media: 'video' }))).toEqual(['project'])
+    expect(scopesForNode(node({ media: 'text' }))).toEqual(['project'])
+    expect(scopesForNode(node({ media: 'audio' }))).toEqual(['project'])
   })
 })
 
@@ -190,25 +199,42 @@ describe('入口一 · 产出意图（saveCanvasNodeToProject 纯函数）', () 
     expect(teamHasSameName(assets, 'team_a', '别的名字')).toBe(false)
     expect(teamHasSameName(assets, 'team_b', '苏晚')).toBe(false) // 别的团队不算
   })
+
+  it('destinationsForScope（0810）：团队库 / 广场没有「其他」、没有「角色音色」', () => {
+    // 项目层沿用 destinationsForMedia 的全集。
+    expect(destinationsForScope('image', 'project')).toEqual(['character', 'prop', 'costume', 'scene', 'other'])
+    // 团队库：滤掉 other / voice。
+    expect(destinationsForScope('image', 'team')).toEqual(['character', 'prop', 'costume', 'scene'])
+    expect(destinationsForScope('audio', 'team')).toEqual(['audio'])
+    expect(destinationsForScope('image', 'plaza')).toEqual(['character', 'prop', 'costume', 'scene'])
+  })
+
+  it('plazaHasSameNameBySubmitter（0810）：按投稿人维度查重', () => {
+    const assets = [
+      { id: 'p1', scope: 'plaza', contributedBy: 'u_a', name: '西装' },
+      { id: 'p2', scope: 'plaza', name: '官方西装' }, // 官方素材无 contributedBy
+    ] as never[]
+    expect(plazaHasSameNameBySubmitter(assets, 'u_a', '西装')).toBe(true) // 同人同名
+    expect(plazaHasSameNameBySubmitter(assets, 'u_a', '风衣')).toBe(false) // 同人异名
+    expect(plazaHasSameNameBySubmitter(assets, 'u_b', '西装')).toBe(false) // 异人同名 → 放行
+    expect(plazaHasSameNameBySubmitter(assets, 'u_a', '官方西装')).toBe(false) // 官方素材不参与
+  })
 })
 
 /* ═══ 「其他」类目流转守卫（服务层挡死，不只靠界面隐藏按钮 · 技术规划 §五）═══ */
 
-describe('「其他」类目不参与向上流转（assetService 守卫）', () => {
+describe('「其他」类目不参与向上流转（assertPayload 守卫）', () => {
   const owner: User = { id: 'u_owner', name: '主账号', avatar: '', role: 'owner', teamId: 'team_a' }
-  const otherAsset: Asset = {
-    id: 'a_other', category: 'other', name: '分镜图', scope: 'project', scopeId: 'proj_daily',
-    status: 'done', cover: '/board.png', fields: { media: 'image' }, tags: [], createdAt: 0,
-  }
+  const otherPayload = { url: '/board.png', name: '分镜图', category: 'other' as const }
 
   it('deposit（→ 团队库）对「其他」抛业务错误', () => {
-    expect(() => deposit(otherAsset, 'team_a', owner)).toThrow(AssetRuleError)
-    expect(() => deposit(otherAsset, 'team_a', owner)).toThrow(/团队库/)
+    expect(() => deposit(otherPayload, 'team_a', owner)).toThrow(AssetRuleError)
+    expect(() => deposit(otherPayload, 'team_a', owner)).toThrow(/团队库/)
   })
 
   it('contributeToPlaza（→ 素材广场）对「其他」抛业务错误', () => {
-    expect(() => contributeToPlaza(otherAsset, owner)).toThrow(AssetRuleError)
-    expect(() => contributeToPlaza(otherAsset, owner)).toThrow(/素材广场/)
+    expect(() => contributeToPlaza(otherPayload, owner)).toThrow(AssetRuleError)
+    expect(() => contributeToPlaza(otherPayload, owner)).toThrow(/素材广场/)
   })
 })
 
@@ -230,20 +256,20 @@ beforeAll(async () => {
   const mod = await import('../store/useStore')
   store = mod.useStore
 })
-// 0805：都市日常那批资产（a_ajie 等）改由演示脚手架灌入；重置后跑一遍演示动作补回，
-// 让沿用旧演员表（关联 a_ajie 等）的入口一用例照常跑。
+// 0805：都市日常那批资产（d_ajie 等）改由演示脚手架灌入；重置后跑一遍演示动作补回，
+// 让沿用旧演员表（关联 d_ajie 等）的入口一用例照常跑。
+// 0810：演示生成后基础素材直接落成品（有图必自动定稿），无需再补定稿。
 beforeEach(() => {
   store.getState().resetDemo()
   store.getState().runDemoAnalyze()
   store.getState().runDemoGenerate()
-  // 0807：演示生成后基础素材是「待定稿」；沿用旧演员表（关联 / 存入 a_ajie 等）的用例，
-  // 这里把每份待定稿的第一张候选拍成定稿，恢复"成品"初始态。
-  for (const a of store.getState().world.assets) {
-    if (a.scopeId === 'proj_daily' && a.status === 'pending' && a.candidates?.length) {
-      store.getState().runSetFinal(a.id, a.candidates[0].id)
-    }
-  }
 })
+
+/** 0810：把一份项目资产按单张图存入团队库（替代已删除的 runDeposit）。 */
+function sendTeam(id: string) {
+  const a = store.getState().world.assets.find((x: { id: string }) => x.id === id)
+  return store.getState().runSendImage({ target: 'team', payload: { url: a.cover, name: a.name, category: a.category }, sourceAssetId: id })
+}
 
 const projectAssets = () =>
   store.getState().world.assets.filter((a: { scope: string; scopeId?: string }) => a.scope === 'project' && a.scopeId === 'proj_daily')
@@ -306,7 +332,7 @@ describe('入口一 · store 提交（runSaveToProject）', () => {
 
     // 再把这份项目资产往团队存入 → 这一步才生成待审批申请
     const uploaded = store.getState().world.assets.at(-1)
-    const d = store.getState().runDeposit(uploaded.id)
+    const d = sendTeam(uploaded.id)
     expect(d.ok).toBe(true)
     expect(store.getState().applications.length).toBe(1)
   })
@@ -350,10 +376,10 @@ describe('入口一→存入 · 去重（⑧）', () => {
     })
     expect(up.ok).toBe(true)
     const uploaded = store.getState().world.assets.at(-1)
-    // 存入团队库 → 团队库已有同名，挡下
-    const d = store.getState().runDeposit(uploaded.id)
+    // 存入团队库 → 团队库已有同名，挡下（0810 文案统一为「换个名字」）
+    const d = sendTeam(uploaded.id)
     expect(d.ok).toBe(false)
-    expect(d.message).toContain('改名')
+    expect(d.message).toContain('换个名字')
   })
 
   it('改个不冲突的名字就能存入成功', () => {
@@ -363,7 +389,7 @@ describe('入口一→存入 · 去重（⑧）', () => {
       name: '苏晚·画布分身',
     })
     const uploaded = store.getState().world.assets.at(-1)
-    const d = store.getState().runDeposit(uploaded.id)
+    const d = sendTeam(uploaded.id)
     expect(d.ok).toBe(true)
   })
 })
@@ -397,7 +423,7 @@ describe('演示动线：子账号画布上传 → 存入 → 主账号审批 �
 
     // ② 子账号把它存入 → 生成待审批申请
     const uploaded = store.getState().world.assets.at(-1)
-    expect(store.getState().runDeposit(uploaded.id).ok).toBe(true)
+    expect(sendTeam(uploaded.id).ok).toBe(true)
     const appl = store.getState().applications.at(-1)
     expect(appl.status).toBe('pending')
 
@@ -411,14 +437,14 @@ describe('演示动线：子账号画布上传 → 存入 → 主账号审批 �
     ).toBe(1)
   })
 
-  it('子账号存入 → 审批后团队库那份只带定稿图、候选池不带（0803）', () => {
+  it('子账号存入 → 审批后团队库那份是扁平的单图（0810 扁平化三件套）', () => {
     // 小林（子账号，分配了都市日常）存入「阿杰」
     store.getState().setCurrentUser('u_lin')
     const ajie = store.getState().world.assets.find((a: { id: string }) => a.id === 'd_ajie')
-    expect(store.getState().runDeposit('d_ajie').ok).toBe(true)
+    expect(sendTeam('d_ajie').ok).toBe(true)
     const appl = store.getState().applications.at(-1)
 
-    // 主账号审批通过 → 团队库那份：定稿在、候选池不带
+    // 主账号审批通过 → 团队库那份：定稿在，图片列表 / 参考图 / 来源全无
     store.getState().setCurrentUser('u_sunny')
     expect(store.getState().approveApplication(appl.id).ok).toBe(true)
     const master = store
@@ -429,6 +455,8 @@ describe('演示动线：子账号画布上传 → 存入 → 主账号审批 �
       )
       .at(-1)
     expect(master.cover).toBe(ajie.cover) // 定稿带上
-    expect(master.candidates).toBeUndefined() // 候选池不带
+    expect(master.candidates).toBeUndefined() // 无图片列表
+    expect(master.referenceImages).toBeUndefined() // 无参考图
+    expect(master.referencedFrom).toBeUndefined() // 无来源
   })
 })

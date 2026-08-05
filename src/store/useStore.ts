@@ -19,7 +19,7 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { World, User, Asset, AssetStatus, Canvas, Category, Notification, NotificationKind, Voice } from '../data/types'
+import type { World, User, Asset, AssetStatus, Canvas, Category, FlatImagePayload, Notification, NotificationKind, Voice } from '../data/types'
 import { createSeedWorld, IDS } from '../data/seed'
 import { DEMO_ASSETS, DEMO_IDS, DEMO_LOOK_IDS } from '../data/demoProject'
 import {
@@ -32,8 +32,6 @@ import {
   materializePlaza,
   removeCandidate,
   setFinal,
-  unsetFinal,
-  withSelfReference,
   makeCandidate,
   makeId,
   coverOf,
@@ -55,16 +53,24 @@ import {
   getTeam,
   isAdmin,
   isListed,
-  depositMode,
 } from '../services/permission'
 import {
   saveCanvasNodeToProject,
   teamHasSameName,
   libraryHasSameName,
+  plazaHasSameNameBySubmitter,
   type CanvasNode,
   type SaveSpec,
   type SaveOutcome,
 } from '../services/canvasService'
+
+/** 「送一张图出去」的入参（0810 · runSendImage）。 */
+export interface SendImageInput {
+  target: 'team' | 'plaza'
+  payload: FlatImagePayload
+  /** 从项目库某份资产送出时给上；画布节点 / 本地文件直传时不给。 */
+  sourceAssetId?: string
+}
 
 /** 流转动作的统一返回：ok + 一句给用户看的话。 */
 export interface ActionResult {
@@ -111,7 +117,12 @@ interface StoreState {
   runDirectReuse: (sourceId: string, targetProjectId: string, includeVoice?: boolean) => ActionResult
   runFavorite: (sourceId: string) => ActionResult
   runReuse: (sourceId: string, targetProjectId: string) => ActionResult
-  runDeposit: (sourceId: string) => ActionResult
+  /**
+   * 【0810 · B 主线唯一落点】把一张图送出去（存入团队库 / 贡献广场）。
+   * 流转的最小单位是图不是资产：主账号存团队库直接落一份扁平单图，子账号存团队库生成申请，
+   * 广场投稿一律进 admin 队列。唯一守门规则是名字不重复（团队库全库查、广场按投稿人查）。
+   */
+  runSendImage: (input: SendImageInput) => ActionResult
 
   /**
    * 【入口一 · 本期内核唯一实质扩展】把一个画布成品节点存进项目资产库（技术规划 §2.1）。
@@ -126,9 +137,7 @@ interface StoreState {
   /** 驳回一条子账号资产存入申请：申请标记 rejected、记录理由（选填），随通知发给申请人。团队库不动。 */
   rejectApplication: (applicationId: string, reason?: string) => ActionResult
 
-  // ── 广场投稿（发起：主账号/子账号；审核：admin）──
-  /** 发起广场投稿：把自己团队库/项目里的成品资产提交到 admin 审核队列（只带定稿图）。 */
-  runContribute: (sourceId: string) => ActionResult
+  // ── 广场投稿（发起走 runSendImage；审核：admin）──
   /** admin 通过广场投稿：把资产上架成广场官方母版（shelfStatus=listed）、回填 resultAssetId、给投稿人发通知。 */
   approvePlazaSubmission: (submissionId: string) => ActionResult
   /** admin 驳回广场投稿：标记 rejected、记录理由（选填），随通知发给投稿人。广场不动。 */
@@ -160,18 +169,14 @@ interface StoreState {
    * （删定稿且池空的归零判定由详情页按层分流到 clearAssetImages / runDeleteAsset。）
    */
   runRemoveCandidate: (assetId: string, candidateId: string) => ActionResult
-  /** 把候选池里的某张设为定稿。 */
+  /** 把候选池里的某张设为定稿（换 cover 指向）。 */
   runSetFinal: (assetId: string, candidateId: string) => ActionResult
-  /** 取消定稿：资产退回待定稿（图都还在池子里），撤回"可被引用"的授权。 */
-  runUnsetFinal: (assetId: string) => ActionResult
   /**
-   * 把新生成 / 新上传的图并入候选池（0807：不再有"保留选中"这道人工关卡）。
-   * 资产原本没有定稿（空壳 / 待定稿）→ status 变 'pending'，等用户在预览台点「设为定稿」。
+   * 把新生成 / 新上传的图并入候选池（0810）。
+   * 资产从"没有图"变成"有图"时，本批第一张自动成为定稿——生成 / 上传 / 批量一视同仁；
    * 资产原本已有定稿 → 定稿不动，只是候选池多了几张。
-   * allowAutoFinal（默认 true）：只有"系统生成"才享受 0808 的"1 张自动定稿"；
-   *   用户主动上传本地图应传 false——那是探索行为，定稿权留给用户，不代他拍板。
    */
-  appendCandidates: (assetId: string, urls: string[], allowAutoFinal?: boolean) => ActionResult
+  appendCandidates: (assetId: string, urls: string[]) => ActionResult
   /** 编辑提示词（左栏 textarea 失焦 / 生成时提交）。只改这一份的 prompt。 */
   setPrompt: (assetId: string, prompt: string) => ActionResult
   /**
@@ -190,7 +195,7 @@ interface StoreState {
     referencedFrom?: string,
   ) => ActionResult
   /**
-   * 批量生成：对选中的空壳 / 待定稿资产各生成 countPerAsset 张（默认 1 张）。
+   * 批量生成：对选中的空壳资产各生成 countPerAsset 张（默认 1 张）。
    * 默认 1 张是有意的——统一生成属于标准化动作，一份一张、自动定稿，
    * 下游的角色造型才能立刻把它们选作参考图（参考图选择器只列成品）。
    */
@@ -389,7 +394,7 @@ export const useStore = create<StoreState>()(
         if (!user.teamId) return fail('当前账号没有团队库')
         if (!canFavorite(user)) return fail('只有主账号能收藏进团队库（子账号请用"直接复用"）')
         // 去重把关（v5 改动1）：写团队库的两条路（收藏 / 存入）都去重。
-        // 收藏进团队库前，若团队库已有同名，挡下、提示改名（与 runDeposit 一致）。
+        // 收藏进团队库前，若团队库已有同名，挡下、提示改名（与 runSendImage 一致）。
         if (teamHasSameName(world.assets, user.teamId, source.name)) {
           return fail(`团队库已有同名「${source.name}」，请改名后再收藏进团队库`)
         }
@@ -422,41 +427,79 @@ export const useStore = create<StoreState>()(
         }
       },
 
-      runDeposit: (sourceId) => {
+      runSendImage: (input) => {
         const { world, currentUserId } = get()
+        const { target, payload, sourceAssetId } = input
         const user = findUser(world, currentUserId)
-        const source = findAsset(world, sourceId)
-        if (!user || !source) return fail('数据不存在')
-        if (!user.teamId) return fail('当前账号没有团队库')
-        if (depositMode(user) === 'none') return fail('管理员只治理，不参与存入')
-        // 去重（v5：库内顶层资产名唯一）：项目→团队这一步，团队库同名则挡下、提示改名。
-        if (libraryHasSameName(world.assets, 'team', user.teamId, source.name)) {
-          return fail(`团队库已有同名「${source.name}」，请改名后再存入团队库`)
-        }
-        try {
-          const res = deposit(source, user.teamId, user)
-          if (res.kind === 'asset') {
-            set((s) => ({ world: addAsset(s.world, res.asset) }))
-            return ok(`已把「${source.name}」存入为团队母版`)
+        if (!user) return fail('数据不存在')
+        // ② admin 不参与创作与流转。
+        if (isAdmin(user)) return fail('管理员只治理，不参与创作与流转')
+        // ③ 名字不能为空。
+        const name = payload.name.trim()
+        if (!name) return fail('请先给这张素材起个名字')
+        const src = sourceAssetId ? findAsset(world, sourceAssetId) : undefined
+
+        // ④ 唯一的守门规则：重名校验（团队库全库查、广场按投稿人查）。
+        if (target === 'team') {
+          if (!user.teamId) return fail('当前账号没有团队库')
+          if (libraryHasSameName(world.assets, 'team', user.teamId, name)) {
+            return fail(`团队库已有同名「${name}」，请换个名字`)
           }
-          // 子账号：登记一条待审批申请，不直接写团队库；额外知会主账号「有新申请待你审批」
-          // （审核中心改造 · 第 5 类消息：原来只有头像红点，没有通知）。
+        } else {
+          if (plazaHasSameNameBySubmitter(world.assets, user.id, name)) {
+            return fail(`你已经投过同名的「${name}」，请换个名字`)
+          }
+          // ⑤ 广场发起层校验：子账号只能从项目库发起（无源资产=画布直传，算项目上下文）。
+          const scope = src?.scope ?? 'project'
+          if (!canContributeToPlaza(user, { scope } as Asset)) {
+            return fail('你没有权限在这一层向广场投稿')
+          }
+        }
+
+        try {
+          if (target === 'team') {
+            const res = deposit(payload, user.teamId!, user, { assetId: sourceAssetId, scopeId: src?.scopeId })
+            if (res.kind === 'asset') {
+              set((s) => ({ world: addAsset(s.world, res.asset) }))
+              return ok(`已把「${name}」存入团队资产库`)
+            }
+            // 子账号：登记一条待审批申请，不直接写团队库；额外知会主账号。
+            set((s) => ({
+              applications: [...s.applications, res],
+              notifications: user.parentId
+                ? [
+                    ...s.notifications,
+                    makeNotification(
+                      user.parentId,
+                      'deposit_submitted',
+                      `${user.name} 提交了素材「${name}」的存入申请，待你审批`,
+                      '#/team/deposits',
+                    ),
+                  ]
+                : s.notifications,
+            }))
+            return ok(`已提交「${name}」的存入申请，待主账号审批`)
+          }
+          // 广场投稿：一律进 admin 队列；子账号投稿额外知会主账号（不拦截）。
+          const submission = contributeToPlaza(payload, user, {
+            assetId: sourceAssetId,
+            scope: src?.scope === 'team' || src?.scope === 'project' ? src.scope : undefined,
+            scopeId: src?.scopeId,
+          })
           set((s) => ({
-            applications: [...s.applications, res],
+            plazaSubmissions: [...s.plazaSubmissions, submission],
             notifications: user.parentId
               ? [
                   ...s.notifications,
                   makeNotification(
                     user.parentId,
-                    'deposit_submitted',
-                    `${user.name} 提交了「${source.name}」的资产存入申请，待你审批`,
-                    // v2：主账号进不去 #/review 了；点通知直接在团队库上弹开存入申请抽屉。
-                    '#/team/deposits',
+                    'plaza_submit_notice',
+                    `${user.name} 把素材「${name}」投稿到了素材广场（知会，未拦截）`,
                   ),
                 ]
               : s.notifications,
           }))
-          return ok(`已提交「${source.name}」的资产存入申请，待主账号审批`)
+          return ok(`已提交「${name}」的广场投稿，待审核`)
         } catch (e) {
           return fromError(e)
         }
@@ -494,11 +537,14 @@ export const useStore = create<StoreState>()(
         const applicant = findUser(world, appl.applicantId)
         if (!applicant) return fail('申请人不存在')
         if (!canApproveDeposit(approver, applicant)) return fail('只有该子账号的主账号能审批')
-        const source = findAsset(world, appl.assetId)
-        if (!source) return fail('原资产已不存在，无法入库')
+        // 0810：不再回查源资产，直接用申请携带的快照落库。
+        // 落库前做第二次重名校验（在途期间团队库可能已经多了一个同名的）。
+        if (libraryHasSameName(world.assets, 'team', appl.toTeamId, appl.payload.name)) {
+          return fail(`团队库已有同名「${appl.payload.name}」，请让申请人改名后重新提交`)
+        }
         try {
           // 复用同一处"入库"实现，保证审批通过和主账号直接存入行为一致
-          const master = materializeDeposit(source, appl.toTeamId)
+          const master = materializeDeposit(appl.payload, appl.toTeamId)
           set((s) => ({
             world: addAsset(s.world, master),
             applications: s.applications.map((a) =>
@@ -508,10 +554,10 @@ export const useStore = create<StoreState>()(
             ),
             notifications: [
               ...s.notifications,
-              makeNotification(appl.applicantId, 'deposit_approved', `你的「${appl.assetName}」资产存入申请已通过，已进团队库`),
+              makeNotification(appl.applicantId, 'deposit_approved', `你的「${appl.payload.name}」素材存入申请已通过，已进团队库`),
             ],
           }))
-          return ok(`已通过「${appl.assetName}」的资产存入申请，写入团队库`)
+          return ok(`已通过「${appl.payload.name}」的存入申请，写入团队库`)
         } catch (e) {
           return fromError(e)
         }
@@ -537,41 +583,11 @@ export const useStore = create<StoreState>()(
             makeNotification(
               appl.applicantId,
               'deposit_rejected',
-              `你的「${appl.assetName}」资产存入申请被驳回${reason ? `：${reason}` : ''}`,
+              `你的「${appl.payload.name}」素材存入申请被驳回${reason ? `：${reason}` : ''}`,
             ),
           ],
         }))
-        return ok(`已驳回「${appl.assetName}」的资产存入申请`)
-      },
-
-      runContribute: (sourceId) => {
-        const { world, currentUserId } = get()
-        const user = findUser(world, currentUserId)
-        const source = findAsset(world, sourceId)
-        if (!user || !source) return fail('数据不存在')
-        if (!canContributeToPlaza(user, source)) return fail('你没有权限在这一层向广场投稿')
-        try {
-          const submission = contributeToPlaza(source, user)
-          // 子账号投稿直达 admin，主账号不拦截；但知会一条，让主账号知道团队的东西要外流
-          // （审核中心改造 · 第 8 类消息）。
-          set((s) => ({
-            plazaSubmissions: [...s.plazaSubmissions, submission],
-            notifications: user.parentId
-              ? [
-                  ...s.notifications,
-                  makeNotification(
-                    user.parentId,
-                    'plaza_submit_notice',
-                    `${user.name} 把「${source.name}」投稿到了素材广场（知会，未拦截）`,
-                    // v2：这是知会，主账号对广场投稿没有可执行动作，不给可点链接（免得误导）。
-                  ),
-                ]
-              : s.notifications,
-          }))
-          return ok(`已提交「${source.name}」的广场投稿，待 admin 审核`)
-        } catch (e) {
-          return fromError(e)
-        }
+        return ok(`已驳回「${appl.payload.name}」的存入申请`)
       },
 
       approvePlazaSubmission: (submissionId) => {
@@ -581,12 +597,14 @@ export const useStore = create<StoreState>()(
         if (!reviewer || !sub) return fail('数据不存在')
         if (!canReviewPlaza(reviewer)) return fail('只有 admin 能审核广场投稿')
         if (sub.status !== 'pending') return fail('这条投稿已经处理过了')
-        const source = findAsset(world, sub.assetId)
-        if (!source) return fail('原资产已不存在，无法上架')
+        // 0810：不再回查源资产，直接用投稿携带的快照上架；落库前再按投稿人维度查一次重名。
+        if (plazaHasSameNameBySubmitter(world.assets, sub.submitterId, sub.payload.name)) {
+          return fail(`该投稿人已有同名素材「${sub.payload.name}」，请驳回并让其改名`)
+        }
         try {
           // 上架时显式打上 shelfStatus='listed'，并把生成的广场资产 id 回填给投稿记录，
           // 让审核中心列表能把「投稿记录」和「已上架资产」对上号、不重复出行。
-          const master = { ...materializePlaza(source, sub.submitterId), shelfStatus: 'listed' as const }
+          const master = { ...materializePlaza(sub.payload, sub.submitterId), shelfStatus: 'listed' as const }
           set((s) => ({
             world: addAsset(s.world, master),
             plazaSubmissions: s.plazaSubmissions.map((x) =>
@@ -596,10 +614,10 @@ export const useStore = create<StoreState>()(
             ),
             notifications: [
               ...s.notifications,
-              makeNotification(sub.submitterId, 'plaza_approved', `你投稿的「${sub.assetName}」已通过 admin 审核，已上架素材广场`),
+              makeNotification(sub.submitterId, 'plaza_approved', `你投稿的「${sub.payload.name}」已通过 admin 审核，已上架素材广场`),
             ],
           }))
-          return ok(`已通过「${sub.assetName}」的广场投稿，已上架`)
+          return ok(`已通过「${sub.payload.name}」的广场投稿，已上架`)
         } catch (e) {
           return fromError(e)
         }
@@ -623,11 +641,11 @@ export const useStore = create<StoreState>()(
             makeNotification(
               sub.submitterId,
               'plaza_rejected',
-              `你投稿的「${sub.assetName}」被 admin 驳回${reason ? `：${reason}` : ''}`,
+              `你投稿的「${sub.payload.name}」被 admin 驳回${reason ? `：${reason}` : ''}`,
             ),
           ],
         }))
-        return ok(`已驳回「${sub.assetName}」的广场投稿`)
+        return ok(`已驳回「${sub.payload.name}」的广场投稿`)
       },
 
       runRemovePlaza: (assetId) => {
@@ -750,8 +768,7 @@ export const useStore = create<StoreState>()(
         if (!user || !asset) return fail('数据不存在')
         if (!canDeleteLibraryAsset(user, asset)) return fail('你没有权限修改这份资产')
         try {
-          // 定稿后若是造型，把定稿图追加进自己的参考图（withSelfReference 内部判造型 + 判重）。
-          const next = withSelfReference(setFinal(asset, candidateId))
+          const next = setFinal(asset, candidateId)
           set((s) => ({
             world: {
               ...s.world,
@@ -764,24 +781,7 @@ export const useStore = create<StoreState>()(
         }
       },
 
-      runUnsetFinal: (assetId) => {
-        const { world, currentUserId } = get()
-        const user = findUser(world, currentUserId)
-        const asset = findAsset(world, assetId)
-        if (!user || !asset) return fail('数据不存在')
-        if (!canRegenerate(user, asset)) return fail('你没有权限修改这份资产')
-        try {
-          const next = unsetFinal(asset)
-          set((s) => ({
-            world: { ...s.world, assets: s.world.assets.map((a) => (a.id === assetId ? next : a)) },
-          }))
-          return ok('已取消定稿，这份资产暂时不能被参考或存入团队库')
-        } catch (e) {
-          return fromError(e)
-        }
-      },
-
-      appendCandidates: (assetId, urls, allowAutoFinal = true) => {
+      appendCandidates: (assetId, urls) => {
         const { world, currentUserId } = get()
         const user = findUser(world, currentUserId)
         const asset = findAsset(world, assetId)
@@ -789,31 +789,25 @@ export const useStore = create<StoreState>()(
         if (!canRegenerate(user, asset)) return fail('你没有权限往这份资产生成图片')
         if (urls.length === 0) return fail('没有可生成的图片')
         const added = urls.map((u) => makeCandidate(u, asset.prompt))
+        // 0810：任何时候资产从"没有图"变成"有图"，本批第一张自动成为定稿。
+        // 生成 / 上传 / 批量，一视同仁——不再区分张数、不再区分是不是用户主动放进来的。
+        const autoFinal = !asset.cover
         set((s) => ({
           world: {
             ...s.world,
             assets: s.world.assets.map((a) => {
               if (a.id !== assetId) return a
-              const prevCands = a.candidates ?? []
-              const candidates = [...prevCands, ...added]
-              // 0808 · 自动定稿的三个条件：本批只有 1 张 + 原本没定稿 + 原本池子是空的（第一次出图）。
-              // 三条缺一不可；尤其别漏第三条，否则"待定稿资产补传一张"会被意外定稿。
-              // allowAutoFinal=false：调用方声明这是用户主动放进来的图（如上传本地图），
-              // 定稿权留给用户，不代他拍板——直接进待定稿。
-              const autoFinal = allowAutoFinal && added.length === 1 && !a.cover && prevCands.length === 0
-              const next = {
+              const candidates = [...(a.candidates ?? []), ...added]
+              return {
                 ...a,
                 candidates,
                 cover: autoFinal ? added[0].url : a.cover,
-                status: (autoFinal || a.cover ? 'done' : 'pending') as AssetStatus,
+                status: 'done' as AssetStatus, // ← 有图必成品
               }
-              // 自动定稿的若是造型，把定稿图一并挂进自己的参考图。
-              return autoFinal ? withSelfReference(next) : next
             }),
           },
         }))
-        const autoFinaled = allowAutoFinal && added.length === 1 && !asset.cover && (asset.candidates?.length ?? 0) === 0
-        return ok(autoFinaled ? '已生成并设为定稿' : `已生成 ${added.length} 张，挑一张设为定稿`)
+        return ok(autoFinal ? `已生成 ${added.length} 张，第一张已设为定稿` : `已生成 ${added.length} 张`)
       },
 
       setPrompt: (assetId, prompt) => {
@@ -915,8 +909,8 @@ export const useStore = create<StoreState>()(
             ...s.world,
             assets: s.world.assets.map((a) => {
               if (!idSet.has(a.id)) return a
-              // 0807：空壳和待定稿都可以再生成；已有定稿的成品跳过（批量生成是给"还没出图"的用的）。
-              if (!canRegenerate(user, a) || (a.status !== 'empty' && a.status !== 'pending')) {
+              // 0810：批量生成只给"还没出图"的空壳用；有图的资产要补图请进详情页点生成。
+              if (!canRegenerate(user, a) || a.status !== 'empty') {
                 skipped++
                 return a
               }
@@ -927,16 +921,13 @@ export const useStore = create<StoreState>()(
               const cands = Array.from({ length: countPerAsset }, () =>
                 makeCandidate(`${src}?g=${++seq}`, a.prompt),
               )
-              // 与 appendCandidates 同一条规则：本批 1 张 + 原本没定稿 + 原本池子空 → 自动定稿。
-              const autoFinal = cands.length === 1 && !a.cover && (a.candidates?.length ?? 0) === 0
-              const next = {
+              // 空壳原本无定稿，本批第一张自动成为定稿（0810：有图必成品）。
+              return {
                 ...a,
                 candidates: [...(a.candidates ?? []), ...cands],
-                cover: autoFinal ? cands[0].url : a.cover,
-                status: (autoFinal ? 'done' : 'pending') as AssetStatus,
+                cover: cands[0].url,
+                status: 'done' as AssetStatus,
               }
-              // 自动定稿的若是造型，把定稿图一并挂进自己的参考图。
-              return autoFinal ? withSelfReference(next) : next
             }),
           },
         }))
@@ -1122,23 +1113,25 @@ export interface PlazaReviewRow {
 export function selectPlazaReviewRows(state: StoreState): PlazaReviewRow[] {
   const { world, plazaSubmissions } = state
   const userName = (id: string) => world.users.find((u) => u.id === id)?.name ?? id
-  const fromLabelOf = (fromScope: 'team' | 'project', fromScopeId?: string) =>
-    fromScope === 'team' ? '团队资产库' : world.projects.find((p) => p.id === fromScopeId)?.name ?? '某项目'
+  const fromLabelOf = (fromScope: 'team' | 'project' | undefined, fromScopeId?: string) =>
+    fromScope === 'team' ? '团队资产库'
+      : fromScope === 'project' ? world.projects.find((p) => p.id === fromScopeId)?.name ?? '某项目'
+        : '—'
 
   const rows: PlazaReviewRow[] = []
 
   // ① 还没过审 / 被驳回的投稿：世界里还没有对应的广场资产，从投稿记录出行。
   //    已通过（approved）的不在这里出——它对应的资产已经在 world.assets 里，会从 ② 出行，否则重复。
+  //    0810：投稿携带图片快照，名字 / 封面 / 类目直接读 payload，不再回查源资产。
   for (const s of plazaSubmissions) {
     if (s.status === 'approved') continue
-    const src = world.assets.find((a) => a.id === s.assetId)
     rows.push({
       key: `sub_${s.id}`,
       submissionId: s.id,
-      assetId: s.assetId,
-      name: s.assetName,
-      cover: src ? coverOf(src) : '',
-      category: src?.category ?? 'character',
+      assetId: s.sourceAssetId,
+      name: s.payload.name,
+      cover: s.payload.url,
+      category: s.payload.category,
       submitterName: userName(s.submitterId),
       fromLabel: fromLabelOf(s.fromScope, s.fromScopeId),
       createdAt: s.createdAt,
@@ -1194,12 +1187,11 @@ export function selectDepositRows(state: StoreState): DepositReviewRow[] {
   return applications
     .filter((a) => world.users.find((u) => u.id === a.applicantId)?.parentId === me.id)
     .map((a) => {
-      const src = world.assets.find((x) => x.id === a.assetId)
       return {
         id: a.id,
-        assetId: a.assetId,
-        name: a.assetName,
-        cover: src ? coverOf(src) : '',
+        assetId: a.sourceAssetId ?? '',
+        name: a.payload.name,
+        cover: a.payload.url,
         applicantName: userName(a.applicantId),
         fromLabel: projName(a.fromScopeId),
         createdAt: a.createdAt,

@@ -37,6 +37,20 @@ const CREATABLE: Category[] = ['character', 'costume', 'scene', 'prop']
 const CAT_LABEL: Record<Category, string> = {
   character: '角色', costume: '服装', scene: '场景', prop: '道具', audio: '音频', other: '其他',
 }
+/** 新增资产弹窗主文案（0810 · §5.2.2）。 */
+const CREATE_DESC: Partial<Record<Category, string>> = {
+  character: '新增一个角色。形象、提示词与音色可在详情页中逐步完善。',
+  costume: '新增一件服装。款式描述与参考图可在详情页中逐步完善。',
+  scene: '新增一个场景。环境描述与参考图可在详情页中逐步完善。',
+  prop: '新增一件道具。外观描述与参考图可在详情页中逐步完善。',
+}
+/** 新增资产弹窗输入框 placeholder（0810 · §5.2.2）。 */
+const CREATE_PLACEHOLDER: Partial<Record<Category, string>> = {
+  character: '输入角色名称，如：便利店老板',
+  costume: '输入服装名称，如：黑色风衣',
+  scene: '输入场景名称，如：便利店门口',
+  prop: '输入道具名称，如：折叠伞',
+}
 
 export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
   const world = useStore((s) => s.world)
@@ -56,6 +70,7 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
   const [sortDesc, setSortDesc] = useState(true) // 时间倒序：默认最新在前
   const [batch, setBatch] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [confirmDelete, setConfirmDelete] = useState(false) // 批量删除二次确认弹窗
   const [detailAssetId, setDetailAssetId] = useState<string | null>(null)
   const [demoOpen, setDemoOpen] = useState(false) // 演示控件收起/展开
   const [toast, setToast] = useState<string | null>(null)
@@ -138,6 +153,18 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
     if (selected.size === 0) return
     const r = batchGenerate([...selected], assetUrl('assets/canvas/image-placeholder.svg'))
     showToast(r.message)
+    exitBatch()
+  }
+
+  /** 批量删除（二次确认后执行）：逐份整删，汇总成一条 toast。 */
+  function runBatchDelete() {
+    if (selected.size === 0) return
+    let done = 0
+    for (const id of selected) {
+      if (runDeleteAsset(id).ok) done++
+    }
+    setConfirmDelete(false)
+    showToast(done > 0 ? `已删除 ${done} 项` : '没有可删除的资产')
     exitBatch()
   }
 
@@ -237,6 +264,12 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
             </button>
           )}
 
+          {batch && (
+            <button className={styles.btnDanger} disabled={selected.size === 0} onClick={() => setConfirmDelete(true)}>
+              批量删除（{selected.size}）
+            </button>
+          )}
+
           {CREATABLE.includes(category) && !batch && (
             <button className={`${styles.btn} ${styles.btnAccent}`} onClick={() => { setNewName(''); setCreateErr(null); setCreating(true) }}>
               ＋ 新增{CAT_LABEL[category]}
@@ -286,7 +319,7 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
             整体往下顶一截；它讲的又是"当前类目还剩几份"，本就属于 Tab 这一行，收进右端空白里。 */}
         {emptyShells.length > 0 && !batch && (
           <button className={styles.tabAction} onClick={generateAllShells}>
-            一键生成剩余 {emptyShells.length} 份
+            一键生成剩余素材（{emptyShells.length}）
           </button>
         )}
       </nav>
@@ -332,12 +365,12 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
           <div className={styles.createCard} onKeyDown={(e) => { if (e.key === 'Escape') setCreating(false) }}>
             <h4 className={styles.createTitle}>新增{CAT_LABEL[category]}</h4>
             <p className={styles.createDesc}>
-              建好后是一份待生成的空壳，进详情页写提示词、加参考图，再点生成。
+              {CREATE_DESC[category] ?? '建好后是一份待生成的空壳，进详情页写提示词、加参考图，再点生成。'}
             </p>
             <input
               className={styles.createInput}
               autoFocus
-              placeholder={`给这个${CAT_LABEL[category]}起个名字`}
+              placeholder={CREATE_PLACEHOLDER[category] ?? `给这个${CAT_LABEL[category]}起个名字`}
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') submitCreate() }}
@@ -346,6 +379,24 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
             <div className={styles.createActs}>
               <button className={styles.btn} onClick={() => setCreating(false)}>取消</button>
               <button className={styles.btnGen} disabled={!newName.trim()} onClick={submitCreate}>创建</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 批量删除二次确认：整份删除不可恢复，连带图片 / 候选池 / 提示词一起删。 */}
+      {confirmDelete && (
+        <div className={styles.msubroot}>
+          <div className={styles.sscrim} onClick={() => setConfirmDelete(false)} />
+          <div className={styles.createCard} onKeyDown={(e) => { if (e.key === 'Escape') setConfirmDelete(false) }}>
+            <h4 className={styles.createTitle}>删除选中的 {selected.size} 项？</h4>
+            <p className={styles.createDesc}>
+              这些资产会被整份删除，连同它们的全部图片、候选池与提示词一起清掉，<b>不可恢复</b>。
+              已经复用 / 存出去的独立副本不受影响。
+            </p>
+            <div className={styles.createActs}>
+              <button className={styles.btn} onClick={() => setConfirmDelete(false)}>取消</button>
+              <button className={styles.btnDanger} onClick={runBatchDelete}>删除 {selected.size} 项</button>
             </div>
           </div>
         </div>

@@ -100,6 +100,7 @@ export function CanvasAssetPanel({
   mode = 'canvas',
   onPick,
   maxPick,
+  alreadyPickedUrls,
 }: {
   pid: string
   projectName: string
@@ -112,6 +113,8 @@ export function CanvasAssetPanel({
   mode?: 'canvas' | 'pick'
   onPick?: (picked: PickedRef[]) => void
   maxPick?: number
+  /** 已经是当前资产参考图的定稿地址（去掉 ?g=N 后缀）：命中的卡片标记「已添加至参考图」、不可再选。 */
+  alreadyPickedUrls?: string[]
 }) {
   const world = useStore((s) => s.world)
   const user = useCurrentUser()
@@ -180,11 +183,17 @@ export function CanvasAssetPanel({
   /** 图片类资产卡。选图模式 = 点击勾选（卡片右上角勾选框 + 选中高亮）；画布模式照旧。 */
   function renderCard(a: Asset) {
     if (picking) {
+      // 已是当前资产参考图的定稿：不再是"可选项"，标一枚「已添加至参考图」并锁掉，避免重复添加。
+      const already = !!alreadyPickedUrls && alreadyPickedUrls.includes(coverOf(a).split('?')[0])
       const on = !!picked[a.id]
       return (
-        <div key={a.id} className={`${styles.pickWrap} ${on ? styles.pickWrapOn : ''}`}>
-          <AssetCard asset={a} hideSub compact onClick={() => togglePick(a)} />
-          <span className={`${styles.pickBox} ${on ? styles.pickBoxOn : ''}`}>{on ? '✓' : ''}</span>
+        <div key={a.id} className={`${styles.pickWrap} ${on ? styles.pickWrapOn : ''} ${already ? styles.pickWrapDone : ''}`}>
+          <AssetCard asset={a} hideSub compact onClick={already ? undefined : () => togglePick(a)} />
+          {already ? (
+            <span className={styles.pickDone}>✓ 已添加至参考图</span>
+          ) : (
+            <span className={`${styles.pickBox} ${on ? styles.pickBoxOn : ''}`}>{on ? '✓' : ''}</span>
+          )}
         </div>
       )
     }

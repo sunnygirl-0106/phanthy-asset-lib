@@ -237,9 +237,17 @@ export function canRegenerate(user: User, asset: Asset): boolean {
   return isOwner(user) || isSub(user)
 }
 
-/** 提示词可见性（v6）：项目库/团队库可看可复制；素材广场本期不给用户看。 */
-export function canViewPrompt(asset: Asset): boolean {
-  return asset.scope !== 'plaza'
+/**
+ * 提示词可见性（0811）：三层都可看、可复制。
+ *
+ * 改动理由：0810 起提示词随图流转到团队库 / 广场（flattenToLibrary 带 prompt）。
+ * 带走了却不给看，等于白带——提示词恰恰是一张广场素材作为「可复用素材」最值钱的部分：
+ * 别人复用回项目库时能照着重新生成。
+ *
+ * 只读性由 canRegenerate 保证（广场恒 false），这里不需要再挡一层。
+ */
+export function canViewPrompt(_asset: Asset): boolean {
+  return true
 }
 
 /** 审核广场投稿：仅 admin（不管投稿人是主账号还是子账号，都由 admin 审）。 */

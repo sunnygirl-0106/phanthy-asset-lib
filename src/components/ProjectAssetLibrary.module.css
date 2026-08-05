@@ -151,6 +151,16 @@
 .btnGen:hover { filter: brightness(1.08); }
 .btnGen:disabled { opacity: 0.5; cursor: not-allowed; filter: none; }
 
+/* 批量删除 / 二次确认里的危险按钮：红色描边 + 淡填充，工具条态复用 .btn 尺寸。 */
+.btnDanger {
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 36px; padding: 0 18px; border: 1px solid rgba(255, 92, 92, 0.5); border-radius: var(--radius-pill);
+  background: rgba(255, 92, 92, 0.12); color: #ff6b6b; font-size: 13.5px; font-weight: 600;
+  white-space: nowrap; cursor: pointer; transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+.btnDanger:hover { background: rgba(255, 92, 92, 0.2); border-color: #ff6b6b; }
+.btnDanger:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* 批量生成结果 toast */
 .toast {
   position: fixed; bottom: 34px; left: 50%; transform: translateX(-50%);

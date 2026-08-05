@@ -18,10 +18,10 @@
   position: relative;
   width: min(960px, 96vw);
   max-height: 88vh;
-  background: #15181e;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 11px;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+  background: var(--panel-3);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  box-shadow: var(--shadow-float);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -36,7 +36,7 @@
   align-items: flex-start;
   gap: 16px;
   padding: 16px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--line-soft);
 }
 .mtitleWrap { flex: 1; min-width: 0; }
 .mtitleRow { display: flex; align-items: center; gap: 8px; }
@@ -49,7 +49,7 @@
 }
 .pencil:hover { background: #22272f; color: #fff; }
 .rnInput {
-  background: #0d1015; border: 1px solid var(--accent); border-radius: 8px;
+  background: var(--field); border: 1px solid var(--accent); border-radius: 8px;
   color: #e9ecf1; padding: 5px 10px; font-size: 19px; font-weight: 700;
   width: 100%; max-width: 340px; font-family: inherit;
 }
@@ -101,7 +101,7 @@
 /* ── 主体两栏 ── */
 .mbody { display: flex; flex: 1; min-height: 0; }
 .mleft {
-  width: 340px; flex: none; border-right: 1px solid rgba(255, 255, 255, 0.08);
+  width: 340px; flex: none; border-right: 1px solid var(--line-soft);
   padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px;
 }
 .mright { flex: 1; padding: 20px; overflow-y: auto; }
@@ -228,28 +228,10 @@
 .finalBadge   { top: 10px; left: 10px; font-size: 11.5px; padding: 4px 11px; }
 .finalBadgeSm { top: 6px;  left: 6px;  font-size: 10px;   padding: 2px 7px; }
 
-/* 待定稿徽章：同形状，中性灰字，跟定稿明确区分开。 */
-.pendingBadge {
-  position: absolute; top: 10px; left: 10px; z-index: 3;
-  background: rgba(0, 0, 0, 0.62); backdrop-filter: blur(4px);
-  color: rgba(255, 255, 255, 0.72); border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 20px; font-size: 11.5px; font-weight: 600; padding: 4px 11px;
-}
 .coverBadge {
   position: absolute; top: 6px; left: 6px; font-size: 10.5px; font-weight: 600;
   background: var(--accent); color: var(--accent-ink); padding: 2px 7px; border-radius: 20px;
 }
-.lookOv {
-  position: absolute; inset: 0; z-index: 2; display: flex; align-items: flex-end; justify-content: center;
-  padding: 8px; opacity: 0; background: linear-gradient(0deg, rgba(0, 0, 0, 0.8), transparent 55%); transition: 0.15s;
-}
-.look:hover .lookOv { opacity: 1; }
-.tbtn {
-  height: 30px; padding: 0 11px; border-radius: 8px; font-size: 12px;
-  background: rgba(20, 24, 30, 0.92); border: 1px solid rgba(255, 255, 255, 0.14); color: #fff;
-  display: inline-flex; align-items: center; gap: 5px; cursor: pointer; font-family: inherit;
-}
-.tbtn:hover { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .addLook {
   border: 1.5px dashed rgba(255, 255, 255, 0.14); border-radius: 8px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
@@ -274,7 +256,7 @@
 .promptBadge:hover { transform: scale(1.14); background: rgba(13, 16, 21, 0.85); border-color: rgba(255, 255, 255, 0.3); color: #fff; }
 
 .promptBox {
-  background: #0d1015; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 10px;
+  background: var(--field); border: 1px solid var(--line-soft); border-radius: 10px;
   padding: 12px 13px; font-size: 12.5px; line-height: 1.7; color: rgba(255, 255, 255, 0.82);
   white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow-y: auto; margin-bottom: 12px;
 }
@@ -283,7 +265,7 @@
 
 .promptEdit {
   width: 100%; box-sizing: border-box; resize: vertical;
-  background: #0d1015; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 10px;
+  background: var(--field); border: 1px solid var(--line-soft); border-radius: 10px;
   color: #e9ecf1; padding: 11px 13px; font-size: 12.5px; line-height: 1.7; font-family: inherit;
   margin-bottom: 8px;
 }
@@ -322,11 +304,11 @@
 .sscrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); }
 .msub {
   position: relative; width: min(580px, 94%); max-height: 92%; overflow-y: auto;
-  background: #1b1f27; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 14px; padding: 18px;
+  background: #1b1f27; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 14px; padding: 22px;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6); animation: pop 0.14s ease;
 }
 @keyframes pop { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: none; } }
-.subH { margin: 0 0 4px; font-size: 14px; }
+.subH { margin: 0 0 4px; font-size: 15px; }
 .subD { margin: 0 0 14px; font-size: 12px; color: rgba(255, 255, 255, 0.55); line-height: 1.6; }
 .inlActions { display: flex; gap: 10px; margin-top: 8px; }
 
@@ -438,9 +420,20 @@
 }
 
 /* 目标项目 chips */
-.projChips { display: flex; flex-wrap: wrap; gap: 8px; }
-.pchip { height: 34px; padding: 0 14px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.14); background: #22272f; color: #e9ecf1; font-size: 12.5px; cursor: pointer; font-family: inherit; }
-.pchip:hover { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+/* 复用弹窗（0811）：项目列表改带封面的卡片行。 */
+.projList { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.projItem {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 10px 12px; border-radius: 12px; cursor: pointer; text-align: left;
+  background: #12161c; border: 1px solid rgba(255, 255, 255, 0.1); font-family: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+.projItem:hover { border-color: rgba(var(--accent-rgb), 0.55); background: #161b23; }
+.projCover { width: 44px; height: 44px; border-radius: 9px; object-fit: cover; flex: none; background: #000; }
+.projMeta { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.projName { font-size: 13.5px; font-weight: 600; color: #e9ecf1; }
+.projTag { font-size: 11px; color: rgba(255, 255, 255, 0.42); }
+.projGo { color: rgba(255, 255, 255, 0.3); font-size: 18px; flex: none; }
 
 /* 音色设置面板 */
 .vtabs { display: flex; gap: 8px; margin-bottom: 14px; }
@@ -458,7 +451,7 @@
 .drop b { color: #e9ecf1; }
 .field { margin-bottom: 10px; }
 .field label { display: block; font-size: 11.5px; color: rgba(255, 255, 255, 0.55); margin-bottom: 5px; }
-.field input { width: 100%; background: #0d1015; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 8px; color: #e9ecf1; padding: 9px 11px; font-size: 13px; font-family: inherit; }
+.field input { width: 100%; background: var(--field); border: 1px solid var(--line-soft); border-radius: 8px; color: #e9ecf1; padding: 9px 11px; font-size: 13px; font-family: inherit; }
 .field input:focus { outline: none; border-color: var(--accent); }
 
 /* 窄屏兜底：两栏叠成一栏 */
@@ -479,7 +472,7 @@
 
 /* ── 左栏：生成面板（0804：整体收窄到 340，把省下的宽度让给中栏结果区）── */
 .genLeft {
-  width: 340px; flex: none; border-right: 1px solid rgba(255, 255, 255, 0.08);
+  width: 340px; flex: none; border-right: 1px solid var(--line-soft);
   padding: 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px;
 }
 .genLeft::-webkit-scrollbar { width: 8px; }
@@ -491,23 +484,43 @@
 .req { color: var(--danger); font-size: 12px; }
 .fhint { font-weight: 400; color: rgba(255, 255, 255, 0.38); font-size: 11px; }
 
+/* 资产名称输入框（对齐 Figma node 47:18）：黑透明底 + 白字半粗，与提示词同一套 well 观感。 */
+.nameField {
+  width: 100%; box-sizing: border-box;
+  background: var(--field); border: 1px solid var(--line-soft); border-radius: 8px;
+  color: #fff; font-family: inherit; font-size: 14px; font-weight: 600; padding: 12px 13px;
+}
+.nameField:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1); }
+.nameField::placeholder { color: rgba(255, 255, 255, 0.3); font-weight: 400; }
+
 /* 提示词吃满左栏所有剩余高度（0805 · 改动四 4.1）：不再固定 160px。 */
 .genPrompt {
   width: 100%; box-sizing: border-box; flex: 1; min-height: 120px; resize: none;
-  background: #0d1015; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 11px;
+  background: var(--field); border: 1px solid var(--line-soft); border-radius: 11px;
   color: #e9ecf1; font-family: inherit; font-size: 13px; line-height: 1.65; padding: 12px 13px;
 }
 .genPrompt:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1); }
 .genPrompt::placeholder { color: rgba(255, 255, 255, 0.3); }
 
+/* 提示词文本域滑条（提示词很长上下滚动时）：去掉轨道"框框"、极细极淡，尽量弱化存在感。 */
+.genPrompt, .promptEdit { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.14) transparent; }
+.genPrompt::-webkit-scrollbar, .promptEdit::-webkit-scrollbar { width: 6px; }
+.genPrompt::-webkit-scrollbar-track, .promptEdit::-webkit-scrollbar-track { background: transparent; }
+.genPrompt::-webkit-scrollbar-thumb, .promptEdit::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.13); border-radius: 6px; }
+.genPrompt::-webkit-scrollbar-thumb:hover, .promptEdit::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.22); }
+
 /* 参考图排（0805 · 改动四 4.3）：120px 缩略图不换行，横向滚动查看；「＋ 上传图片」永远排最后。 */
 .refRow {
-  display: flex; gap: 10px; flex-wrap: nowrap; overflow-x: auto;
-  padding-bottom: 0; min-height: 120px; scroll-snap-type: x proximity;
-  scrollbar-width: none;          /* Firefox */
-  -ms-overflow-style: none;       /* 旧 Edge */
+  display: flex; gap: 8px; flex-wrap: nowrap; overflow-x: auto;
+  padding-bottom: 5px; min-height: 125px; scroll-snap-type: x proximity;
+  scrollbar-width: thin;                                   /* Firefox：窄 */
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
 }
-.refRow::-webkit-scrollbar { display: none; }
+/* 极细极淡的滑条，只做"还能往右滑"的示意，不抢缩略图注意力。 */
+.refRow::-webkit-scrollbar { height: 4px; }
+.refRow::-webkit-scrollbar-track { background: transparent; }
+.refRow::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
+.refRow::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
 .refItem { display: flex; flex-direction: column; align-items: center; gap: 5px; flex: none; scroll-snap-align: start; }
 .refSlot { position: relative; width: 120px; height: 120px; border-radius: 12px; overflow: hidden; flex: none; border: 1px solid rgba(255, 255, 255, 0.1); background: #000; }
 .refSlot img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -527,7 +540,7 @@
 .refRemove:hover { background: rgba(0, 0, 0, 0.85); }
 .refAdd {
   width: 120px; height: 120px; border-radius: 12px; flex: none; scroll-snap-align: start;
-  border: 1.5px dashed rgba(255, 255, 255, 0.2); background: #0d1015;
+  border: 1.5px dashed rgba(255, 255, 255, 0.2); background: var(--field);
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   color: rgba(255, 255, 255, 0.55); font-size: 11px; text-align: center; cursor: pointer; font-family: inherit;
   transition: border-color 0.14s ease, color 0.14s ease, background 0.14s ease;
@@ -566,7 +579,7 @@
 .subLabel { font-size: 11.5px; color: rgba(255, 255, 255, 0.55); font-weight: 500; }
 .sel {
   appearance: none; -webkit-appearance: none; width: 100%; box-sizing: border-box;
-  background: #0d1015; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 10px;
+  background: var(--field); border: 1px solid var(--line-soft); border-radius: 10px;
   color: #e9ecf1; font: inherit; font-size: 12.5px; padding: 9px 28px 9px 11px; cursor: pointer;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7078' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 9px center;
@@ -595,21 +608,28 @@
 .genCenter {
   flex: 1; min-width: 0; padding: 18px 20px; overflow-y: auto;
   display: flex; flex-direction: column; gap: 13px;
+  background: var(--panel-2);
 }
 .genCenter::-webkit-scrollbar { width: 8px; }
 .genCenter::-webkit-scrollbar-thumb { background: #2b323c; border-radius: 8px; }
 .stageTitle { font-size: 12.5px; color: rgba(255, 255, 255, 0.55); font-weight: 600; }
+/* ── 预览比例口径（0810 · §6）──
+ * 缩略 / 网格位（卡片、图片列表格、参考图槽）：正方形 + object-fit: cover。
+ *   这里是"认图"，网格整齐比完整重要，裁一点无所谓。
+ * 预览大图 + 灯箱：容器固定，图 object-fit: contain 完整居中，四周深色底，不锁比例。
+ *   理由：生成参数里有 3:4 / 1:1 / 9:16 / 16:9 四种比例。预览台一旦锁死一个比例，
+ *   用户选 9:16 生成出来看到被裁的图，会以为模型出错了。 */
 .bigframe {
-  position: relative; width: 100%; flex: 1; min-height: 300px;
-  background: #0d1015; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 14px;
+  position: relative; width: 100%; flex: 1; min-height: 360px; padding: 12px;
+  background: var(--field); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 14px;
   display: grid; place-items: center; overflow: hidden;
 }
-.bigImgWrap { position: relative; width: min(72%, 300px); aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45); }
-.bigImgWrap > img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.bigframe .bigMediaWrap { width: min(72%, 300px); }
-.bigframe .bigMediaWrap img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 12px; display: block; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45); }
+.bigImgWrap { position: relative; width: 100%; height: 100%; display: grid; place-items: center; }
+.bigImgWrap > img { width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; display: block; border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45); }
+.bigframe .bigMediaWrap { display: grid; place-items: center; max-width: 100%; max-height: 100%; }
+.bigframe .bigMediaWrap img { width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 12px; display: block; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45); }
 .bigframe .otherTextBig { width: min(80%, 340px); aspect-ratio: auto; max-height: 100%; }
-.bigframe .emptyBig { width: min(72%, 300px); aspect-ratio: 3 / 4; }
+.bigframe .emptyBig { width: min(72%, 300px); aspect-ratio: 1 / 1; }
 /* 生成中骨架态（0807）：中栏旋转圈 + 一行说明。 */
 .genLoading {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
@@ -625,7 +645,7 @@
 .bigImgWrap .thumbIcons { top: 8px; right: 8px; }
 .bigImgWrap:hover .thumbIcons { opacity: 1; transform: none; }
 
-/* 预览动作条（0808）：预览大图下方一排实体按钮，承接"添加至参考图 / 设为定稿 / 取消定稿"。 */
+/* 预览动作条（0810）：预览大图下方一排按钮，承接"参考图 / 设为定稿 / 存入团队库 / 贡献广场"。 */
 .previewActs { display: flex; gap: 8px; justify-content: center; margin-top: 12px; flex: none; }
 .pvBtn {
   padding: 7px 14px; border-radius: 9px; font-size: 12.5px; font-weight: 500; cursor: pointer;
@@ -677,8 +697,9 @@
 
 /* ── 右栏：全部图片（候选池只属于项目层 · 规则 14；宽 260）── */
 .genRight {
-  width: 260px; flex: none; border-left: 1px solid rgba(255, 255, 255, 0.08);
+  width: 260px; flex: none; border-left: 1px solid var(--line-soft);
   padding: 18px; overflow-y: auto; display: flex; flex-direction: column;
+  background: var(--panel-2);
 }
 .genRight::-webkit-scrollbar { width: 8px; }
 .genRight::-webkit-scrollbar-thumb { background: #2b323c; border-radius: 8px; }
@@ -705,15 +726,36 @@
 
 /* 生成中骨架格（0807）：流光扫过。 */
 .thumbSkeleton {
-  aspect-ratio: 3 / 4; border-radius: 12px;
+  aspect-ratio: 1 / 1; border-radius: 12px;
   background: linear-gradient(100deg, #14181f 30%, #1d222b 50%, #14181f 70%);
   background-size: 220% 100%; animation: gshine 1.3s ease-in-out infinite;
 }
 @keyframes gshine { to { background-position: -220% 0 } }
 
-/* 全部图片缩略图沿用 .look，只把宽高比改成 3:4 以对齐生成图 */
-.thumbsGrid .look { aspect-ratio: 3 / 4; cursor: pointer; }
-.thumbsGrid .look img { aspect-ratio: 3 / 4; }
+/* 缩略网格位统一正方形（0810 · §6：认图优先，cover 裁切无妨） */
+.thumbsGrid .look { aspect-ratio: 1 / 1; cursor: pointer; }
+.thumbsGrid .look img { aspect-ratio: 1 / 1; }
+
+/* 图片列表加号格（0810）：与 .look 同尺寸的正方形虚线框，固定排第一位。 */
+.addTile {
+  aspect-ratio: 1 / 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  border: 1px dashed rgba(255, 255, 255, 0.2); border-radius: 12px; background: #12161c;
+  color: rgba(255, 255, 255, 0.55); cursor: pointer; font-family: inherit; transition: border-color .15s, color .15s;
+}
+.addTile:hover { border-color: var(--accent); color: var(--accent); }
+.addPlus { font-size: 22px; line-height: 1; }
+.addText { font-size: 11px; }
+
+/* 预览动作条：当前定稿的不可点状态标（0810，与实体按钮区分）。 */
+.pvCurrent {
+  display: inline-flex; align-items: center; padding: 7px 14px; border-radius: 9px; font-size: 12.5px; font-weight: 600;
+  background: rgba(var(--accent-rgb), 0.14); border: 1px solid var(--accent-line); color: var(--accent); cursor: default;
+}
+/* 参考图区：关掉自参考后的「恢复当前定稿」小链接。 */
+.refRestore {
+  align-self: center; background: none; border: none; color: var(--accent); font-size: 11.5px; cursor: pointer;
+  font-family: inherit; padding: 4px 6px; text-decoration: underline;
+}
 
 /* 窄屏兜底：三栏依次叠成一栏 */
 @media (max-width: 900px) {

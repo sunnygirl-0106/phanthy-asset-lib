@@ -43,6 +43,7 @@ import {
   reuse,
   deposit,
   materializeDeposit,
+  flattenToLibrary,
   coverOf,
   removeCandidate,
   setFinal,
@@ -224,21 +225,26 @@ describe('收藏与复用（拉一份就是独立副本，不再有跟随选项�
 })
 
 /* ═══════════════ 六、流转 · 存入 ═══════════════ */
-describe('存入（项目→团队库）', () => {
+describe('存入（项目→团队库，0810 · 按图）', () => {
+  /** 把一份资产打包成"送出这张定稿图"的 FlatImagePayload。 */
+  const payloadOf = (id: string) => {
+    const a = assetById(world, id)
+    return { url: a.cover, name: a.name, category: a.category, prompt: a.prompt }
+  }
+
   it('主账号直接存入为团队母版（新母版：无 masterId）', () => {
-    const src = assetById(world, 'd_ajie')
-    const res = deposit(src, IDS.teamA, userById(world, IDS.sunny))
+    const res = deposit(payloadOf('d_ajie'), IDS.teamA, userById(world, IDS.sunny))
     expect(res.kind).toBe('asset')
     if (res.kind === 'asset') {
       expect(res.asset.scope).toBe('team')
       expect(res.asset.scopeId).toBe(IDS.teamA)
       expect(res.asset.masterId).toBeUndefined()
+      expect(res.asset.candidates).toBeUndefined() // 扁平：无图片列表
     }
   })
 
   it('子账号存入只生成"待审批申请"，不直接写团队库', () => {
-    const src = assetById(world, 'd_ajie')
-    const res = deposit(src, IDS.teamA, userById(world, IDS.lin))
+    const res = deposit(payloadOf('d_ajie'), IDS.teamA, userById(world, IDS.lin))
     expect(res.kind).toBe('application')
     if (res.kind === 'application') {
       expect(res.status).toBe('pending')
@@ -247,17 +253,18 @@ describe('存入（项目→团队库）', () => {
   })
 
   it('admin 不参与存入，会被拦下', () => {
-    const src = assetById(world, 'd_ajie')
-    expect(() => deposit(src, IDS.teamA, userById(world, IDS.admin))).toThrow(AssetRuleError)
+    expect(() => deposit(payloadOf('d_ajie'), IDS.teamA, userById(world, IDS.admin))).toThrow(AssetRuleError)
   })
 
-  it('主账号存入为团队母版：只带定稿图、候选池不带（0803）', () => {
+  it('主账号存入为团队母版：扁平的单图（无图片列表 / 无参考图 · 0810）', () => {
     const suwan = assetById(world, 'a_suwan')
-    const res = deposit(suwan, IDS.teamA, userById(world, IDS.sunny))
+    const res = deposit(payloadOf('a_suwan'), IDS.teamA, userById(world, IDS.sunny))
     expect(res.kind).toBe('asset')
     if (res.kind === 'asset') {
       expect(res.asset.cover).toBe(suwan.cover)
       expect(res.asset.candidates).toBeUndefined()
+      expect(res.asset.referenceImages).toBeUndefined()
+      expect(res.asset.referencedFrom).toBeUndefined()
     }
   })
 
@@ -275,19 +282,19 @@ describe('存入（项目→团队库）', () => {
   })
 })
 
-/* ═══════════════ 七、红线 · 只有成品能流转 ═══════════════ */
-describe('红线：非成品不能被复用/存入/贡献', () => {
-  // 临时造一份"生成中"的资产（不进种子数据，避免污染界面）
-  function makeGenerating(world: World): Asset {
-    return { ...assetById(world, 'a_cyber_police'), id: 'tmp_wip', status: 'generating' }
+/* ═══════════════ 七、守卫 · 没有图片不能被复用/收藏（0810 assertHasImage）═══════════════ */
+describe('守卫：没有图片不能被复用/收藏', () => {
+  // 临时造一份"没有图"的资产（空壳：cover 空、无候选池）。
+  function makeEmpty(world: World): Asset {
+    return { ...assetById(world, 'a_cyber_police'), id: 'tmp_empty', cover: '', candidates: undefined, status: 'empty' }
   }
 
-  it('对"生成中"的资产做直接复用会抛错', () => {
-    expect(() => directReuse(makeGenerating(world), IDS.projDaily)).toThrow(AssetRuleError)
+  it('对没有图片的资产做直接复用会抛错', () => {
+    expect(() => directReuse(makeEmpty(world), IDS.projDaily)).toThrow(AssetRuleError)
   })
 
-  it('对"生成中"的资产做收藏也会抛错', () => {
-    expect(() => favorite(makeGenerating(world), IDS.teamA)).toThrow(AssetRuleError)
+  it('对没有图片的资产做收藏也会抛错', () => {
+    expect(() => favorite(makeEmpty(world), IDS.teamA)).toThrow(AssetRuleError)
   })
 })
 
@@ -311,11 +318,11 @@ describe('canRegenerate（重新生成 / 新增造型权限 · 0803：只有项�
   })
 })
 
-describe('canViewPrompt（提示词可见性）', () => {
-  it('项目库/团队库可看；广场本期不给看', () => {
+describe('canViewPrompt（0811）：三层都可看', () => {
+  it('项目库 / 团队库 / 广场都可看（提示词随图流转，带走了就得给看）', () => {
     expect(canViewPrompt(assetById(world, 'd_ajie'))).toBe(true) // 项目库
     expect(canViewPrompt(assetById(world, 'a_suwan'))).toBe(true) // 团队库
-    expect(canViewPrompt(assetById(world, 'a_cyber_police'))).toBe(false) // 广场
+    expect(canViewPrompt(assetById(world, 'a_cyber_police'))).toBe(true) // 广场
   })
 })
 
@@ -332,7 +339,18 @@ describe('提示词随副本走（cloneForCopy 带上 prompt）', () => {
     expect(favorite(cyber, IDS.teamA).prompt).toBe(cyber.prompt)
 
     const ajie = assetById(world, 'd_ajie')
-    expect(materializeDeposit(ajie, IDS.teamA).prompt).toBe(ajie.prompt)
+    expect(materializeDeposit({ url: ajie.cover, name: ajie.name, category: ajie.category, prompt: ajie.prompt }, IDS.teamA).prompt).toBe(ajie.prompt)
+  })
+
+  it('提示词随扁平化走（flattenToLibrary 带 prompt · 0810）', () => {
+    const cyber = assetById(world, 'a_cyber_police')
+    const flat = flattenToLibrary(
+      { url: cyber.cover, name: cyber.name, category: cyber.category, prompt: cyber.prompt },
+      { scope: 'team', scopeId: IDS.teamA },
+    )
+    expect(flat.prompt).toBe(cyber.prompt)
+    expect(flat.candidates).toBeUndefined()
+    expect(flat.masterId).toBeUndefined()
   })
 })
 
@@ -353,6 +371,14 @@ describe('种子不变式', () => {
 
   it('团队库永不出现空壳（空壳只在项目里）', () => {
     expect(world.assets.filter((a) => a.scope === 'team' && a.status === 'empty').length).toBe(0)
+  })
+
+  it('自参考不入库（0810）：没有任何资产的 referenceImages 含自己的 cover', () => {
+    const bare = (u: string) => u.split('?')[0]
+    for (const a of world.assets) {
+      if (!a.cover || !a.referenceImages?.length) continue
+      expect(a.referenceImages.some((u) => bare(u) === bare(a.cover))).toBe(false)
+    }
   })
 
   it('凡带候选池的资产，定稿图都在池中（★ 打得准）', () => {

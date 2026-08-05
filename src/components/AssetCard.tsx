@@ -90,10 +90,15 @@ export function AssetCard({
       style={cursor ? { cursor } : undefined}
     >
       {asset.status === 'empty' ? (
-        // 空壳（R1）：图片被清空，只留提示词/名字。封面区渲染虚线占位，标「待生成」。
+        // 空壳（R1）：图片被清空，只留提示词/名字。有提示词就把它当封面预览，只在右下角留个小标；
+        // 没提示词才回落到中央「待生成」占位图标。
         <div className={styles.emptyCover}>
-          <EmptyGlyph />
-          <span>待生成</span>
+          {asset.prompt?.trim() ? (
+            <p className={styles.promptPreview}>{asset.prompt.trim()}</p>
+          ) : (
+            <><EmptyGlyph /><span>待生成</span></>
+          )}
+          <span className={styles.emptyTag}>待生成</span>
         </div>
       ) : isText ? (
         // 「其他」文本：不放图，卡面渲染深色底 + 正文预览（多行截断），避免裂图。
@@ -119,7 +124,7 @@ export function AssetCard({
           {otherMedia && <span className={`${styles.badge} ${styles.badgeMedia}`}>{MEDIA_LABEL[otherMedia]}</span>}
           {asset.masterId && <span className={`${styles.badge} ${styles.badgeCopy}`}>副本</span>}
           {asset.status !== 'done' && asset.status !== 'empty' && (
-            <span className={`${styles.badge} ${asset.status === 'pending' ? styles.badgePending : ''}`}>
+            <span className={styles.badge}>
               {statusLabel(asset.status)}
             </span>
           )}
@@ -154,7 +159,6 @@ function EmptyGlyph() {
 function statusLabel(status: Asset['status']): string {
   return status === 'empty' ? '待生成'
     : status === 'generating' ? '生成中'
-    : status === 'pending' ? '待定稿'
     : status === 'failed' ? '失败'
     : '成品'
 }
