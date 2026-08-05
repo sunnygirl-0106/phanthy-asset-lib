@@ -456,7 +456,7 @@ describe('演示动线：子账号画布上传 → 存入 → 主账号审批 �
       .at(-1)
     expect(master.cover).toBe(ajie.cover) // 定稿带上
     expect(master.candidates).toBeUndefined() // 无图片列表
-    expect(master.referenceImages).toBeUndefined() // 无参考图
+    expect(master.references).toBeUndefined() // 无参考槽
     expect(master.referencedFrom).toBeUndefined() // 无来源
   })
 })

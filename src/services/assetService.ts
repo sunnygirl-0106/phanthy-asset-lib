@@ -21,7 +21,7 @@
  * 旧红线"只有 done 才能流转"随 pending 一起退场——"这张图存不存在"由调用方选图时就保证了。
  * ─────────────────────────────────────────────────────────────────────── */
 
-import type { Asset, Candidate, FlatImagePayload, User } from '../data/types'
+import type { Asset, AssetRef, Candidate, FlatImagePayload, User, World } from '../data/types'
 import { depositMode } from './permission'
 
 /* ─── 一、一个专门的错误类型：违反业务规则时抛它 ───
@@ -76,6 +76,76 @@ function cloneForCopy(source: Asset, overrides: Partial<Asset>): Asset {
 /** 取一份资产对外展示的图：定稿优先；有图必有定稿，兜底再取候选池第一张。 */
 export function coverOf(asset: Pick<Asset, 'cover' | 'candidates'>): string {
   return asset.cover || asset.candidates?.[0]?.url || ''
+}
+
+/* ─── 二·五、参考槽解析（0812）──────────────────────────────────────────
+ * 把「槽当前解析成什么」这件事收在一处。所有页面只读这里，不要各自判断。
+ * 两种槽（见 types.AssetRef）：
+ *   · image —— 恒 ready，label 留空（那张图本来就没有名字）
+ *   · asset —— 随上游状态活着：上游没了 → missing；上游没出图 → pending；上游定稿 → ready */
+
+/** 一个参考槽在当前 world 下解析成什么。 */
+export type ResolvedRef =
+  | { state: 'ready';   url: string;  label?: string; assetId?: string }
+  | { state: 'pending'; label: string; assetId: string }  // 上游还在，但没出图
+  | { state: 'missing'; label: string; assetId: string }  // 上游已被整份删除
+
+/** 解析一份资产的全部参考槽（下标与 references 对齐）。 */
+export function resolveRefs(world: World, a: Asset): ResolvedRef[] {
+  const refs = a.references ?? []
+  return refs.map((ref) => resolveRef(world, ref))
+}
+
+function resolveRef(world: World, ref: AssetRef): ResolvedRef {
+  if (ref.kind === 'image') {
+    return { state: 'ready', url: ref.url }
+  }
+  const up = world.assets.find((x) => x.id === ref.assetId)
+  if (!up) return { state: 'missing', label: '已删除', assetId: ref.assetId }
+  if (up.status !== 'done' || !up.cover) return { state: 'pending', label: up.name, assetId: ref.assetId }
+  return { state: 'ready', url: up.cover, label: up.name, assetId: ref.assetId }
+}
+
+/** 还没就位的槽（pending + missing，两者都带 assetId）。空数组 = 全部就位。 */
+export function pendingRefs(world: World, a: Asset): Exclude<ResolvedRef, { state: 'ready' }>[] {
+  return resolveRefs(world, a).filter(
+    (r): r is Exclude<ResolvedRef, { state: 'ready' }> => r.state !== 'ready',
+  )
+}
+
+/** 全部就位？没挂槽的资产恒为 true。 */
+export function refsReady(world: World, a: Asset): boolean {
+  return pendingRefs(world, a).length === 0
+}
+
+/** 出图时真正拿得到的参考图 url —— 只有 ready 的槽算数。 */
+export function usableRefUrls(world: World, a: Asset): string[] {
+  return resolveRefs(world, a)
+    .filter((r): r is Extract<ResolvedRef, { state: 'ready' }> => r.state === 'ready')
+    .map((r) => r.url)
+}
+
+/**
+ * 加参考槽前的环检测：a 参考 target 会不会成环。
+ * 沿资产级槽（kind:'asset'）向上游追溯：若从 target 出发能回到 a，就会成环。
+ * 只有资产级槽会形成依赖边；图级槽是死的 url，永远不成环。
+ */
+export function wouldCycle(world: World, aId: string, targetId: string): boolean {
+  if (aId === targetId) return true
+  const byId = new Map(world.assets.map((x) => [x.id, x] as const))
+  const seen = new Set<string>()
+  const stack = [targetId]
+  while (stack.length) {
+    const cur = stack.pop()!
+    if (cur === aId) return true
+    if (seen.has(cur)) continue
+    seen.add(cur)
+    const asset = byId.get(cur)
+    for (const ref of asset?.references ?? []) {
+      if (ref.kind === 'asset') stack.push(ref.assetId)
+    }
+  }
+  return false
 }
 
 /**
@@ -145,7 +215,7 @@ export function imageBelongsTo(asset: Asset, url: string): boolean {
 /**
  * 扁平化落库（0810）：把一张图落成团队库 / 广场里的一份独立素材。
  *
- * 【丢掉】图片列表(candidates) / 参考图(referenceImages,referenceLabels) /
+ * 【丢掉】图片列表(candidates) / 参考槽(references) /
  *         来源(referencedFrom) / 血缘(masterId) / 状态机（永远 done）
  * 【带走】图、名称、类目、提示词、音色（角色）
  *
@@ -169,8 +239,7 @@ export function flattenToLibrary(
     prompt: payload.prompt,
     cover: payload.url,
     candidates: undefined,        // ← 扁平：没有图片列表
-    referenceImages: undefined,   // ← 扁平：没有参考图
-    referenceLabels: undefined,
+    references: undefined,         // ← 扁平：没有参考槽（0812）
     referencedFrom: undefined,
     fields: {},
     tags: [],

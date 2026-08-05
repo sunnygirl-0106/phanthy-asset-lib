@@ -5,6 +5,66 @@
   min-width: 0;
 }
 
+/* 「批量操作」下拉（0812）：点开二选一——批量生成 / 批量删除。 */
+.batchWrap { position: relative; display: inline-flex; }
+.batchMenuBackdrop { position: fixed; inset: 0; z-index: 20; }
+.batchMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 21;
+  min-width: 220px;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--panel-2, #1a1e25);
+  border: 1px solid var(--line-soft);
+  box-shadow: var(--shadow-float, 0 12px 32px rgba(0, 0, 0, 0.4));
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.batchMenuItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 11px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-main);
+  font-size: 13px;
+}
+.batchMenuItem:hover:not(:disabled) { background: rgba(var(--accent-rgb), 0.12); }
+.batchMenuItem:disabled { opacity: 0.45; cursor: not-allowed; }
+.batchMenuHint { font-size: 11px; color: var(--text-muted); }
+
+/* 引导条（0812 · §6.5）：常驻一条，陈述状态、给一个「生成这 N 份」入口。 */
+.guide {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0 4px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(var(--accent-rgb), 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.28);
+}
+.guideText { font-size: 13px; color: var(--text-main); }
+.guideBtn {
+  margin-left: auto;
+  padding: 7px 16px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: #06222a;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.guideBtn:hover { filter: brightness(1.06); }
+
 /* ── 页头：标题 + 副标题（左） · 工具条（右）同一行 ── */
 .header {
   display: flex;

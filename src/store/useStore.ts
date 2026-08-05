@@ -19,8 +19,8 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { World, User, Asset, AssetStatus, Canvas, Category, FlatImagePayload, Notification, NotificationKind, Voice } from '../data/types'
-import { createSeedWorld, IDS } from '../data/seed'
+import type { World, User, Asset, AssetRef, AssetStatus, Canvas, Category, FlatImagePayload, Notification, NotificationKind, Voice } from '../data/types'
+import { createSeedWorld, IDS, PROMPT_BY_CATEGORY } from '../data/seed'
 import { DEMO_ASSETS, DEMO_IDS, DEMO_LOOK_IDS } from '../data/demoProject'
 import {
   directReuse,
@@ -35,6 +35,8 @@ import {
   makeCandidate,
   makeId,
   coverOf,
+  usableRefUrls,
+  wouldCycle,
   AssetRuleError,
   type DepositApplication,
   type PlazaSubmission,
@@ -180,24 +182,28 @@ interface StoreState {
   /** 编辑提示词（左栏 textarea 失焦 / 生成时提交）。只改这一份的 prompt。 */
   setPrompt: (assetId: string, prompt: string) => ActionResult
   /**
-   * 删一张参考图（详情左栏参考图区的 ✕）。按下标移除 referenceImages，
-   * 并同步删掉对应下标的 referenceLabels（0804 · 规则 16，下标对齐）。
+   * 删一个参考槽（0812，原 removeReferenceImage）。按下标从 references 移除。
+   * 两分法的直接收益：移除后不再需要同步第二个平行数组。
+   * 移除后打 fields.refsTouched = true（用户手动改过，工作流不再覆盖）。
    */
-  removeReferenceImage: (assetId: string, index: number) => ActionResult
+  removeRef: (assetId: string, index: number) => ActionResult
   /**
-   * 追加参考图（0804 · 参考图选择器）：把选中的图并入 referenceImages + referenceLabels。
-   * items 每项自带 url 与 label（从素材库选：按类目推「素模/服装/参考」；上传临时：'临时'）。
-   * referencedFrom 原来为空时才写第一个来源，别覆盖已有血缘。守卫同 removeReferenceImage（canRegenerate）。
+   * 用户从素材库挑图（0812）：只能挑已出图的资产的某张图，产出**图级槽**。
+   * 用户没有能力创建 pending 槽——由选择器只列成品保证，这里只负责落图级槽。
+   * 打 fields.refsTouched = true。
    */
-  addReferenceImages: (
-    assetId: string,
-    items: { url: string; label: string }[],
-    referencedFrom?: string,
-  ) => ActionResult
+  addImageRefs: (assetId: string, urls: string[]) => ActionResult
   /**
-   * 批量生成：对选中的空壳资产各生成 countPerAsset 张（默认 1 张）。
-   * 默认 1 张是有意的——统一生成属于标准化动作，一份一张、自动定稿，
-   * 下游的角色造型才能立刻把它们选作参考图（参考图选择器只列成品）。
+   * 工作流拆剧本时建**资产级槽**（0812）。带 wouldCycle 守卫，成环则拒绝。
+   * 系统只填空位、不覆盖用户的决定：资产被用户手动改过（refsTouched）则不再塞。
+   */
+  addAssetRefs: (assetId: string, targetIds: string[]) => ActionResult
+  /**
+   * 批量生成（0812 重写）：对选中的空壳资产按依赖拓扑分波生成。
+   *   ① 拓扑排序：参考槽指向本批次内其他资产的，排到后面（被参考的先出图）。
+   *   ② 分波落地：同一波同时进 generating，1200ms 后统一 → done；波数 = 依赖深度。
+   *   ③ 出图源：usableRefUrls[0] → fields.lookUrl（演示替身）→ placeholderUrl。
+   * 返回即时结果；各波的 generating / done 跃迁随定时器异步发生。
    */
   batchGenerate: (assetIds: string[], placeholderUrl: string, countPerAsset?: number) => ActionResult
   /**
@@ -276,11 +282,11 @@ export const useStore = create<StoreState>()(
        *    ↺ 重置         按 id 清掉这一批 + 用户手动新增的生产类资产
        * ── */
 
-      /** 把一份完整定义降级成"只有提示词"的空壳。 */
+      /** 把一份完整定义降级成"只有提示词"的空壳（0812：参考槽原样保留——造型的资产级槽从第一步就带着）。 */
       runDemoAnalyze: () => {
         if (get().demoStep !== 'idle') return fail('剧本已分析过了')
-        // 此刻谁都还没出图，造型要参考的角色/服装也还没出，所以参考图一并清空——
-        // 参考图要等 ② 资产生成之后才有意义。（幂等：已存在的按 id 跳过。）
+        // 造型的资产级槽此刻指向还没出图的角色/服装（pending 状态），这是对的：
+        // 「参考对象还没出图」这个状态本来就只有工作流能造出来（0812 §1）。（幂等：已存在的按 id 跳过。）
         set((s) => {
           const existing = new Set(s.world.assets.map((a) => a.id))
           const incoming: Asset[] = DEMO_ASSETS
@@ -290,8 +296,7 @@ export const useStore = create<StoreState>()(
               status: 'empty' as const,
               cover: '',
               candidates: undefined,
-              referenceImages: undefined,
-              referenceLabels: undefined,
+              // references 原样保留（资产级槽从第一步就在，指着还没出图的上游）
             }))
           return { world: { ...s.world, assets: [...s.world.assets, ...incoming] }, demoStep: 'analyzed' }
         })
@@ -300,9 +305,9 @@ export const useStore = create<StoreState>()(
 
       runDemoGenerate: () => {
         if (get().demoStep !== 'analyzed') return fail('请先完成「剧本分析」')
-        // 基础素材（没有 referencedFrom）：空壳 → 成品，一次落 4 张候选、首张自动定稿。
-        // 造型（有 referencedFrom）：仍留空壳，但把参考图挂回去——此刻它要参考的
-        // 角色/服装已经定稿，参考图才有意义。造型本身等 ③ 批量生成。
+        // 基础素材：空壳 → 成品，一次落 4 张候选、首张自动定稿。
+        // 造型：留待第三步生成（本身仍是空壳）。它的资产级槽会随上游一 done 自动从
+        // pending 变 ready——不需要任何"把参考图挂回去"的代码（0812 §5.4）。
         const byId = new Map(DEMO_ASSETS.map((a) => [a.id, a] as const))
         const baseCount = DEMO_ASSETS.length - DEMO_LOOK_IDS.size
         set((s) => ({
@@ -311,17 +316,14 @@ export const useStore = create<StoreState>()(
             assets: s.world.assets.map((a): Asset => {
               const def = byId.get(a.id)
               if (!def) return a
-              if (!DEMO_LOOK_IDS.has(def.id)) {
-                if (a.status !== 'empty') return a
-                return { ...def } // 完整定义：cover=1.png、candidates=1..4、参考图=自己
-              }
-              // 造型：留待生成，仅把参考图 / 标签挂回
-              return { ...a, referenceImages: def.referenceImages, referenceLabels: def.referenceLabels }
+              if (DEMO_LOOK_IDS.has(def.id)) return a // 造型：原样留空壳，槽自动就位
+              if (a.status !== 'empty') return a
+              return { ...def } // 完整定义：cover=1.png、candidates=1..4
             }),
           },
           demoStep: 'generated',
         }))
-        return ok(`已生成 ${baseCount} 份基础素材，${DEMO_LOOK_IDS.size} 份造型的参考图已挂好`)
+        return ok(`已生成 ${baseCount} 份基础素材`)
       },
 
       runDemoLooks: () => {
@@ -825,18 +827,15 @@ export const useStore = create<StoreState>()(
         return ok('提示词已更新')
       },
 
-      removeReferenceImage: (assetId, index) => {
+      removeRef: (assetId, index) => {
         const { world, currentUserId } = get()
         const user = findUser(world, currentUserId)
         const asset = findAsset(world, assetId)
         if (!user || !asset) return fail('数据不存在')
         if (!canRegenerate(user, asset)) return fail('你没有权限编辑这份资产的参考图')
-        const refs = asset.referenceImages ?? []
+        const refs = asset.references ?? []
         if (index < 0 || index >= refs.length) return fail('参考图不存在')
         const next = refs.filter((_, i) => i !== index)
-        // 标签下标对齐：删同一下标的 label（label 数组可能比图短，超界忽略）。
-        const labels = asset.referenceLabels ?? []
-        const nextLabels = labels.filter((_, i) => i !== index)
         set((s) => ({
           world: {
             ...s.world,
@@ -844,8 +843,9 @@ export const useStore = create<StoreState>()(
               a.id === assetId
                 ? {
                     ...a,
-                    referenceImages: next.length ? next : undefined,
-                    referenceLabels: nextLabels.length ? nextLabels : undefined,
+                    references: next.length ? next : undefined,
+                    // 用户手动改过参考槽 → 打标，工作流不再覆盖（系统只填空位）。
+                    fields: { ...a.fields, refsTouched: true },
                   }
                 : a,
             ),
@@ -854,46 +854,65 @@ export const useStore = create<StoreState>()(
         return ok('已移除参考图')
       },
 
-      addReferenceImages: (assetId, items, referencedFrom) => {
+      addImageRefs: (assetId, urls) => {
         const { world, currentUserId } = get()
         const user = findUser(world, currentUserId)
         const asset = findAsset(world, assetId)
         if (!user || !asset) return fail('数据不存在')
         if (!canRegenerate(user, asset)) return fail('你没有权限编辑这份资产的参考图')
-        if (items.length === 0) return fail('没有可添加的参考图')
-        const baseImgs = asset.referenceImages ?? []
-        // 标签补齐到与图等长（历史资产可能没写全 label），再追加。
-        const baseLabels = [...(asset.referenceLabels ?? [])]
-        while (baseLabels.length < baseImgs.length) baseLabels.push('参考')
-        // 去重 + 归一化：候选池的 url 带 ?g=N 后缀、参考图存裸地址，同一张图不能以两个身份进来。
+        if (urls.length === 0) return fail('没有可添加的参考图')
+        const refs = asset.references ?? []
+        // 去重 + 归一化：候选池的 url 带 ?g=N 后缀、图级槽存裸地址，同一张图不能以两个身份进来。
         const bare = (u: string) => u.split('?')[0]
-        const seen = new Set(baseImgs.map(bare))
-        const fresh = items.filter((it) => {
-          const k = bare(it.url)
-          if (seen.has(k)) return false
+        const seen = new Set(refs.filter((r) => r.kind === 'image').map((r) => bare((r as { url: string }).url)))
+        const fresh: string[] = []
+        for (const u of urls) {
+          const k = bare(u)
+          if (seen.has(k)) continue
           seen.add(k)
-          return true
-        })
+          fresh.push(k)
+        }
         if (fresh.length === 0) return fail('这张已经在参考图里了')
-        const nextImgs = [...baseImgs, ...fresh.map((it) => bare(it.url))]
-        const nextLabels = [...baseLabels, ...fresh.map((it) => it.label)]
+        const nextRefs: AssetRef[] = [...refs, ...fresh.map((u) => ({ kind: 'image' as const, url: u }))]
         set((s) => ({
           world: {
             ...s.world,
             assets: s.world.assets.map((a) =>
               a.id === assetId
-                ? {
-                    ...a,
-                    referenceImages: nextImgs,
-                    referenceLabels: nextLabels,
-                    // 原来没有血缘时才写第一个来源，别覆盖已有 referencedFrom。
-                    referencedFrom: a.referencedFrom || referencedFrom,
-                  }
+                ? { ...a, references: nextRefs, fields: { ...a.fields, refsTouched: true } }
                 : a,
             ),
           },
         }))
-        return ok(`已添加 ${items.length} 张参考图`)
+        return ok(`已添加 ${fresh.length} 张参考图`)
+      },
+
+      addAssetRefs: (assetId, targetIds) => {
+        const { world, currentUserId } = get()
+        const user = findUser(world, currentUserId)
+        const asset = findAsset(world, assetId)
+        if (!user || !asset) return fail('数据不存在')
+        // 系统只填空位、不覆盖用户的决定：用户手动改过就不再塞（0812 §5.3）。
+        if (asset.fields?.refsTouched) return fail('用户已手动调整过参考，工作流不再覆盖')
+        const refs = asset.references ?? []
+        const existing = new Set(refs.filter((r) => r.kind === 'asset').map((r) => (r as { assetId: string }).assetId))
+        const fresh: string[] = []
+        for (const t of targetIds) {
+          if (t === assetId || existing.has(t)) continue
+          // 加槽前跑环检测：a 参考 t 会不会成环。
+          if (wouldCycle(world, assetId, t)) return fail('不能互相参考（会形成环）')
+          existing.add(t)
+          fresh.push(t)
+        }
+        if (fresh.length === 0) return fail('没有可添加的参考')
+        const nextRefs: AssetRef[] = [...refs, ...fresh.map((id) => ({ kind: 'asset' as const, assetId: id }))]
+        set((s) => ({
+          world: {
+            ...s.world,
+            assets: s.world.assets.map((a) => (a.id === assetId ? { ...a, references: nextRefs } : a)),
+          },
+        }))
+        return ok(`已添加 ${fresh.length} 个参考`)
       },
 
       batchGenerate: (assetIds, placeholderUrl, countPerAsset = 1) => {
@@ -901,38 +920,82 @@ export const useStore = create<StoreState>()(
         const user = findUser(world, currentUserId)
         if (!user) return fail('数据不存在')
         const idSet = new Set(assetIds)
-        let generated = 0
-        let skipped = 0
+        // 只处理：有权生成、且还没出图（空壳）的资产。有图的、无权的都算跳过。
+        const targets = world.assets.filter(
+          (a) => idSet.has(a.id) && canRegenerate(user, a) && a.status === 'empty',
+        )
+        const skipped = assetIds.filter((id) => !targets.some((t) => t.id === id)).length
+        if (targets.length === 0) return fail('没有可生成的资产')
+
+        // ① 拓扑排序：只看本批次内的资产级依赖，算出每份的依赖深度（波号）。
+        const inBatch = new Set(targets.map((a) => a.id))
+        const depthCache = new Map<string, number>()
+        const visiting = new Set<string>()
+        let cyclic = false
+        const depthOf = (id: string): number => {
+          if (depthCache.has(id)) return depthCache.get(id)!
+          if (visiting.has(id)) { cyclic = true; return 0 } // 环：兜底（加槽时已挡环，这里只兜底）
+          visiting.add(id)
+          const a = world.assets.find((x) => x.id === id)
+          let d = 0
+          for (const ref of a?.references ?? []) {
+            if (ref.kind === 'asset' && inBatch.has(ref.assetId)) d = Math.max(d, depthOf(ref.assetId) + 1)
+          }
+          visiting.delete(id)
+          depthCache.set(id, d)
+          return d
+        }
+        const waves: string[][] = []
+        for (const a of targets) {
+          const d = cyclic ? 0 : depthOf(a.id)
+          ;(waves[d] ??= []).push(a.id)
+        }
+        if (cyclic) console.warn('batchGenerate: 参考槽在本批次内成环，按原顺序降级处理')
+
+        // ② 分波落地：每波先进 generating，1200ms 后统一 → done，再触发下一波。
+        //    下一波开始时上一波已 done，下游 usableRefUrls 拿得到真实参考图。
         let seq = 0
-        set((s) => ({
-          world: {
-            ...s.world,
-            assets: s.world.assets.map((a) => {
-              if (!idSet.has(a.id)) return a
-              // 0810：批量生成只给"还没出图"的空壳用；有图的资产要补图请进详情页点生成。
-              if (!canRegenerate(user, a) || a.status !== 'empty') {
-                skipped++
-                return a
-              }
-              generated++
-              // 造型有 lookUrl（真实成品图替身）时优先用它出图；否则回落参考图第一张 / 占位图。
-              const look = typeof a.fields?.lookUrl === 'string' ? a.fields.lookUrl : undefined
-              const src = (look ?? a.referenceImages?.[0] ?? placeholderUrl).split('?')[0]
-              const cands = Array.from({ length: countPerAsset }, () =>
-                makeCandidate(`${src}?g=${++seq}`, a.prompt),
-              )
-              // 空壳原本无定稿，本批第一张自动成为定稿（0810：有图必成品）。
-              return {
-                ...a,
-                candidates: [...(a.candidates ?? []), ...cands],
-                cover: cands[0].url,
-                status: 'done' as AssetStatus,
-              }
-            }),
-          },
-        }))
-        if (generated === 0 && skipped === 0) return fail('没有可生成的资产')
-        return ok(`已生成 ${generated} 份资产（跳过 ${skipped} 份）`)
+        const runWave = (i: number) => {
+          const wave = waves[i]
+          if (!wave) return
+          const ids = new Set(wave)
+          set((s) => ({
+            world: {
+              ...s.world,
+              assets: s.world.assets.map((a) =>
+                ids.has(a.id) ? { ...a, status: 'generating' as AssetStatus } : a,
+              ),
+            },
+          }))
+          setTimeout(() => {
+            set((s) => ({
+              world: {
+                ...s.world,
+                assets: s.world.assets.map((a): Asset => {
+                  if (!ids.has(a.id)) return a
+                  // ③ 出图源：真实参考图优先于演示替身（0812 §5.1）。此刻读最新 world。
+                  const usable = usableRefUrls(s.world, a)[0]
+                  const look = typeof a.fields?.lookUrl === 'string' ? a.fields.lookUrl : undefined
+                  const src = (usable ?? look ?? placeholderUrl).split('?')[0]
+                  const cands = Array.from({ length: countPerAsset }, () =>
+                    makeCandidate(`${src}?g=${++seq}`, a.prompt),
+                  )
+                  // 空壳原本无定稿，本批第一张自动成为定稿（0810：有图必成品）。
+                  return {
+                    ...a,
+                    candidates: [...(a.candidates ?? []), ...cands],
+                    cover: cands[0].url,
+                    status: 'done' as AssetStatus,
+                  }
+                }),
+              },
+            }))
+            runWave(i + 1)
+          }, 1200)
+        }
+        runWave(0)
+
+        return ok(`已开始生成 ${targets.length} 份资产${skipped ? `（跳过 ${skipped} 份）` : ''}`)
       },
 
       createShellAsset: (projectId, category, name) => {
@@ -950,7 +1013,9 @@ export const useStore = create<StoreState>()(
         const id = makeId('asset')
         const asset: Asset = {
           id, category, name: nm, scope: 'project', scopeId: projectId,
-          status: 'empty', cover: '', prompt: '', fields: {}, tags: [],
+          // 0812：灌按类目的兜底提示词，与剧本拆出来的资产完全一致。有了兜底，批量生成
+          // 就不必再处理"提示词为空"这个分支，§2 的判据才能真的只剩一句话。
+          status: 'empty', cover: '', prompt: PROMPT_BY_CATEGORY[category], fields: {}, tags: [],
           createdAt: Date.now(),
         }
         set((s) => ({ world: { ...s.world, assets: [...s.world.assets, asset] } }))
@@ -1072,6 +1137,23 @@ export const useStore = create<StoreState>()(
     {
       name: 'phanty-demo-v1',
       partialize: (state) => ({ currentUserId: state.currentUserId }),
+      /**
+       * generating 是瞬态（0812 §5.1）：若 world 被持久化，刷新页面后所有 generating 会
+       * 永久冻在那里。这里把它们打回空壳兜底。当前 partialize 不持久化 world，本守卫暂时
+       * 空转，但语义摆在这里——一旦以后把 world 纳入持久化，就不会变成必现 bug。
+       */
+      onRehydrateStorage: () => (state) => {
+        if (!state?.world) return
+        if (!state.world.assets.some((a) => a.status === 'generating')) return
+        state.world = {
+          ...state.world,
+          assets: state.world.assets.map((a) =>
+            a.status === 'generating'
+              ? { ...a, status: 'empty' as AssetStatus, cover: '', candidates: undefined }
+              : a,
+          ),
+        }
+      },
     },
   ),
 )

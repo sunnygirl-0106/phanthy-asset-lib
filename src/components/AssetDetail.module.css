@@ -341,8 +341,22 @@
   margin: 0 0 20px; font-size: 13px; line-height: 1.7;
   color: rgba(255, 255, 255, 0.62);
 }
+/* 二次确认里列出「这次参考不到的」资产名（0812 §6.4）。 */
+.confirmList {
+  margin: 0 0 20px; padding: 10px 12px; border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04); font-size: 12.5px; line-height: 1.6;
+  color: rgba(255, 255, 255, 0.8);
+}
 .confirmActions { display: flex; gap: 10px; }
 .confirmActions > * { flex: 1; }
+
+/* 有 pending 槽时的警示行（0812 §8.2）：琥珀底、放在生成按钮上方。 */
+.refWarn {
+  margin: 0 0 10px; padding: 9px 12px; border-radius: 8px;
+  background: rgba(245, 194, 107, 0.12); border: 1px solid rgba(245, 194, 107, 0.3);
+  font-size: 12px; line-height: 1.6; color: #f5c26b;
+}
+.refWarn b { color: #ffd489; font-weight: 600; }
 .btnDanger {
   background: var(--danger); color: #2a0d0d; border-color: transparent; font-weight: 600;
 }
@@ -524,7 +538,14 @@
 .refItem { display: flex; flex-direction: column; align-items: center; gap: 5px; flex: none; scroll-snap-align: start; }
 .refSlot { position: relative; width: 120px; height: 120px; border-radius: 12px; overflow: hidden; flex: none; border: 1px solid rgba(255, 255, 255, 0.1); background: #000; }
 .refSlot img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.refLabel { font-size: 11px; color: rgba(255, 255, 255, 0.6); line-height: 1; }
+.refLabel { font-size: 11px; color: rgba(255, 255, 255, 0.6); line-height: 1.3; text-align: center; max-width: 120px; }
+
+/* 资产级槽 · pending / missing（0812 §6.3）：整颗灰化 —— 灰方块 + 名字 + ·待生成/·已删除。 */
+.refSlotPending { border-style: dashed; opacity: 0.75; }
+.refPendingBox {
+  width: 100%; height: 100%;
+  background: repeating-linear-gradient(135deg, rgba(255,255,255,0.04) 0 8px, rgba(255,255,255,0.08) 8px 16px);
+}
 .refZoom {
   position: absolute; top: 5px; left: 5px; width: 24px; height: 24px; border-radius: 7px; padding: 0;
   display: none; align-items: center; justify-content: center; z-index: 2;

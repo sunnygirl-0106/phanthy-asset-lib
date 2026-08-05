@@ -56,17 +56,25 @@
 .promptPreview::before { content: '“'; }
 .promptPreview::after { content: '”'; }
 
-/* 空壳右下角小标：深色半透明底。 */
+/* 空壳右下角小标：深色半透明底，承载状态文案（0812 §7.2）。 */
 .emptyTag {
   position: absolute;
   right: 8px;
   bottom: 8px;
+  z-index: 3; /* 压在底部浮层渐变之上，避免被名字浮层盖住 */
   font-size: 10px;
   padding: 2px 8px;
   border-radius: var(--radius-pill);
   background: rgba(0, 0, 0, 0.55);
   color: var(--text-main);
   backdrop-filter: blur(2px);
+}
+
+/* 状态 #3「参考图待生成」：描边款琥珀（半透明底 + 边框 + 黄字），克制不刺眼。 */
+.emptyTagWait {
+  background: rgba(245, 194, 107, 0.15);
+  border: 1px solid rgba(245, 194, 107, 0.55);
+  color: #f5c26b;
 }
 
 /* 左上角徽章 */

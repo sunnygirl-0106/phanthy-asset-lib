@@ -11,7 +11,8 @@
 
 import type { ReactNode } from 'react'
 import type { Asset, Category } from '../data/types'
-import { coverOf } from '../services/assetService'
+import { coverOf, resolveRefs } from '../services/assetService'
+import { useStore } from '../store/useStore'
 import styles from './AssetCard.module.css'
 
 const CATEGORY_LABEL: Record<Category, string> = {
@@ -32,17 +33,13 @@ const MEDIA_LABEL: Record<'image' | 'video' | 'text', string> = {
 
 /**
  * 卡片副标题（0805 · 改动三）：不显示时间，显示这份资产是什么"形态"。
- * 「其他」按媒介、音频写「音频」、有 referencedFrom 的写「角色造型 / 场景变体 / 道具变体」，
- * 其余（顶层素模）写类目名（角色 / 服装 / 场景 / 道具）。
+ * 「其他」按媒介、音频写「音频」，其余一律写类目名。
+ * 【0812】删掉「有 referencedFrom 就写角色造型」的分支——系统里不再有「素模 / 造型」这个概念，
+ * 一份资产就是一份资产（§7.3）。
  */
 function formLabel(a: Asset): string {
   if (a.category === 'other') return MEDIA_LABEL[(a.fields.media as 'image' | 'video' | 'text' | undefined) ?? 'image']
   if (a.category === 'audio') return '音频'
-  if (a.referencedFrom) {
-    return a.category === 'character' ? '角色造型'
-      : a.category === 'scene' ? '场景变体'
-        : a.category === 'prop' ? '道具变体' : '造型'
-  }
   return CATEGORY_LABEL[a.category]
 }
 
@@ -70,6 +67,16 @@ export function AssetCard({
   // 副标题（0805 · 规则 19）：不显示时间、也不暴露候选数，只写这份资产的形态标签。
   const subtitle = formLabel(asset)
 
+  // 参考槽解析（0812 §7.2）：没图的卡片，若有槽还没就位（pending）→「参考图待生成」。
+  const world = useStore((s) => s.world)
+  const noImage = asset.status === 'empty' || asset.status === 'generating'
+  const pendingRefs = noImage
+    ? resolveRefs(world, asset).filter((r) => r.state === 'pending')
+    : []
+  const waitingRefs = pendingRefs.length > 0
+  const shellStatus = asset.status === 'generating' ? '生成中' : waitingRefs ? '参考图待生成' : '待生成'
+  const shellTitle = waitingRefs ? `还在等：${pendingRefs.map((r) => r.label).join('、')}` : undefined
+
   // 「其他」类目：按 fields.media 分三种渲染（图片 / 视频 / 文本），并在左上角打一个媒介徽章。
   const otherMedia = asset.category === 'other' ? (asset.fields.media as 'image' | 'video' | 'text' | undefined) ?? 'image' : null
   const isText = otherMedia === 'text'
@@ -89,16 +96,16 @@ export function AssetCard({
       onDragStart={onDragStart}
       style={cursor ? { cursor } : undefined}
     >
-      {asset.status === 'empty' ? (
-        // 空壳（R1）：图片被清空，只留提示词/名字。有提示词就把它当封面预览，只在右下角留个小标；
-        // 没提示词才回落到中央「待生成」占位图标。
-        <div className={styles.emptyCover}>
+      {noImage ? (
+        // 没图的卡片：封面露出提示词预览（保留原设计），名字在底部浮层。
+        // 右下角状态小标承载 0812 的语义：#1/#2「待生成」(灰)·#3「参考图待生成」(琥珀)·生成中。
+        <div className={styles.emptyCover} title={shellTitle}>
           {asset.prompt?.trim() ? (
             <p className={styles.promptPreview}>{asset.prompt.trim()}</p>
           ) : (
             <><EmptyGlyph /><span>待生成</span></>
           )}
-          <span className={styles.emptyTag}>待生成</span>
+          <span className={`${styles.emptyTag} ${waitingRefs ? styles.emptyTagWait : ''}`}>{shellStatus}</span>
         </div>
       ) : isText ? (
         // 「其他」文本：不放图，卡面渲染深色底 + 正文预览（多行截断），避免裂图。
@@ -117,24 +124,20 @@ export function AssetCard({
         </>
       )}
 
-      {/* 左上角徽章：媒介（其他）/ 副本血缘 / 非成品状态。
-          「待生成」空壳不再打状态角标——封面中央已写「待生成」，避免同一张卡重复两次。 */}
-      {(otherMedia || asset.masterId || (asset.status !== 'done' && asset.status !== 'empty')) && (
+      {/* 左上角徽章：媒介（其他）/ 副本血缘 / 失败状态。
+          「待生成」/「生成中」没图的卡片不打状态角标——封面中央已写状态，避免同一张卡重复两次。 */}
+      {(otherMedia || asset.masterId || asset.status === 'failed') && (
         <div className={styles.badges}>
           {otherMedia && <span className={`${styles.badge} ${styles.badgeMedia}`}>{MEDIA_LABEL[otherMedia]}</span>}
           {asset.masterId && <span className={`${styles.badge} ${styles.badgeCopy}`}>副本</span>}
-          {asset.status !== 'done' && asset.status !== 'empty' && (
-            <span className={styles.badge}>
-              {statusLabel(asset.status)}
-            </span>
-          )}
+          {asset.status === 'failed' && <span className={styles.badge}>{statusLabel(asset.status)}</span>}
         </div>
       )}
 
       {/* hover 行动层：压在封面上浮出「查看 / 使用」（仅画布面板传 hoverActions 时出现） */}
       {hoverActions && <div className={styles.hoverActions}>{hoverActions}</div>}
 
-      {/* 底部浮层：渐变 + 名字 / 形态标签（规则 19：不再叠卡边、不打候选数角标） */}
+      {/* 底部浮层：渐变 + 名字 / 形态标签（规则 19：不再叠卡边、不打候选数角标）。 */}
       <div className={styles.overlay}>
         <div className={styles.info}>
           <div className={styles.name}>{asset.name}</div>
@@ -145,7 +148,7 @@ export function AssetCard({
   )
 }
 
-/** 空壳占位图标：一张「图片」轮廓（虚线感由外层 CSS 提供）。 */
+/** 空壳占位图标（无提示词时的兜底）：一张「图片」轮廓。 */
 function EmptyGlyph() {
   return (
     <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden>

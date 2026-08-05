@@ -13,12 +13,17 @@
 import { useMemo, useState } from 'react'
 import type { Category, Asset } from '../data/types'
 import { useStore } from '../store/useStore'
+import { refsReady } from '../services/assetService'
 import { AssetCard } from './AssetCard'
 import { AssetDetail } from './AssetDetail'
 import { AudioList } from './AudioList'
 import { OtherVideoPlayer } from './OtherVideoPlayer'
+import { BatchGenerateModal } from './BatchGenerateModal'
 import { assetUrl } from '../utils/assets'
 import styles from './ProjectAssetLibrary.module.css'
+
+/** 生产类目（跨类目"全部没图"的口径）。音频 /「其他」不参与生成。 */
+const PRODUCTION_CATS: Category[] = ['character', 'costume', 'scene', 'prop']
 
 /** 顶部类目 Tab：顺序对齐团队库与截图。末尾「其他」是另一层东西，单独隔出（见 tabOther）。 */
 const CATEGORIES: { key: Category; label: string; icon: string }[] = [
@@ -56,7 +61,6 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
   const world = useStore((s) => s.world)
   const renameAsset = useStore((s) => s.renameAsset)
   const runDeleteAsset = useStore((s) => s.runDeleteAsset)
-  const batchGenerate = useStore((s) => s.batchGenerate)
   const createShellAsset = useStore((s) => s.createShellAsset)
   // 演示脚手架（0805）：左下角「演示」控件用，只服务于讲解、交付时移除。
   const demoStep = useStore((s) => s.demoStep)
@@ -68,12 +72,15 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
   const [category, setCategory] = useState<Category>('character')
   const [query, setQuery] = useState('')
   const [sortDesc, setSortDesc] = useState(true) // 时间倒序：默认最新在前
-  const [batch, setBatch] = useState(false)
+  const [batch, setBatch] = useState(false) // 批量删除模式（勾选卡片）
+  const [batchMenu, setBatchMenu] = useState(false) // 「批量操作」下拉：批量生成 / 批量删除
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [confirmDelete, setConfirmDelete] = useState(false) // 批量删除二次确认弹窗
   const [detailAssetId, setDetailAssetId] = useState<string | null>(null)
   const [demoOpen, setDemoOpen] = useState(false) // 演示控件收起/展开
   const [toast, setToast] = useState<string | null>(null)
+  // 生成前确认弹窗（0812 · §6）：三个入口统一走它，各自喂不同的候选 id 列表。
+  const [batchModal, setBatchModal] = useState<{ title: string; ids: string[] } | null>(null)
   // 「其他」视频：不进详情弹窗，直接大屏播放（§用户口径：视频就直接大屏播放，不用这么麻烦）。
   const [videoAsset, setVideoAsset] = useState<Asset | null>(null)
   // 新增资产弹窗（0808）：只填名称，建完直接开详情页。
@@ -100,19 +107,20 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
     return m
   }, [projectAssets])
 
-  // 当前类目下"可以生成了"的造型空壳（引导条用）：有 referencedFrom 的造型，且**参考图已挂上**。
-  // 挂参考图 = 它要参考的素模/服装已经生成（演示第二步「资产生成」做的事）。参考图还没挂
-  // （第一步「剧本分析」后的过渡态）就先别催生成——那时基础素材都还没出图，造型还轮不到。
-  const emptyShells = useMemo(
+  // 本项目全部没图的生产类资产（跨类目）——「一键生成全部资产」的候选池。
+  const allNoImage = useMemo(
+    () => projectAssets.filter((a) => a.status === 'empty' && PRODUCTION_CATS.includes(a.category)),
+    [projectAssets],
+  )
+
+  // 引导条（§6.5）：status==='empty' 且挂了参考槽 且 refsReady（状态 #2）——参考图已全部就位、可以生成。
+  // 判据是通用的：用户手动新建、自己从素材库挂了参考图的资产同样会被捞出来，这是对的（它陈述的是事实）。
+  const readyToGen = useMemo(
     () =>
       projectAssets.filter(
-        (a) =>
-          a.category === category &&
-          a.status === 'empty' &&
-          a.referencedFrom &&
-          (a.referenceImages?.length ?? 0) > 0,
+        (a) => a.status === 'empty' && (a.references?.length ?? 0) > 0 && refsReady(world, a),
       ),
-    [projectAssets, category],
+    [projectAssets, world],
   )
 
   // 类目 → 搜索 → 排序，派生出当前网格要摆的资产。
@@ -122,9 +130,9 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
       .filter((a) => a.category === category)
       .filter((a) => (q ? a.name.toLowerCase().includes(q) : true))
       .sort((a, b) => {
-        // 已生成的成品排在前面、待生成（空壳）排在后面；组内再按时间排序。
-        const ae = a.status === 'empty' ? 1 : 0
-        const be = b.status === 'empty' ? 1 : 0
+        // 已生成的成品排在前面、没图的（待生成 / 生成中）排在后面；组内再按时间排序。
+        const ae = a.status === 'done' ? 0 : 1
+        const be = b.status === 'done' ? 0 : 1
         if (ae !== be) return ae - be
         return sortDesc ? b.createdAt - a.createdAt : a.createdAt - b.createdAt
       })
@@ -148,14 +156,6 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
     window.setTimeout(() => setToast((t) => (t === message ? null : t)), 2600)
   }
 
-  /** 批量生成：对选中的空壳各落一张占位图 → 成品（已有成品自动跳过），toast 汇报。 */
-  function runBatchGenerate() {
-    if (selected.size === 0) return
-    const r = batchGenerate([...selected], assetUrl('assets/canvas/image-placeholder.svg'))
-    showToast(r.message)
-    exitBatch()
-  }
-
   /** 批量删除（二次确认后执行）：逐份整删，汇总成一条 toast。 */
   function runBatchDelete() {
     if (selected.size === 0) return
@@ -168,11 +168,16 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
     exitBatch()
   }
 
-  /** 引导条「批量生成」：自动勾选本类目全部空壳并直接执行（少两步点击）。 */
-  function generateAllShells() {
-    if (emptyShells.length === 0) return
-    const r = batchGenerate(emptyShells.map((a) => a.id), assetUrl('assets/canvas/image-placeholder.svg'))
-    showToast(r.message)
+  /** 批量操作 · 批量生成：本项目全部没图的资产，跨类目，喂进弹窗（在弹窗里再挑生成哪些）。 */
+  function openAllModal() {
+    if (allNoImage.length === 0) return
+    setBatchModal({ title: '批量生成', ids: allNoImage.map((a) => a.id) })
+  }
+
+  /** 入口三「生成这 N 份」（引导条）：参考图已就位的那些，喂进弹窗。 */
+  function openReadyModal() {
+    if (readyToGen.length === 0) return
+    setBatchModal({ title: '生成这 ' + readyToGen.length + ' 份资产', ids: readyToGen.map((a) => a.id) })
   }
 
   /** 建完直接打开详情页——用户接着就要写提示词、点生成，别让他再去网格里找一遍。 */
@@ -249,25 +254,17 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
         </div>
 
         <div className={styles.tools}>
+          {/* 批量删除模式：勾选卡片后在这里确认删除（批量生成不走勾选，由弹窗内选） */}
           {batch && (
-            <span className={styles.batchStatus}>
-              已选 {selected.size} 项
-              <button className={styles.batchCancel} onClick={exitBatch}>
-                取消
+            <>
+              <span className={styles.batchStatus}>
+                已选 {selected.size} 项
+                <button className={styles.batchCancel} onClick={exitBatch}>取消</button>
+              </span>
+              <button className={styles.btnDanger} disabled={selected.size === 0} onClick={() => setConfirmDelete(true)}>
+                删除选中（{selected.size}）
               </button>
-            </span>
-          )}
-
-          {batch && (
-            <button className={styles.btnGen} disabled={selected.size === 0} onClick={runBatchGenerate}>
-              批量生成（{selected.size}）
-            </button>
-          )}
-
-          {batch && (
-            <button className={styles.btnDanger} disabled={selected.size === 0} onClick={() => setConfirmDelete(true)}>
-              批量删除（{selected.size}）
-            </button>
+            </>
           )}
 
           {CREATABLE.includes(category) && !batch && (
@@ -276,13 +273,41 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
             </button>
           )}
 
-          <button
-            className={`${styles.btn} ${batch ? styles.btnOn : ''}`}
-            onClick={() => (batch ? exitBatch() : setBatch(true))}
-          >
-            <img className={styles.btnIcon} src={assetUrl('assets/icons/batch-all.svg')} alt="" aria-hidden />
-            批量操作
-          </button>
+          {/* 批量操作（§6）：点开后二选一——批量生成（走弹窗、在里面挑资产）/ 批量删除（勾选卡片）。 */}
+          {!batch && (
+            <div className={styles.batchWrap}>
+              <button
+                className={`${styles.btn} ${batchMenu ? styles.btnOn : ''}`}
+                onClick={() => setBatchMenu((v) => !v)}
+              >
+                <img className={styles.btnIcon} src={assetUrl('assets/icons/batch-all.svg')} alt="" aria-hidden />
+                批量操作
+                <img className={styles.btnCaret} src={assetUrl('assets/icons/chevron-down.svg')} alt="" aria-hidden />
+              </button>
+              {batchMenu && (
+                <>
+                  <div className={styles.batchMenuBackdrop} onClick={() => setBatchMenu(false)} />
+                  <div className={styles.batchMenu}>
+                    <button
+                      className={styles.batchMenuItem}
+                      disabled={allNoImage.length === 0}
+                      onClick={() => { setBatchMenu(false); openAllModal() }}
+                    >
+                      <span>批量生成</span>
+                      <span className={styles.batchMenuHint}>本项目全部没图的资产（{allNoImage.length}）</span>
+                    </button>
+                    <button
+                      className={styles.batchMenuItem}
+                      onClick={() => { setBatchMenu(false); setBatch(true) }}
+                    >
+                      <span>批量删除</span>
+                      <span className={styles.batchMenuHint}>勾选卡片后删除</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           <button className={styles.btn} onClick={() => setSortDesc((v) => !v)}>
             <img className={styles.btnIcon} src={assetUrl('assets/icons/sort-two.svg')} alt="" aria-hidden />
@@ -315,14 +340,18 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
           </button>
         ))}
 
-        {/* 一键生成本类目全部空壳（0809）：原来是 Tab 下方一整条横幅，每次出现都把网格
-            整体往下顶一截；它讲的又是"当前类目还剩几份"，本就属于 Tab 这一行，收进右端空白里。 */}
-        {emptyShells.length > 0 && !batch && (
-          <button className={styles.tabAction} onClick={generateAllShells}>
-            一键生成剩余素材（{emptyShells.length}）
-          </button>
-        )}
+        {/* 原 Tab 行右端「一键生成剩余素材」已删除（0812）——它按类目切分，和「资产生成是一次把
+            基础素材全出完」的语义打架；语义被工具条主 CTA「一键生成全部资产」覆盖。 */}
       </nav>
+
+      {/* 引导条（§6.5）：常驻一条（不是 toast，toast 会跑掉），只陈述状态、不提「下一步」。
+          判据通用：status==='empty' 且挂了参考槽 且 refsReady（状态 #2）。 */}
+      {readyToGen.length > 0 && !batch && (
+        <div className={styles.guide}>
+          <span className={styles.guideText}>{readyToGen.length} 份资产的参考图已全部就位</span>
+          <button className={styles.guideBtn} onClick={openReadyModal}>生成这 {readyToGen.length} 份</button>
+        </div>
+      )}
 
       {/* ── 网格 ── */}
       {visible.length === 0 ? (
@@ -400,6 +429,16 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 生成前确认弹窗（§6）：三个入口统一走它。生成后 toast 汇报。 */}
+      {batchModal && (
+        <BatchGenerateModal
+          title={batchModal.title}
+          assetIds={batchModal.ids}
+          onClose={() => setBatchModal(null)}
+          onDone={showToast}
+        />
       )}
 
       {/* 批量生成结果 toast */}

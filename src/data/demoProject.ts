@@ -51,11 +51,15 @@ function made(
   }
 }
 
-/** 生成一份"造型"的资产定义：参考图 = 角色定稿 + 服装定稿。 */
+/**
+ * 生成一份"造型"的资产定义（0812）：参考槽 = 两个**资产级槽**，分别指向角色与服装。
+ * 资产级槽是活的：上游还没出图时槽是空的（pending），上游一定稿槽自动拿到它的 cover——
+ * 所以"造型第一步没图、第二步自动就位"不需要任何特殊代码，是状态流动的结果。
+ */
 function look(
   id: string, name: string, slug: string,
   from: { id: string; name: string; slug: string },
-  costume: { name: string; slug: string },
+  costume: { id: string; name: string; slug: string },
   fields: Record<string, unknown> = {}, createdAt = 0,
 ): Asset {
   const p = pool(slug)
@@ -63,8 +67,10 @@ function look(
     id, category: 'character', name, scope: 'project', scopeId: IDS.projDaily,
     status: 'done', cover: p[0], candidates: cands(p),
     referencedFrom: from.id,
-    referenceImages: [`${IMG}/proj-daily/${from.slug}/1.png`, `${IMG}/proj-daily/${costume.slug}/1.png`],
-    referenceLabels: [from.name, costume.name],
+    references: [
+      { kind: 'asset', assetId: from.id },     // 角色（阿杰 / 苏可）
+      { kind: 'asset', assetId: costume.id },  // 服装（西装 / 睡衣）
+    ],
     prompt: PROMPT_CHARACTER,
     // fields.lookUrl 是**演示脚手架专用**：没有生图后端，手动「批量生成」时拿它当出图替身，
     // 保证造型出的是造型图而不是素模图。接真后端后连同本文件一起删。
@@ -75,8 +81,8 @@ function look(
 
 const AJIE = { id: 'd_ajie', name: '阿杰', slug: 'ajie' }
 const SUKE = { id: 'd_suke', name: '苏可', slug: 'suke' }
-const SUIT = { name: '西装', slug: 'suit' }
-const PAJAMAS = { name: '睡衣', slug: 'pajamas' }
+const SUIT = { id: 'd_suit', name: '西装', slug: 'suit' }
+const PAJAMAS = { id: 'd_pajamas', name: '睡衣', slug: 'pajamas' }
 
 /**
  * 8 份资产的**完整形态**（已出图的样子）。

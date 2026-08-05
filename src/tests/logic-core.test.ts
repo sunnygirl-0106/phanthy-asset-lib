@@ -47,6 +47,11 @@ import {
   coverOf,
   removeCandidate,
   setFinal,
+  resolveRefs,
+  refsReady,
+  pendingRefs,
+  usableRefUrls,
+  wouldCycle,
   AssetRuleError,
 } from '../services/assetService'
 
@@ -263,7 +268,7 @@ describe('存入（项目→团队库，0810 · 按图）', () => {
     if (res.kind === 'asset') {
       expect(res.asset.cover).toBe(suwan.cover)
       expect(res.asset.candidates).toBeUndefined()
-      expect(res.asset.referenceImages).toBeUndefined()
+      expect(res.asset.references).toBeUndefined()
       expect(res.asset.referencedFrom).toBeUndefined()
     }
   })
@@ -373,11 +378,13 @@ describe('种子不变式', () => {
     expect(world.assets.filter((a) => a.scope === 'team' && a.status === 'empty').length).toBe(0)
   })
 
-  it('自参考不入库（0810）：没有任何资产的 referenceImages 含自己的 cover', () => {
+  it('自参考不入库（0812）：没有任何资产的 references 指向自己', () => {
     const bare = (u: string) => u.split('?')[0]
     for (const a of world.assets) {
-      if (!a.cover || !a.referenceImages?.length) continue
-      expect(a.referenceImages.some((u) => bare(u) === bare(a.cover))).toBe(false)
+      for (const ref of a.references ?? []) {
+        if (ref.kind === 'asset') expect(ref.assetId).not.toBe(a.id)
+        else if (a.cover) expect(bare(ref.url)).not.toBe(bare(a.cover))
+      }
     }
   })
 
@@ -406,20 +413,12 @@ describe('种子不变式', () => {
     }
   })
 
-  it('所有带 referenceLabels 的资产，referenceLabels 与 referenceImages 等长', () => {
-    for (const a of world.assets) {
-      if (a.referenceLabels) {
-        expect(a.referenceLabels.length).toBe(a.referenceImages?.length)
-      }
-    }
-  })
-
-  it('项目库造型资产都有来源与参考图（角色定稿 + 服装定稿，规则 16）', () => {
+  it('项目库造型资产都有来源与两个资产级参考槽（角色 + 服装，0812）', () => {
     const looks = world.assets.filter((a) => a.scope === 'project' && a.referencedFrom)
     expect(looks.length).toBeGreaterThanOrEqual(2) // 阿杰·西装造型 / 苏可·睡衣造型
     for (const l of looks) {
-      expect(l.referenceImages?.length).toBe(2) // 第 1 张角色、第 2 张服装
-      expect(l.referenceLabels?.length).toBe(2)
+      expect(l.references?.length).toBe(2) // 第 1 个角色、第 2 个服装
+      expect(l.references?.every((r) => r.kind === 'asset')).toBe(true) // 工作流拆出来的是资产级槽
       expect(l.referencedFrom).toBeTruthy()
     }
   })
@@ -430,12 +429,11 @@ describe('种子不变式', () => {
     expect(nonProject.every((a) => !a.candidates?.length)).toBe(true)
   })
 
-  it('项目库造型资产（有 referencedFrom）参考图 ≥ 1，且 referenceLabels 与之等长（规则 16）', () => {
+  it('项目库造型资产（有 referencedFrom）参考槽 ≥ 1（0812）', () => {
     const looks = world.assets.filter((a) => a.scope === 'project' && a.referencedFrom)
     expect(looks.length).toBeGreaterThan(0)
     for (const a of looks) {
-      expect(a.referenceImages?.length ?? 0).toBeGreaterThanOrEqual(1)
-      expect(a.referenceLabels?.length).toBe(a.referenceImages?.length)
+      expect(a.references?.length ?? 0).toBeGreaterThanOrEqual(1)
     }
   })
 })
@@ -545,5 +543,47 @@ describe('parseHash / routeToHash：#/team 与 #/team/deposits 往返', () => {
   it('routeToHash：team 往返一致', () => {
     expect(routeToHash({ name: 'team' })).toBe('#/team')
     expect(routeToHash({ name: 'team', drawer: 'deposits' })).toBe('#/team/deposits')
+  })
+})
+
+/* ═══════════════ 十一、参考槽两分（0812 · resolveRefs / refsReady / pendingRefs / wouldCycle）═══════════════ */
+describe('参考槽解析（0812）', () => {
+  const doneUp: Asset = { id: 'up_done', category: 'character', name: '角色A', scope: 'project', scopeId: IDS.projDaily, status: 'done', cover: '/a.png', fields: {}, tags: [], createdAt: 0 }
+  const emptyUp: Asset = { ...doneUp, id: 'up_empty', name: '角色B', status: 'empty', cover: '' }
+  const mkWorld = (extra: Asset[]): World => ({ ...createSeedWorld(), assets: [doneUp, emptyUp, ...extra] })
+  const mk = (over: Partial<Asset>): Asset => ({ id: 'x', category: 'character', name: 'X', scope: 'project', scopeId: IDS.projDaily, status: 'empty', cover: '', fields: {}, tags: [], createdAt: 0, ...over })
+
+  it('状态判据：没图无参考 / 参考全就位 / 图级槽 → refsReady=true；有 pending 上游 → false', () => {
+    const w = mkWorld([])
+    expect(refsReady(w, mk({ references: undefined }))).toBe(true)                                    // #1
+    expect(refsReady(w, mk({ references: [{ kind: 'asset', assetId: 'up_done' }] }))).toBe(true)      // #2
+    expect(refsReady(w, mk({ references: [{ kind: 'image', url: '/z.png' }] }))).toBe(true)           // 图级槽恒 ready
+    const s3 = mk({ references: [{ kind: 'asset', assetId: 'up_done' }, { kind: 'asset', assetId: 'up_empty' }] })
+    expect(refsReady(w, s3)).toBe(false)                                                              // #3
+    expect(pendingRefs(w, s3).length).toBe(1)
+    expect(pendingRefs(w, s3)[0].state).toBe('pending')
+    expect(pendingRefs(w, s3)[0].label).toBe('角色B')
+  })
+
+  it('上游被整份删除 → 槽解析为 missing，且 refsReady=false', () => {
+    const w = mkWorld([])
+    const s = mk({ references: [{ kind: 'asset', assetId: 'up_gone' }] })
+    expect(resolveRefs(w, s)[0].state).toBe('missing')
+    expect(refsReady(w, s)).toBe(false)
+  })
+
+  it('usableRefUrls：只有 ready 的槽算数（真实参考图）', () => {
+    const w = mkWorld([])
+    const s = mk({ references: [{ kind: 'asset', assetId: 'up_done' }, { kind: 'asset', assetId: 'up_empty' }, { kind: 'image', url: '/img.png' }] })
+    expect(usableRefUrls(w, s)).toEqual(['/a.png', '/img.png'])
+  })
+
+  it('wouldCycle：A→B 之后 B→A 会成环；参考无依赖上游不成环；自环恒 true', () => {
+    const A = mk({ id: 'cyc_a', references: [{ kind: 'asset', assetId: 'cyc_b' }] })
+    const B = mk({ id: 'cyc_b', name: 'B' })
+    const w = mkWorld([A, B])
+    expect(wouldCycle(w, 'cyc_b', 'cyc_a')).toBe(true)
+    expect(wouldCycle(w, 'cyc_b', 'up_done')).toBe(false)
+    expect(wouldCycle(w, 'x', 'x')).toBe(true)
   })
 })

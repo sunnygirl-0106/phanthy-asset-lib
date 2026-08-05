@@ -18,7 +18,7 @@ import { useEffect, useState } from 'react'
 import type { Category, Voice, Scope } from '../data/types'
 import { useStore, useCurrentUser, type ActionResult } from '../store/useStore'
 import { canDirectReuse, canFavorite, canReuseFromTeam, canRemovePlazaAsset, canDeleteLibraryAsset, canViewPrompt, canRegenerate, isAdmin } from '../services/permission'
-import { coverOf } from '../services/assetService'
+import { coverOf, resolveRefs, pendingRefs as pendingRefsOf, usableRefUrls } from '../services/assetService'
 import { COST_PER_IMAGE } from '../data/pricing'
 import { PRESET_VOICES } from '../data/presetVoices'
 import { CanvasAssetPanel, type PickedRef } from './canvas/CanvasAssetPanel'
@@ -46,10 +46,10 @@ const IMG_PLACEHOLDER = assetUrl('assets/canvas/image-placeholder.svg')
 
 /** 去掉 ?g=N 后缀，拿到图片本体地址。 */
 function baseUrl(u: string): string { return u.split('?')[0] }
-/** 生成图来源：定稿 → 造型真实成品图替身（fields.lookUrl，演示脚手架）→ 参考图第一张 → 通用占位图。 */
-function genSourceOf(a: { cover: string; fields?: { lookUrl?: unknown }; referenceImages?: string[] }): string {
+/** 生成图来源（0812）：定稿 → 真实参考图（就位的槽）→ 造型成品图替身（lookUrl，演示脚手架）→ 通用占位图。 */
+function genSourceOf(a: { cover: string; fields?: { lookUrl?: unknown } }, usableRef?: string): string {
   const look = typeof a.fields?.lookUrl === 'string' ? a.fields.lookUrl : undefined
-  return baseUrl(a.cover || look || a.referenceImages?.[0] || IMG_PLACEHOLDER)
+  return baseUrl(a.cover || usableRef || look || IMG_PLACEHOLDER)
 }
 
 /** 生成参数选项（纯展示，对齐现有产品「一键生成」弹窗；仅数量驱动张数）。 */
@@ -210,8 +210,8 @@ export function AssetDetail({
   const runSetFinal = useStore((s) => s.runSetFinal)
   const appendCandidates = useStore((s) => s.appendCandidates)
   const setPrompt = useStore((s) => s.setPrompt)
-  const removeReferenceImage = useStore((s) => s.removeReferenceImage)
-  const addReferenceImages = useStore((s) => s.addReferenceImages)
+  const removeRef = useStore((s) => s.removeRef)
+  const addImageRefs = useStore((s) => s.addImageRefs)
   const clearAssetImages = useStore((s) => s.clearAssetImages)
   const renameAsset = useStore((s) => s.renameAsset)
   const setVoice = useStore((s) => s.setVoice)
@@ -256,12 +256,15 @@ export function AssetDetail({
   const [addPicker, setAddPicker] = useState<'menu' | 'library' | null>(null)
   // 参考图第一槽：本次生成要不要以当前定稿为底（派生，不入库）。切换资产时重置为 true。
   const [useSelfRef, setUseSelfRef] = useState(true)
+  // 生成软拦截二次确认（0812 §8.3）：有 pending 槽时弹一次「这次参考不到这 N 份」。
+  const [confirmGen, setConfirmGen] = useState(false)
 
   // Esc：先收子面板 / 改名，再关整扇弹窗
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       if (sendImg) setSendImg(null)
+      else if (confirmGen) setConfirmGen(false)
       else if (addPicker) setAddPicker(null)
       else if (preview) setPreview(null)
       else if (refPicker) setRefPicker(null)
@@ -272,7 +275,7 @@ export function AssetDetail({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [sendImg, addPicker, preview, refPicker, promptOpen, picker, renaming, onClose])
+  }, [sendImg, confirmGen, addPicker, preview, refPicker, promptOpen, picker, renaming, onClose])
 
   // 切换到另一份资产时，清掉三栏面板的本地态（生成中 / 中栏选中 / 提示词草稿）。
   useEffect(() => {
@@ -309,8 +312,14 @@ export function AssetDetail({
   const coverImg = coverOf(asset)
   const candidates = asset.candidates ?? []
   const isEmpty = asset.status === 'empty'
-  const referenceImages = asset.referenceImages ?? []
-  const referenceLabels = asset.referenceLabels ?? []
+  // 参考槽（0812）：references 与 resolved 下标对齐；pendingList = 还没就位的（pending + missing）。
+  const references = asset.references ?? []
+  const resolved = resolveRefs(world, asset)
+  const pendingList = pendingRefsOf(world, asset)
+  // 图级槽的裸 url 集合——判「当前预览这张是不是已在参考里」用。
+  const imageRefUrls = references
+    .filter((r) => r.kind === 'image')
+    .map((r) => baseUrl((r as { url: string }).url))
   // 候选池是项目层特有的生产过程留存物（规则 14）：团队库 / 广场只展示定稿，右栏不出。
   const hasCandidatePool = asset.scope === 'project' && !isOther
   // 参考图选择器（从素材库添加）需要项目上下文：空壳/造型都在项目层，取它所在项目。
@@ -385,17 +394,31 @@ export function AssetDetail({
   // 当前预览的这张，是不是就是"当前定稿"（= 参考图第一槽 selfRef 派生的那张）。
   const isCenterCover = !!centerCand && baseUrl(centerCand.url) === baseUrl(asset.cover ?? '')
   // 当前预览的这张，是不是已经在参考图里了。
-  // ⚠️ 必须按 baseUrl 比：候选池的 url 带 ?g=N 去重后缀，参考图存的是不带后缀的裸地址
-  //    （见 seed.ts 里素模的 cover 与 referenceImages），裸字符串比较永远不相等。
-  // 两条路径都算"已是参考图"：① 已写进存量 referenceImages；② 它就是当前定稿、且自参考第一槽开着
-  //    （素模自己的定稿不入库、由 selfRef 派生成第一槽——只查 referenceImages 会漏判，按钮就一直显示"添加"）。
+  // ⚠️ 必须按 baseUrl 比：候选池的 url 带 ?g=N 去重后缀，图级槽存的是不带后缀的裸地址。
+  // 两条路径都算"已是参考图"：① 已写进图级槽；② 它就是当前定稿、且自参考第一槽开着
+  //    （素模自己的定稿不入库、由 selfRef 派生成第一槽——只查图级槽会漏判，按钮就一直显示"添加"）。
   const isCenterInRefs =
     !!centerCand &&
-    (referenceImages.some((u) => baseUrl(u) === baseUrl(centerCand.url)) || (isCenterCover && useSelfRef))
+    (imageRefUrls.includes(baseUrl(centerCand.url)) || (isCenterCover && useSelfRef))
 
-  // 参考图第一槽（0810）：资产自己的当前定稿，渲染时派生、不写进 referenceImages。
+  // 参考图第一槽（0810）：资产自己的当前定稿，渲染时派生、不写进 references。
   // 定稿一换第一槽自动跟着换（因为是派生的）；关掉只影响本次生成，退出重进恢复。
   const selfRef = asset.cover && useSelfRef ? { url: baseUrl(asset.cover), label: '当前定稿' } : null
+
+  /**
+   * 点「生成」：软拦截（0812 §8.3）。有 pending 槽（上游没出图）时不禁用按钮，
+   * 弹一次二次确认（§6.4 第二种），确认后照常生成——参考槽是空的、模型本就拿不到，
+   * 这次只是"少参考一张"，不是错误操作。
+   */
+  function requestGenerate() {
+    if (!canRegen || generating !== null) return
+    if (!promptDraft.trim()) {
+      setResult({ ok: false, message: '先写提示词再生成' })
+      return
+    }
+    if (pendingList.length > 0) { setConfirmGen(true); return }
+    doGenerate()
+  }
 
   /** 生成：先进「生成中」骨架态，1.2s 后把 genCount 张直接并入候选池，并自动预览第一张。 */
   function doGenerate() {
@@ -406,7 +429,7 @@ export function AssetDetail({
     }
     if (promptDraft !== (asset!.prompt ?? '')) setPrompt(asset!.id, promptDraft)
     setGenerating(genCount)
-    const src = genSourceOf(asset!)
+    const src = genSourceOf(asset!, usableRefUrls(world, asset!)[0])
     const urls = Array.from({ length: genCount }, (_, i) => `${src}?g=${Date.now()}${i}`)
     window.setTimeout(() => {
       const r = appendCandidates(asset!.id, urls)
@@ -448,40 +471,38 @@ export function AssetDetail({
   }
 
   /**
-   * 把当前预览的这张图加进 / 移出这份资产自己的参考图（0808）。
-   * 标签直接写资产名（规则 20：参考图标签写它的真名），与种子里素模的口径一致。
-   * 存进去的 url 统一去掉 ?g=N 后缀，跟 referenceImages 的既有格式对齐——
+   * 把当前预览的这张图加进 / 移出这份资产自己的参考图（0812）。产出**图级槽**（用户挑的一张具体的图）。
+   * 存进去的 url 统一去掉 ?g=N 后缀，跟图级槽的既有格式对齐——
    * 否则同一张图会以两个字符串身份存在，判重和「已是参考图」都会失灵。
    */
   function toggleAsReference(cand: { url: string }) {
     const key = baseUrl(cand.url)
-    // 当前定稿走"自参考第一槽"这条派生路径：加/移只翻 useSelfRef，不往 referenceImages 里塞一份重复的
+    // 当前定稿走"自参考第一槽"这条派生路径：加/移只翻 useSelfRef，不往 references 里塞一份重复的
     //    （与第一槽上那个 ✕ 同一个开关，行为对称）。
     if (key === baseUrl(asset!.cover ?? '')) {
       setUseSelfRef((v) => !v)
       return
     }
-    const i = referenceImages.findIndex((u) => baseUrl(u) === key)
+    const i = references.findIndex((r) => r.kind === 'image' && baseUrl((r as { url: string }).url) === key)
     if (i >= 0) {
-      setResult(removeReferenceImage(asset!.id, i))
+      setResult(removeRef(asset!.id, i))
       return
     }
-    setResult(addReferenceImages(asset!.id, [{ url: key, label: asset!.name }]))
+    setResult(addImageRefs(asset!.id, [key]))
   }
 
-  /** 参考图选择器：确定从素材库选的图 → 并入 referenceImages（标签写被选资产的真名 · 规则 20）。 */
+  /** 参考图选择器（0812）：确定从素材库选的图 → 产出图级槽（用户挑的具体某张图，不显示名字）。 */
   function confirmRefPick(pickedItems: PickedRef[]) {
     if (pickedItems.length === 0) return setRefPicker(null)
-    const items = pickedItems.map((p) => ({ url: p.cover, label: p.name }))
-    setResult(addReferenceImages(asset!.id, items, pickedItems[0].assetId))
+    setResult(addImageRefs(asset!.id, pickedItems.map((p) => p.cover)))
     setRefPicker(null)
   }
 
-  /** 参考图选择器：上传本地临时参考图（纯前端占位，刷新即失）。 */
+  /** 参考图选择器：上传本地临时参考图（纯前端占位，刷新即失）→ 图级槽。 */
   function uploadTempRef(file: File | null) {
     if (!file) return
     const url = URL.createObjectURL(file)
-    setResult(addReferenceImages(asset!.id, [{ url, label: '临时' }]))
+    setResult(addImageRefs(asset!.id, [url]))
     setRefPicker(null)
   }
 
@@ -517,6 +538,38 @@ export function AssetDetail({
     )
   }
 
+  /**
+   * 生成软拦截二次确认（0812 §6.4 第二种 · §8.3）：上游不在本批次里、还没出图。
+   * 「这次不会参考到」是事实，不是含糊的风险提示——按钮写「知道了，现在生成」而不是「仍然生成」。
+   */
+  function renderGenConfirm() {
+    if (!confirmGen) return null
+    const n = pendingList.length
+    const names = pendingList.map((r) => r.label).join(' · ')
+    return (
+      <div className={styles.msubroot}>
+        <div className={styles.sscrim} onClick={() => setConfirmGen(false)} />
+        <div className={styles.confirmCard}>
+          <div className={`${styles.confirmIcon} ${styles.confirmIconAccent}`}><RegenIcon /></div>
+          <h4 className={styles.confirmTitle}>有 {n} 项参考对象尚未生成</h4>
+          <p className={styles.confirmBody}>
+            这些参考对象还没有生成图片，本次将<b>暂不参考其形象</b>，仅依据提示词生成。参考关系会为你保留，待它们出图后重新生成，即可自动生效。
+          </p>
+          <p className={styles.confirmList}>本次暂不参考：{names}</p>
+          <div className={styles.confirmActions}>
+            <button className={styles.btnGhost} onClick={() => setConfirmGen(false)}>暂不生成</button>
+            <button
+              className={`${styles.btn} ${styles.btnPri}`}
+              onClick={() => { setConfirmGen(false); doGenerate() }}
+            >
+              确认生成
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   /** 参考图选择器（0804 · 改动三）：二选一菜单 + 从素材库多选 / 上传临时参考。 */
   function renderRefPicker() {
     if (!refPicker) return null
@@ -532,7 +585,7 @@ export function AssetDetail({
               onUse={() => {}}
               onPick={confirmRefPick}
               onClose={() => setRefPicker(null)}
-              alreadyPickedUrls={referenceImages.map(baseUrl)}
+              alreadyPickedUrls={imageRefUrls}
             />
           </div>
         </div>
@@ -1129,16 +1182,45 @@ export function AssetDetail({
                       <span className={styles.refLabel}>{selfRef.label}</span>
                     </div>
                   )}
-                  {referenceImages.map((src, i) => (
-                    <div key={i} className={styles.refItem}>
-                      <div className={styles.refSlot}>
-                        {/* 来源标签（素模/服装/用户挂图）移到 title，不再常驻占视觉；派生的「当前定稿」槽才留常驻标签。 */}
-                        <img src={src} alt={referenceLabels[i] || '参考图'} title={referenceLabels[i] || undefined} loading="lazy" />
-                        <button className={styles.refZoom} title="放大查看" onClick={() => setPreview({ src, name: referenceLabels[i] || '参考图' })}><ZoomIcon /></button>
-                        <button className={styles.refRemove} title="移除参考图" onClick={() => setResult(removeReferenceImage(asset.id, i))}>✕</button>
+                  {references.map((ref, i) => {
+                    const r = resolved[i]
+                    // 图级槽：纯缩略图，不带任何文字（用户自己挑的图，他知道那是什么）。
+                    if (ref.kind === 'image') {
+                      const src = ref.url
+                      return (
+                        <div key={i} className={styles.refItem}>
+                          <div className={styles.refSlot}>
+                            <img src={src} alt="参考图" loading="lazy" />
+                            <button className={styles.refZoom} title="放大查看" onClick={() => setPreview({ src, name: '参考图' })}><ZoomIcon /></button>
+                            <button className={styles.refRemove} title="移除参考图" onClick={() => setResult(removeRef(asset.id, i))}>✕</button>
+                          </div>
+                        </div>
+                      )
+                    }
+                    // 资产级槽 · ready：缩略图 + 资产名（名字常驻，它是唯一标识）。
+                    if (r.state === 'ready') {
+                      return (
+                        <div key={i} className={styles.refItem}>
+                          <div className={styles.refSlot}>
+                            <img src={r.url} alt={r.label ?? '参考'} loading="lazy" />
+                            <button className={styles.refZoom} title="放大查看" onClick={() => setPreview({ src: r.url, name: r.label ?? '参考' })}><ZoomIcon /></button>
+                            <button className={styles.refRemove} title="移除参考" onClick={() => setResult(removeRef(asset.id, i))}>✕</button>
+                          </div>
+                          <span className={styles.refLabel}>{r.label}</span>
+                        </div>
+                      )
+                    }
+                    // 资产级槽 · pending / missing：整颗灰化 + 资产名 + ·待生成 / ·已删除。
+                    return (
+                      <div key={i} className={styles.refItem}>
+                        <div className={`${styles.refSlot} ${styles.refSlotPending}`}>
+                          <div className={styles.refPendingBox} aria-hidden />
+                          <button className={styles.refRemove} title="移除参考" onClick={() => setResult(removeRef(asset.id, i))}>✕</button>
+                        </div>
+                        <span className={styles.refLabel}>{r.label} ·{r.state === 'pending' ? '待生成' : '已删除'}</span>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                   <button className={styles.refAdd} onClick={() => setRefPicker('menu')} title="从素材库添加 / 上传临时参考">
                     <span className={styles.refPlus}>＋</span>
                     <span>添加参考图</span>
@@ -1172,13 +1254,20 @@ export function AssetDetail({
                 </label>
               </div>
 
-              {/* 底部一行：预计消耗星钻 + 生成 */}
+              {/* 有 pending 槽时的警示行（0812 §8.2）：确定的事用确定的语气。 */}
+              {pendingList.length > 0 && (
+                <div className={styles.refWarn}>
+                  ◷ 参考对象 <b>{pendingList.map((r) => r.label).join('、')}</b> 尚未生成，本次将<b>暂不参考其形象</b>，仅依据提示词生成。参考关系已为你保留，待其出图后重新生成即可自动生效。
+                </div>
+              )}
+
+              {/* 底部一行：预计消耗星钻 + 生成（软拦截：不禁用，点击时若有 pending 槽先弹二次确认） */}
               <div className={styles.genFoot}>
                 <span className={styles.costHint}>预计消耗 <b>{genCount * COST_PER_IMAGE}</b> 星钻</span>
                 <button
                   className={`${styles.genBtn} ${!asset.cover ? styles.genBtnPulse : ''}`}
                   disabled={generating !== null}
-                  onClick={doGenerate}
+                  onClick={requestGenerate}
                 >
                   {generating !== null ? '生成中…' : '生成'}
                 </button>
@@ -1358,6 +1447,7 @@ export function AssetDetail({
         {renderPicker()}
         {renderPromptPanel()}
         {renderDeleteConfirm()}
+        {renderGenConfirm()}
         {renderRefPicker()}
         {renderAddPicker()}
       </div>

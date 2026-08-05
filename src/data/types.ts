@@ -220,8 +220,28 @@ export interface AssetFields {
    * demo 没有生图后端，生成时优先拿它当出图替身（见 genSourceOf / batchGenerate）。
    */
   lookUrl?: string
+  /**
+   * 参考槽被用户手动改过（0812 · §5.3）。打上后工作流不再往里塞任何东西——
+   * 系统只填空位，不覆盖用户的决定。
+   */
+  refsTouched?: boolean
   [key: string]: unknown
 }
+
+/**
+ * 参考槽（0812）：两种，语义完全不同，不要合并。
+ *
+ * · image —— 图级槽。用户从素材库挑的一张具体的图。死的，永不变化，不显示名字
+ *   （那张图本来就没有名字）。用户只能创建这一种。
+ * · asset —— 资产级槽。指向一份资产，图是它当前定稿的派生。活的：上游换定稿这里跟着换，
+ *   上游还没出图这里就是空的。只有工作流拆剧本时能创建。
+ *
+ * 为什么不用「url + 可选 assetId」合成一种：那样"这张图会不会变"就成了隐性知识，
+ * 渲染层每次都要重新判断。两种 kind 摆在类型上，读代码的人一眼就知道自己在处理什么。
+ */
+export type AssetRef =
+  | { kind: 'image'; url: string }
+  | { kind: 'asset'; assetId: string }
 
 /**
  * 资产：整个系统的主角。
@@ -267,21 +287,19 @@ export interface Asset {
   candidates?: Candidate[]
 
   /**
-   * 参考图（0803）：只存"来源参考"——素模 / 服装 / 用户手动挂的图。存图片 url 数组。
+   * 参考槽（0812）：替代原 referenceImages + referenceLabels 两个下标对齐的平行数组。
+   * 两种槽（图级 / 资产级）语义完全不同，见 AssetRef。解析当前状态一律走
+   * assetService.resolveRefs，不要各页面自己判断。
    *
    * 【0810】自参考不入库：一份资产自己的当前定稿，由详情页在渲染时派生成参考图的第一槽，
    * 不写进本数组。原因：定稿一换，存进来的 url 快照就变成脏数据；反复生成还会越堆越长。
    */
-  referenceImages?: string[]
+  references?: AssetRef[]
 
   /**
-   * 参考图的角色标签（0804 · 规则 16），与 referenceImages 一一对应、下标对齐。
-   * 例如 ['素模', '服装']。纯展示，用于在参考图缩略图下方打小标签，讲清"先挂素模、再挂服装"。
-   * 不填就不显示标签，不影响任何逻辑。
+   * 参考自哪份资产（可选，用于卡片 / 详情上的「参考自 XX」小标签）。
+   * 【0812】彻底退回纯展示：只做展示，全仓库不得再有任何代码用它做「谁能不能生成」的判断。
    */
-  referenceLabels?: string[]
-
-  /** 参考自哪份资产（可选，用于卡片 / 详情上的「参考自 XX」小标签）。纯展示，不挂任何行为。 */
   referencedFrom?: string
 
   fields: AssetFields

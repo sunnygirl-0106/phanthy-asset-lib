@@ -8,8 +8,9 @@
  * 所以先塞一个内存版的 localStorage，再动态 import store（保证 import 时它已存在）。
  */
 
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { canSee } from '../services/permission'
+import { resolveRefs } from '../services/assetService'
 
 function memStorage() {
   const m = new Map<string, string>()
@@ -220,96 +221,147 @@ describe('候选池动作（0803：appendCandidates / setFinal / removeCandidate
   })
 })
 
-describe('参考图删除（阶段二：removeReferenceImage · 0804 同步 referenceLabels）', () => {
+describe('参考槽删除（0812：removeRef · 按下标移除 references）', () => {
   const byId = (id: string) =>
     store.getState().world.assets.find((a: { id: string }) => a.id === id)
 
-  it('删一张参考图时同步删掉对应下标的 label（下标对齐）', () => {
-    // a_ajie_trench 空壳：DEMO 预置 2 张参考图，标签写被参考资产真名（规则 20）
+  it('删一个参考槽，按下标移除；打 refsTouched', () => {
+    // d_ajie_suit 造型：DEMO 预置 2 个资产级槽，指向 d_ajie（角色）+ d_suit（服装）
     const before = byId('d_ajie_suit')
-    expect(before.referenceImages.length).toBe(2)
-    expect(before.referenceLabels).toEqual(['阿杰', '西装'])
-    // 删下标 0（阿杰）→ 只剩机甲外骨骼，label 也收缩成 ['西装']
-    const r = store.getState().removeReferenceImage('d_ajie_suit', 0)
+    expect(before.references.length).toBe(2)
+    expect(before.references[0]).toEqual({ kind: 'asset', assetId: 'd_ajie' })
+    // 删下标 0（阿杰）→ 只剩西装那个槽
+    const r = store.getState().removeRef('d_ajie_suit', 0)
     expect(r.ok).toBe(true)
     const after = byId('d_ajie_suit')
-    expect(after.referenceImages).toEqual([before.referenceImages[1]])
-    expect(after.referenceLabels).toEqual(['西装'])
+    expect(after.references).toEqual([{ kind: 'asset', assetId: 'd_suit' }])
+    expect(after.fields.refsTouched).toBe(true) // 用户手动改过 → 打标
   })
 
-  it('删光后 referenceImages / referenceLabels 都变 undefined', () => {
-    store.getState().removeReferenceImage('d_ajie_suit', 0)
-    store.getState().removeReferenceImage('d_ajie_suit', 0)
-    const after = byId('d_ajie_suit')
-    expect(after.referenceImages).toBeUndefined()
-    expect(after.referenceLabels).toBeUndefined()
+  it('删光后 references 变 undefined', () => {
+    store.getState().removeRef('d_ajie_suit', 0)
+    store.getState().removeRef('d_ajie_suit', 0)
+    expect(byId('d_ajie_suit').references).toBeUndefined()
   })
 
-  it('越界下标被挡；无生成权者不能改参考图', () => {
-    expect(store.getState().removeReferenceImage('d_ajie_suit', 9).ok).toBe(false) // 越界
+  it('越界下标被挡；无生成权者不能改参考槽', () => {
+    expect(store.getState().removeRef('d_ajie_suit', 9).ok).toBe(false) // 越界
     store.getState().setCurrentUser('u_admin') // admin 恒无生成权
-    expect(store.getState().removeReferenceImage('d_ajie_suit', 0).ok).toBe(false)
+    expect(store.getState().removeRef('d_ajie_suit', 0).ok).toBe(false)
   })
 })
 
-describe('参考图追加（0804：addReferenceImages · 参考图选择器落点）', () => {
+describe('参考槽追加（0812：addImageRefs 图级 / addAssetRefs 资产级）', () => {
   const byId = (id: string) =>
     store.getState().world.assets.find((a: { id: string }) => a.id === id)
 
-  it('把选中的图并入 referenceImages + referenceLabels；原有血缘不被覆盖', () => {
-    const before = byId('d_ajie_suit') // referencedFrom 已是 a_ajie
-    const r = store.getState().addReferenceImages(
-      'd_ajie_suit',
-      [{ url: '/x.png', label: '服装' }],
-      'd_suit', // 传了来源，但原本已有血缘 → 不覆盖
-    )
+  it('addImageRefs 产出图级槽、去重、打 refsTouched', () => {
+    const before = byId('d_ajie_suit')
+    const r = store.getState().addImageRefs('d_ajie_suit', ['/x.png'])
     expect(r.ok).toBe(true)
     const after = byId('d_ajie_suit')
-    expect(after.referenceImages.length).toBe(before.referenceImages.length + 1)
-    expect(after.referenceImages.at(-1)).toBe('/x.png')
-    expect(after.referenceLabels.at(-1)).toBe('服装')
-    expect(after.referencedFrom).toBe('d_ajie') // 原有血缘保留，不被 a_mech_exo 覆盖
+    expect(after.references.length).toBe(before.references.length + 1)
+    expect(after.references.at(-1)).toEqual({ kind: 'image', url: '/x.png' })
+    expect(after.fields.refsTouched).toBe(true)
+    // 再加同一张 → 去重挡下
+    expect(store.getState().addImageRefs('d_ajie_suit', ['/x.png']).ok).toBe(false)
   })
 
-  it('权限守卫：广场资产恒失败；子账号对团队库资产失败', () => {
-    // 广场资产不可生成 → addReferenceImages 挡下
-    expect(store.getState().addReferenceImages('a_cyber_police', [{ url: '/x.png', label: '参考' }]).ok).toBe(false)
-    // 子账号对团队库资产无生成权 → 挡下
+  it('addAssetRefs 成环拒绝（§11.4）', () => {
+    // 两份干净的手建资产 A / B
+    const aId = store.getState().createShellAsset('proj_daily', 'character', '环A').message
+    const bId = store.getState().createShellAsset('proj_daily', 'character', '环B').message
+    expect(store.getState().addAssetRefs(aId, [bId]).ok).toBe(true) // A 参考 B
+    const r = store.getState().addAssetRefs(bId, [aId]) // B 再参考 A → 成环
+    expect(r.ok).toBe(false)
+    expect(byId(bId).references).toBeUndefined() // 没落库
+  })
+
+  it('权限守卫：广场资产（图级槽）恒失败；子账号对团队库资产失败', () => {
+    expect(store.getState().addImageRefs('a_cyber_police', ['/x.png']).ok).toBe(false)
     store.getState().setCurrentUser('u_lin')
-    expect(store.getState().addReferenceImages('a_suwan', [{ url: '/x.png', label: '参考' }]).ok).toBe(false)
+    expect(store.getState().addImageRefs('a_suwan', ['/x.png']).ok).toBe(false)
   })
 })
 
-describe('批量生成（阶段三：batchGenerate）', () => {
+describe('批量生成（0812：拓扑分波 + generating 中间态）', () => {
   const byId = (id: string) =>
     store.getState().world.assets.find((a: { id: string }) => a.id === id)
   const P = '/placeholder.png'
 
-  it('空壳批量生成各 1 张、自动定稿（0810）；已有成品被跳过', () => {
-    // d_ajie_suit / d_suke_pajamas 是项目库造型空壳；d_ajie 是成品 → 混选
-    expect(byId('d_ajie_suit').status).toBe('empty')
-    const r = store.getState().batchGenerate(['d_ajie_suit', 'd_suke_pajamas', 'd_ajie'], P)
-    expect(r.ok).toBe(true)
-    expect(r.message).toContain('已生成 2 份')
-    expect(r.message).toContain('跳过 1 份')
-    const trench = byId('d_ajie_suit')
-    // 0810：空壳生成后有图必成品、首张自动定稿。
-    expect(trench.status).toBe('done')
-    expect(trench.cover).toBe(trench.candidates[0].url)
-    // 造型带 lookUrl（真实造型图替身）→ 生成图用它出图，不是素模、也不是通用占位图 P。
-    expect(trench.candidates[0].url).toContain('ajie-suit')
-    expect(trench.candidates[0].url).not.toBe(P)
-    expect(trench.candidates.length).toBe(1) // 默认每份 1 张
-    // 0810 自参考不入库：造型定稿不再写进 referenceImages，参考图仍是原有的素模 + 服装两张。
-    expect(trench.referenceImages?.length).toBe(2)
-    expect(byId('d_suke_pajamas').status).toBe('done')
+  it('空壳批量生成：先进 generating，1200ms 后 done、首张自动定稿；已有成品跳过', () => {
+    vi.useFakeTimers()
+    try {
+      // d_ajie_suit / d_suke_pajamas 是造型空壳（上游已在 beforeEach 出图 → refsReady）；d_ajie 成品 → 混选
+      expect(byId('d_ajie_suit').status).toBe('empty')
+      const r = store.getState().batchGenerate(['d_ajie_suit', 'd_suke_pajamas', 'd_ajie'], P)
+      expect(r.ok).toBe(true)
+      expect(r.message).toContain('跳过 1 份') // d_ajie 已有图
+      // 立即：进入生成中（异步落地）
+      expect(byId('d_ajie_suit').status).toBe('generating')
+      vi.advanceTimersByTime(1300)
+      const trench = byId('d_ajie_suit')
+      expect(trench.status).toBe('done') // 有图必成品、首张自动定稿
+      expect(trench.cover).toBe(trench.candidates[0].url)
+      expect(trench.candidates.length).toBe(1) // 默认每份 1 张
+      // 参考槽照留（0812 §8.4）：两个资产级槽不动
+      expect(trench.references?.length).toBe(2)
+      expect(byId('d_suke_pajamas').status).toBe('done')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
-  it('子账号对被分配项目的空壳有权 → 生成并自动定稿；未分配项目 → 跳过', () => {
-    store.getState().setCurrentUser('u_lin') // 子账号，分配了都市日常
-    const r = store.getState().batchGenerate(['d_ajie_suit'], P)
-    expect(r.message).toContain('已生成 1 份')
-    expect(byId('d_ajie_suit').status).toBe('done') // 项目库子账号可生成，1 张自动定稿
+  it('拓扑排序：全选 8 份，被参考的资产先于造型变 done', () => {
+    vi.useFakeTimers()
+    try {
+      store.getState().resetDemo()
+      store.getState().runDemoAnalyze() // 8 份全部空壳；造型的资产级槽指向也在批次内的角色/服装
+      const all = store.getState().world.assets
+        .filter((a: { scopeId?: string; category: string }) =>
+          a.scopeId === 'proj_daily' && ['character', 'costume', 'scene', 'prop'].includes(a.category))
+        .map((a: { id: string }) => a.id)
+      store.getState().batchGenerate(all, P)
+      // 第一波（基础素材，深度 0）进 generating；造型（深度 1）还在排队
+      vi.advanceTimersByTime(1200)
+      expect(byId('d_ajie').status).toBe('done') // 被参考的先出图
+      expect(byId('d_ajie_suit').status).not.toBe('done') // 造型还没轮到
+      // 第二波（造型）
+      vi.advanceTimersByTime(1200)
+      expect(byId('d_ajie_suit').status).toBe('done')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('子账号对被分配项目的空壳有权 → 生成；未分配项目 → 跳过', () => {
+    vi.useFakeTimers()
+    try {
+      store.getState().setCurrentUser('u_lin') // 子账号，分配了都市日常
+      const r = store.getState().batchGenerate(['d_ajie_suit'], P)
+      expect(r.ok).toBe(true)
+      vi.advanceTimersByTime(1300)
+      expect(byId('d_ajie_suit').status).toBe('done')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('上游删除（§11.5）：删掉 d_ajie 后 d_ajie_suit 的槽解析为 missing，且它仍可生成', () => {
+    // beforeEach 已 analyze+generate：d_ajie done、d_ajie_suit 空壳带两个资产级槽
+    store.getState().runDeleteAsset('d_ajie') // 主账号 Sunny 删项目库资产
+    const suit = byId('d_ajie_suit')
+    const resolved = resolveRefs(store.getState().world, suit)
+    expect(resolved.some((r: { state: string }) => r.state === 'missing')).toBe(true)
+    // 上游没了不构成死局：仍可生成（软拦截照常）。
+    vi.useFakeTimers()
+    try {
+      store.getState().batchGenerate(['d_ajie_suit'], P)
+      vi.advanceTimersByTime(1300)
+      expect(byId('d_ajie_suit').status).toBe('done')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

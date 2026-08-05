@@ -34,8 +34,11 @@ export const PROMPT_COSTUME = `一套【服装类型 + 整体风格，如古风�
 export const PROMPT_SCENE = `【时间 + 季节 + 天气】的【地点类型，如庭院/街道/森林/室内/异世界】。【主体建筑或环境结构描述】，【近景元素，如水池、桌椅、植物、器物】。【中远景元素，如远山、楼宇、天空】。【氛围光线，如晨光/暮色/月光/灯火】，营造出【整体氛围，如静谧/热闹/苍凉/梦幻】。补充【色调倾向，如青绿/暖黄/冷蓝】，【景深与空间层次】。画质要求：环境细节丰富，光影自然通透，空间纵深感强，电影级场景氛围，与人物主体和谐融合，背景服务于整体意境。`
 export const PROMPT_PROP = `一件【道具类型，如武器/器皿/乐器/书卷/法器/日常物件】，【整体造型与轮廓】。【主体材质，如金属/木质/玉石/陶瓷/织物】，【颜色与光泽感】。【表面纹样或雕刻细节，如花纹、符文、铭文及其分布】。【尺寸比例与结构部件】，【使用或摆放状态，如手持/悬浮/置于台上】。【附加元素，如光效、流苏、镶嵌宝石、磨损痕迹】，体现【道具的年代感或功能属性】。画质要求：材质质感真实，细节纹理清晰，光影反射自然，主体突出，可作为特写或点缀元素融入画面。`
 
-/** 类目 → 演示提示词模板。 */
-const PROMPT_BY_CATEGORY: Record<Category, string> = {
+/**
+ * 类目 → 演示提示词模板（0812：导出，供 store.createShellAsset 给手建空壳灌兜底提示词，
+ * 与剧本拆出来的资产完全一致）。
+ */
+export const PROMPT_BY_CATEGORY: Record<Category, string> = {
   character: PROMPT_CHARACTER,
   costume: PROMPT_COSTUME,
   scene: PROMPT_SCENE,
@@ -168,7 +171,7 @@ export function createSeedWorld(): World {
     asset({ id: 'a_swordsman', category: 'character', name: '东方剑客', scope: 'plaza', cover: `${IMG}/plaza/eastern_swordsman.png`, fields: { gender: '男', age: '青年', style: '国风' } }),
     asset({ id: 'a_mech_butler', category: 'character', name: '机械管家', scope: 'plaza', cover: `${IMG}/plaza/mech_butler.png`, fields: { style: '科幻' } }),
     // 角色造型 6
-    asset({ id: 'a_cyber_police_home', category: 'character', name: '赛博女警·居家造型', scope: 'plaza', cover: `${IMG}/plaza/cyber_police_home.png`, referencedFrom: 'a_cyber_police', referenceImages: [`${IMG}/plaza/cyber_police.png`], referenceLabels: ['赛博女警'], fields: { gender: '女', style: '赛博' } }),
+    asset({ id: 'a_cyber_police_home', category: 'character', name: '赛博女警·居家造型', scope: 'plaza', cover: `${IMG}/plaza/cyber_police_home.png`, referencedFrom: 'a_cyber_police', fields: { gender: '女', style: '赛博' } }),
     asset({ id: 'a_urban_man_suit', category: 'character', name: '都市男青年·西装造型', scope: 'plaza', cover: `${IMG}/plaza/urban_man_suit.png`, fields: { gender: '男', age: '青年', style: '写实' } }),
     asset({ id: 'a_neon_dancer_stage', category: 'character', name: '霓虹舞者·舞台造型', scope: 'plaza', cover: `${IMG}/plaza/neon_dancer_stage.png`, fields: { gender: '女', style: '赛博' } }),
     asset({ id: 'a_shangui_battle', category: 'character', name: '山鬼·战斗造型', scope: 'plaza', cover: `${IMG}/plaza/shangui_battle.png`, fields: { style: '国风' } }),
@@ -205,12 +208,12 @@ export function createSeedWorld(): World {
     asset({ id: 'a_swordsman_base', category: 'character', name: '东方剑客·素模', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team/eastern_swordsman_base.png`, masterId: 'a_swordsman', fields: { gender: '男', style: '国风' }, createdAt: 1_784_680_000_000 }),
     asset({ id: 'a_mech_butler_base', category: 'character', name: '机械管家·素模', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team/mech_butler_base.png`, masterId: 'a_mech_butler', fields: { style: '科幻' }, createdAt: 1_784_640_000_000 }),
     // 角色造型 6
-    asset({ id: 'a_suwan_final', category: 'character', name: '苏晚·成片造型', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team/suwan_final.png`, referencedFrom: 'a_suwan', referenceImages: [`${IMG}/team/suwan.png`], referenceLabels: ['苏晚'], fields: { gender: '女', age: '青年', style: '国风' }, createdAt: 1_784_600_000_000 }),
-    asset({ id: 'a_suwan_guofeng', category: 'character', name: '苏晚·国风造型', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team/suwan_guofeng.png`, referencedFrom: 'a_suwan', referenceImages: [`${IMG}/team/suwan.png`, `${IMG}/team/palace_dress.png`], referenceLabels: ['苏晚', '国风宫装'], fields: { gender: '女', age: '青年', style: '国风' }, createdAt: 1_784_560_000_000 }),
-    asset({ id: 'a_suwan_casual', category: 'character', name: '苏晚·休闲造型', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team/suwan_casual.png`, referencedFrom: 'a_suwan', referenceImages: [`${IMG}/team/suwan.png`], referenceLabels: ['苏晚'], fields: { gender: '女', age: '青年' }, createdAt: 1_784_520_000_000 }),
-    asset({ id: 'a_suwan_cyber', category: 'character', name: '苏晚·赛博造型', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team/suwan_cyber.png`, referencedFrom: 'a_suwan', referenceImages: [`${IMG}/team/suwan.png`, `${IMG}/team/cyber_jacket.png`], referenceLabels: ['苏晚', '赛博夹克'], fields: { gender: '女', age: '青年', style: '赛博' }, createdAt: 1_784_480_000_000 }),
-    asset({ id: 'a_oldk_trench', category: 'character', name: '老K·风衣造型', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team/oldk_trench.png`, referencedFrom: 'a_oldk', referenceImages: [`${IMG}/team/oldk.png`], referenceLabels: ['老K'], fields: { gender: '男', age: '中年' }, createdAt: 1_784_440_000_000 }),
-    asset({ id: 'a_linjingguan_jacket', category: 'character', name: '林警官·夹克造型', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team/linjingguan_jacket.png`, masterId: 'a_cyber_police', referenceImages: [`${IMG}/team/cyber_jacket.png`], referenceLabels: ['赛博夹克'], fields: { gender: '女', style: '赛博' }, createdAt: 1_784_400_000_000 }),
+    asset({ id: 'a_suwan_final', category: 'character', name: '苏晚·成片造型', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team/suwan_final.png`, referencedFrom: 'a_suwan', fields: { gender: '女', age: '青年', style: '国风' }, createdAt: 1_784_600_000_000 }),
+    asset({ id: 'a_suwan_guofeng', category: 'character', name: '苏晚·国风造型', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team/suwan_guofeng.png`, referencedFrom: 'a_suwan', fields: { gender: '女', age: '青年', style: '国风' }, createdAt: 1_784_560_000_000 }),
+    asset({ id: 'a_suwan_casual', category: 'character', name: '苏晚·休闲造型', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team/suwan_casual.png`, referencedFrom: 'a_suwan', fields: { gender: '女', age: '青年' }, createdAt: 1_784_520_000_000 }),
+    asset({ id: 'a_suwan_cyber', category: 'character', name: '苏晚·赛博造型', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team/suwan_cyber.png`, referencedFrom: 'a_suwan', fields: { gender: '女', age: '青年', style: '赛博' }, createdAt: 1_784_480_000_000 }),
+    asset({ id: 'a_oldk_trench', category: 'character', name: '老K·风衣造型', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team/oldk_trench.png`, referencedFrom: 'a_oldk', fields: { gender: '男', age: '中年' }, createdAt: 1_784_440_000_000 }),
+    asset({ id: 'a_linjingguan_jacket', category: 'character', name: '林警官·夹克造型', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team/linjingguan_jacket.png`, masterId: 'a_cyber_police', fields: { gender: '女', style: '赛博' }, createdAt: 1_784_400_000_000 }),
     // 服装 2 / 场景 1 / 道具 1
     asset({ id: 'a_cyber_jacket', category: 'costume', name: '赛博夹克', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team/cyber_jacket.png`, fields: { style: '赛博' }, createdAt: 1_784_300_000_000 }),
     asset({ id: 'a_palace_dress', category: 'costume', name: '国风宫装', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team/palace_dress.png`, fields: { style: '国风' }, createdAt: 1_784_000_000_000 }),
