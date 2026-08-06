@@ -1229,7 +1229,11 @@ export function AssetDetail({
                 ) : hasUnsaved ? (
                   <>
                     <span className={styles.headDirty}><i className={styles.headDot} />有未保存改动</span>
-                    <button className={styles.headSaveBtn} onClick={commitSave}>保存</button>
+                    <span className={styles.headSaveWrap}>
+                      {/* 淡淡的光晕：一圈脉动的光环绕在「保存」外侧（对齐 mockup 的 ringPulse）。 */}
+                      <i className={styles.headSaveRing} aria-hidden />
+                      <button className={styles.headSaveBtn} onClick={commitSave}>保存</button>
+                    </span>
                   </>
                 ) : null)}
                 {headActions()}
@@ -1388,7 +1392,8 @@ export function AssetDetail({
           <div className={styles.genStage}>
 
           {/* ═══ 中栏：预览台（生成中骨架 / 空态 / 预览大图）+ 动作 + 音色 ═══ */}
-          <div className={styles.genCenter}>
+          {/* 定稿态：给整块深色预览框描一圈青绿直角边（与头部「★ 当前定稿」同条件）。 */}
+          <div className={`${styles.genCenter} ${hasGenPanel && !isEmpty && !isOther && generating === null && showFinalBadge && centerIsFinal ? styles.genCenterFinal : ''}`}>
             {/* 「预览」标题只在生成面板里有意义；团队库 / 广场只读态不写它（省地方）。
                 右端计数「第 N 张 / 共 M 张 · 未/已定稿」对齐设计稿，只在有候选、非生成中时出。 */}
             {(hasGenPanel || isOther || isEmpty) && (

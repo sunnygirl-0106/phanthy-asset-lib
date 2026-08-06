@@ -15,6 +15,12 @@
   border-right: 1px solid var(--line-soft);
   display: flex;
   flex-direction: column;
+  /* 钉成一屏高的 sticky 列：不随右侧网格被撑长，否则底部「资产存入申请」入口
+     （margin-top:auto）会被顶到首屏下方看不见（资产一多必现）。顶栏 48px。 */
+  position: sticky;
+  top: 48px;
+  align-self: flex-start;
+  height: calc(100vh - 48px);
 }
 
 .navItem {

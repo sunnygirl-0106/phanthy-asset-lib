@@ -88,15 +88,23 @@
 
 /* 头部「未保存改动 + 保存」簇（对齐 mockup）：脏了才出，存完闪一下「已保存」再淡出。 */
 .headDirty { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: rgba(255, 255, 255, 0.55); white-space: nowrap; }
-.headDot { width: 6px; height: 6px; border-radius: 50%; background: #f0b429; flex: none; }
+.headDot { width: 6px; height: 6px; border-radius: 50%; background: #f0b429; flex: none; animation: dotPulse 1.9s ease-in-out infinite; }
+/* 「保存」外侧一圈淡淡光晕：脉动光环（对齐 mockup ringPulse）。 */
+.headSaveWrap { position: relative; display: inline-flex; }
+.headSaveRing {
+  position: absolute; inset: -5px; border-radius: 999px; border: 1px solid #f0b429;
+  pointer-events: none; animation: ringPulse 3.4s cubic-bezier(0.4, 0, 0.5, 1) infinite;
+}
 .headSaveBtn {
-  height: 34px; padding: 0 26px; border-radius: 999px; cursor: pointer; font-family: inherit;
+  position: relative; height: 34px; padding: 0 26px; border-radius: 999px; cursor: pointer; font-family: inherit;
   font-size: 14px; font-weight: 600; white-space: nowrap;
   background: rgba(240, 180, 41, 0.13); border: 1px solid #f0b429; color: #f6c65a;
 }
 .headSaveBtn:hover { background: rgba(240, 180, 41, 0.22); }
 .headSaved { font-size: 12.5px; font-weight: 600; color: var(--accent); white-space: nowrap; animation: savedFade 1.6s ease forwards; }
 @keyframes savedFade { 0%, 60% { opacity: 1 } 100% { opacity: 0 } }
+@keyframes dotPulse { 0%, 100% { opacity: 1; transform: scale(1) } 50% { opacity: 0.3; transform: scale(0.72) } }
+@keyframes ringPulse { 0% { transform: scale(1); opacity: 0 } 30% { opacity: 0.34 } 100% { transform: scale(1.09); opacity: 0 } }
 
 /* 按钮组 */
 .btn {
@@ -760,6 +768,11 @@
 .genCenter::-webkit-scrollbar-thumb { background: #2b323c; border-radius: 8px; }
 /* 舞台里的中区自带内边距（对齐设计稿 18 20）；只读态由 .mbody:not(.mbody3) 另给边距。 */
 .mbody3 .genStage .genCenter { padding: 18px 20px; }
+/* 定稿态：整块深色预览框描一圈青绿直角边（无圆角，对齐用户要求）。border-box 让边不撑破舞台。 */
+.genCenterFinal {
+  box-sizing: border-box; border: 1.5px solid var(--accent); border-radius: 6px;
+  box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.08) inset;
+}
 /* 预览头一行：左「预览」标题（+ 当前定稿标），右「第 N 张 / 共 M 张」计数。 */
 .stageHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: none; }
 .stageHeadL { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -828,9 +841,16 @@
 /* 分享入口（对齐设计稿）：把「存入团队库 / 贡献到素材广场」两个单张流转收进一个下拉，
    动作行只留三颗胶囊，不再四颗平铺换行。 */
 .pvShareWrap { position: relative; display: inline-flex; }
+/* 分享入口与左边「添加至参考图」保持一致的淡灰胶囊（沿用 .pvBtn 中性色，hover 转青绿）；
+   只带一个小分享图标，不单独走紫色。 */
 .pvShareBtn { display: inline-flex; align-items: center; gap: 6px; }
 .pvShareBtn.pvShareOpen { border-color: var(--accent); color: var(--accent); }
-.pvShareCaret { font-size: 11px; opacity: 0.8; }
+.pvShareBtn svg { width: 13px; height: 13px; flex: none; }
+/* 下拉小箭头：用 flex 居中，抵消 ⌄ 字形自身偏低的基线，让它在按钮里竖直居中。 */
+.pvShareCaret {
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; line-height: 1; opacity: 0.8; transform: translateY(-1px);
+}
 .pvSharePop {
   position: absolute; bottom: calc(100% + 10px); right: 0; z-index: 5; width: 246px; padding: 6px;
   border-radius: 14px; background: #1e2124; border: 1px solid #33363c;
