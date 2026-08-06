@@ -38,7 +38,6 @@ const EMPTY_HINT_BY_CATEGORY: Record<Category, string> = {
   audio: '',
   other: '',
 }
-const SCOPE_LABEL = { plaza: '素材广场', team: '团队资产库', project: '项目资产库' }
 /** 「其他」媒介文案（详情大图 cap / 徽章共用）。 */
 const OTHER_MEDIA_LABEL: Record<'image' | 'video' | 'text', string> = { image: '图片', video: '视频', text: '文本' }
 /** Demo 无生图后端：生成 / 恢复空壳时先落这张占位图，接模型后换真图。 */
@@ -1210,13 +1209,6 @@ export function AssetDetail({
                       </svg>
                     )}
                     {CATEGORY_LABEL[asset.category]}
-                  </span>
-                  <span className={`${styles.chip} ${styles.chipScope}`}>
-                    <svg className={styles.chipScopeIco} width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                      <path d="M2 4.4h4l1.2 1.7H14v7H2z" />
-                      <path d="M2 4.4V2.9h3.3" />
-                    </svg>
-                    {SCOPE_LABEL[asset.scope]}
                   </span>
                   {/* 广场是源头，不展示"我从哪来"（血缘 / 参考自）——规则 14。 */}
                   {asset.scope !== 'plaza' && asset.masterId && (

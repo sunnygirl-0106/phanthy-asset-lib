@@ -47,7 +47,7 @@ const PLACEHOLDER_POOL = [
 ]
 
 /** 新建音频节点的占位音源：Demo 无真实录音，复用预置音色 mp3，能真的点开试听、也能存进库/设为音色。 */
-const AUDIO_PLACEHOLDER_SRC = assetUrl('assets/voices/preset_voice_female.mp3')
+const AUDIO_PLACEHOLDER_SRC = assetUrl('assets/voices/v04_yuanqi-shaonv_female.mp3')
 
 /** 左侧悬浮工具条上唯一“开着”的浮层：加节点菜单 / 资产面板 / 都关。 */
 type Flyout = 'add' | 'folder' | null

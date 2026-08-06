@@ -85,8 +85,8 @@ export function cands(urls: string[]): Candidate[] {
  * 音频没有封面图 → 统一给一张波形占位图；可播放音源与时长塞进 fields。
  * 本期没有真实 BGM 素材，音源先复用两段预置音色 mp3 占位（能真的点开试听）。 */
 const AUDIO_SRC = [
-  `${IMG}/voices/preset_voice_female.mp3`,
-  `${IMG}/voices/preset_voice_male.mp3`,
+  `${IMG}/voices/v04_yuanqi-shaonv_female.mp3`,
+  `${IMG}/voices/v03_cixing-dashu_male.mp3`,
 ]
 const AUDIO_COVER = `${IMG}/canvas/audio-placeholder.svg`
 function audioAsset(
@@ -167,7 +167,7 @@ export function createSeedWorld(): World {
     /* ══ 素材广场 · 官方成品货架 20 ══
        广场只陈列定稿成品（规则 14）：不带候选池、上架后不可编辑。 */
     // 角色 3
-    asset({ id: 'a_cyber_police', category: 'character', name: '赛博女警', scope: 'plaza', cover: `${IMG}/plaza/cyber_police.png`, fields: { gender: '女', age: '青年', style: '赛博' }, voice: { ...PRESET_VOICES[0] } }),
+    asset({ id: 'a_cyber_police', category: 'character', name: '赛博女警', scope: 'plaza', cover: `${IMG}/plaza/cyber_police.png`, fields: { gender: '女', age: '青年', style: '赛博' }, voice: { ...PRESET_VOICES[4] } }),
     asset({ id: 'a_swordsman', category: 'character', name: '东方剑客', scope: 'plaza', cover: `${IMG}/plaza/eastern_swordsman.png`, fields: { gender: '男', age: '青年', style: '国风' } }),
     asset({ id: 'a_mech_butler', category: 'character', name: '机械管家', scope: 'plaza', cover: `${IMG}/plaza/mech_butler.png`, fields: { style: '科幻' } }),
     // 角色造型 6
@@ -197,8 +197,8 @@ export function createSeedWorld(): World {
        跨层流转只带定稿 —— 所以结构上就不该有候选池，生产过程一律留在项目层。
        素模（10）全部归这一层；造型（6）是团队沉淀下来的成片。 */
     // 角色 · 素模 10
-    asset({ id: 'a_suwan', category: 'character', name: '苏晚', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team/suwan.png`, fields: { gender: '女', age: '青年', style: '国风' }, voice: { ...PRESET_VOICES[0] }, createdAt: 1_785_000_000_000 }),
-    asset({ id: 'a_oldk', category: 'character', name: '老K', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team/oldk.png`, fields: { gender: '男', age: '中年' }, voice: { ...PRESET_VOICES[1] }, createdAt: 1_784_960_000_000 }),
+    asset({ id: 'a_suwan', category: 'character', name: '苏晚', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team/suwan.png`, fields: { gender: '女', age: '青年', style: '国风' }, voice: { ...PRESET_VOICES[5] }, createdAt: 1_785_000_000_000 }),
+    asset({ id: 'a_oldk', category: 'character', name: '老K', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team/oldk.png`, fields: { gender: '男', age: '中年' }, voice: { ...PRESET_VOICES[2] }, createdAt: 1_784_960_000_000 }),
     asset({ id: 'a_urban_man', category: 'character', name: '都市男青年', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team/urban_man.png`, fields: { gender: '男', age: '青年', style: '写实' }, createdAt: 1_784_920_000_000 }),
     asset({ id: 'a_neon_dancer', category: 'character', name: '霓虹舞者', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team/neon_dancer.png`, fields: { gender: '女', age: '青年', style: '赛博' }, createdAt: 1_784_880_000_000 }),
     asset({ id: 'a_shangui', category: 'character', name: '山鬼', scope: 'team', scopeId: IDS.teamA, cover: `${IMG}/team/shangui.png`, fields: { style: '国风' }, createdAt: 1_784_840_000_000 }),
