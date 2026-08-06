@@ -14,8 +14,8 @@
  * 逻辑仍完全由 asset.scope + 当前账号权限决定，动作只调 store。
  * ─────────────────────────────────────────────────────────────────────── */
 
-import { useEffect, useState } from 'react'
-import type { Category, Voice, Scope } from '../data/types'
+import { useEffect, useRef, useState } from 'react'
+import type { Asset, AssetRef, AssetSnapshot, Category, Voice, Scope } from '../data/types'
 import { useStore, useCurrentUser, type ActionResult } from '../store/useStore'
 import { canDirectReuse, canFavorite, canReuseFromTeam, canRemovePlazaAsset, canDeleteLibraryAsset, canViewPrompt, canRegenerate, canContributeToPlaza, isAdmin } from '../services/permission'
 import { coverOf, resolveRefs, pendingRefs as pendingRefsOf, usableRefUrls } from '../services/assetService'
@@ -56,6 +56,29 @@ const RATIO_OPTS = ['3 : 4', '1 : 1', '9 : 16', '16 : 9']
 const COUNT_OPTS = [4, 1, 2, 6]
 const QUALITY_OPTS = ['2K', '1K', '4K']
 const MODEL_OPTS = ['phan nano Image 3', 'phan nano Image 2 Pro', 'Seedream 3.0']
+
+/* ═══ 未保存改动追踪（定义层 vs 素材层）══════════════════════════════════
+ * 详情页把一份资产上的字段分成两层，语义完全不同：
+ *   · 素材层 —— candidates（本次生成 / 上传 / 从库添加的图）。花星钻换来的产出物，
+ *     进来即落库、永远保留，不受「保存」管辖，退出也不提示。
+ *   · 定义层 —— 下面 snapshotOf 收窄的这几个字段（名称 / 提示词 / 定稿 / 参考图 / 音色），
+ *     回答「这份资产对外是什么」，会被画布节点引用、被同项目的人看到，需用户显式保存。
+ * 生成参数（比例 / 数量 / 质量 / 模型）是纯本地 UI 态、压根没进 store，不计入未保存改动。
+ *
+ * 「有没有未保存改动」不再靠一个布尔 dirty 猜，而是把当前定义层字段和进入详情时的
+ * 快照逐条 diff——哪几条不一样就列哪几条，逐项可还原（见 store.revertAssetFields）。 */
+function snapshotOf(a: Asset): AssetSnapshot {
+  return {
+    name: a.name,
+    prompt: a.prompt,
+    cover: a.cover ?? '',
+    references: a.references,
+    selfRefOff: a.selfRefOff,
+    voice: a.voice,
+  }
+}
+const refsEqual = (x?: AssetRef[], y?: AssetRef[]) => JSON.stringify(x ?? []) === JSON.stringify(y ?? [])
+const voiceEqual = (x?: Voice, y?: Voice) => JSON.stringify(x ?? null) === JSON.stringify(y ?? null)
 
 // 弹出的"目标选择"面板处于哪种模式
 type PickerMode = 'directReuse' | 'reuse' | 'favorite' | 'voice' | null
@@ -249,6 +272,7 @@ export function AssetDetail({
   const renameAsset = useStore((s) => s.renameAsset)
   const setVoice = useStore((s) => s.setVoice)
   const clearVoice = useStore((s) => s.clearVoice)
+  const revertAssetFields = useStore((s) => s.revertAssetFields)
 
   // 从 world 里取最新的这份资产（改名后能立即反映）
   const asset = world.assets.find((a) => a.id === assetId)
@@ -298,18 +322,27 @@ export function AssetDetail({
   const [useSelfRef, setUseSelfRef] = useState(asset?.selfRefOff !== true)
   // 生成软拦截二次确认（0812 §8.3）：有 pending 槽时弹一次「这次参考不到这 N 份」。
   const [confirmGen, setConfirmGen] = useState(false)
+  // 退出确认：关闭时若有未保存的定义层改动，弹一次「放弃修改 / 继续编辑」。
+  const [confirmClose, setConfirmClose] = useState(false)
+  // 最新的「请求关闭」逻辑放 ref 里——Esc 处理器闭包不随 hasUnsaved 变，直接读 ref 避免拿到旧值。
+  const requestCloseRef = useRef<() => void>(() => {})
   // 预览动作条「分享」下拉（对齐设计稿）：收纳「存入团队库 / 贡献到素材广场」两个单张流转。
   const [shareOpen, setShareOpen] = useState(false)
-  // 本次会话「有改动」软标志：定稿 / 参考 / 参数 / 生成 / 音色 / 改名等任一动作都点亮头部「未保存」，
-  // 点「保存」清零。切换资产重置。纯 UI 提示（各动作本身已即时写入 store）。
-  const [dirty, setDirty] = useState(false)
-  const markDirty = () => setDirty(true)
+  // 进入这份资产时的定义层快照（= 本次会话的「基线」）。改动明细 = 当前定义层 vs 这份快照。
+  // 用 ref 在渲染中按 assetId 同步捕获：切资产的那一帧就换好基线，不闪错误的改动数。
+  const baselineRef = useRef<{ id: string; snap: AssetSnapshot; imgs: number } | null>(null)
+  // 头部「未保存」气泡（悬停展开改动明细）是否打开。
+  const [dirtyOpen, setDirtyOpen] = useState(false)
+  // markDirty 保留为空实现：改动检测已改为「当前定义层 vs 基线快照」逐条 diff，
+  // 定义层动作本身即时写 store、diff 能查到；参数 / 素材层调它则被正确地无视。留着免动十几处调用点。
+  const markDirty = () => {}
 
   // Esc：先收子面板 / 改名，再关整扇弹窗
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      if (shareOpen) setShareOpen(false)
+      if (confirmClose) setConfirmClose(false)
+      else if (shareOpen) setShareOpen(false)
       else if (sendImg) setSendImg(null)
       else if (confirmGen) setConfirmGen(false)
       else if (addPicker) setAddPicker(null)
@@ -319,11 +352,11 @@ export function AssetDetail({
       else if (promptOpen) setPromptOpen(false)
       else if (picker) setPicker(null)
       else if (renaming) setRenaming(false)
-      else onClose?.()
+      else requestCloseRef.current()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [shareOpen, sendImg, confirmGen, addPicker, preview, promptExpand, refPicker, promptOpen, picker, renaming, onClose])
+  }, [confirmClose, shareOpen, sendImg, confirmGen, addPicker, preview, promptExpand, refPicker, promptOpen, picker, renaming])
 
   // 「分享」下拉：点面板外任意处收起（对齐设计稿的 document click 关闭）。
   useEffect(() => {
@@ -334,19 +367,17 @@ export function AssetDetail({
     return () => { window.clearTimeout(t); document.removeEventListener('click', onDown) }
   }, [shareOpen])
 
-  // 切换到另一份资产时，清掉三栏面板的本地态（生成中 / 中栏选中 / 提示词草稿）。
+  // 切换到另一份资产时，清掉三栏面板的本地态（生成中 / 中栏选中 / 子面板）。
+  // 注意：草稿（提示词 / 名称 / 自参考）+ 基线快照改由下方渲染中同步捕获，
+  // 免得切资产那一帧「新资产 vs 旧基线」闪一下假的改动数。
   useEffect(() => {
     setGenerating(null)
     setCenterKeptId(null)
     setRefPicker(null)
     setAddPicker(null)
     setShareOpen(false)
-    setDirty(false)
-    setUseSelfRef(asset?.selfRefOff !== true)
-    setPromptDraft(asset?.prompt ?? '')
-    setPromptSaved(false)
+    setDirtyOpen(false)
     setPromptExpand(false)
-    setNameField(asset?.name ?? '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assetId])
 
@@ -365,6 +396,19 @@ export function AssetDetail({
   }, [result])
 
   if (!asset) return null
+
+  // 进入 / 切到一份资产时，同步捕获它的定义层基线快照 + 当时的图片张数，并把草稿对齐到它。
+  // 在渲染里做（而非 effect）：切资产的这一帧基线和草稿一起换好，diff 不会闪。
+  // setState-in-render 用 id 守卫，只在真正换资产时触发一次额外渲染（React 官方「派生上一次渲染」写法）。
+  if (baselineRef.current?.id !== asset.id) {
+    baselineRef.current = { id: asset.id, snap: snapshotOf(asset), imgs: asset.candidates?.length ?? 0 }
+    setPromptDraft(asset.prompt ?? '')
+    setNameField(asset.name)
+    setUseSelfRef(asset.selfRefOff !== true)
+    setPromptSaved(false)
+    setDirtyOpen(false)
+  }
+  const baseline = baselineRef.current.snap
 
   // 当前账号能作为"目标"的项目
   const projectsForDirect = world.projects.filter((p) => canDirectReuse(user, p))
@@ -397,8 +441,6 @@ export function AssetDetail({
   const canDeleteLib = canDeleteLibraryAsset(user, asset)
   // 「其他」留存物中栏删除入口：广场（下架-删投稿）/ 团队·项目库有图可删。
   const showCoverTrash = isEmpty || canRemovePlaza || (canDeleteLib && !!coverImg)
-
-  const master = asset.masterId ? world.assets.find((a) => a.id === asset.masterId) : undefined
 
   // 执行一个动作后：记录结果、收起选择面板
   function done(r: ActionResult) {
@@ -473,14 +515,51 @@ export function AssetDetail({
   const selfRef = asset.cover && useSelfRef ? { url: baseUrl(asset.cover), label: '当前定稿' } : null
 
   // 提示词是否被改动（用于「保存」时决定要不要落一版提示词）。
-  const promptDirty = promptDraft !== (asset.prompt ?? '')
-  // 头部「未保存」：提示词改了、或本次会话做过任一动作（dirty）都算。
-  const hasUnsaved = dirty || promptDirty
-  /** 点「保存」：提示词若有改动落一版，清掉「未保存」并闪现「已保存」。 */
+  // 提示词是定义层里唯一「不即时写 store」的字段——只在保存 / 生成时才落库，所以拿草稿跟基线比。
+  const promptDirty = promptDraft !== (baseline.prompt ?? '')
+
+  /* ── 改动明细：当前定义层逐条 vs 基线，只列真变了的那几条，每条能单独还原。──
+   * 单条还原借力 store.revertAssetFields：传一份「当前快照、但这一条换回基线值」的快照，
+   * 于是只有这一条被改回去，其余定义层字段和素材层（candidates）纹丝不动。 */
+  type DirtyItem = { key: string; label: string; revert: () => void }
+  // 传「当前快照 + 只把这一条换回基线」。不动 prompt（它没即时落库，靠草稿），
+  // 免得还原音色 / 参考时把没保存的提示词草稿顺手写进库。
+  const revertOnly = (patch: Partial<AssetSnapshot>) =>
+    setResult(revertAssetFields(asset!.id, { ...snapshotOf(asset!), ...patch }))
+  const changes: DirtyItem[] = []
+  if (promptDirty) changes.push({ key: 'prompt', label: '提示词改动', revert: () => { setPromptDraft(baseline.prompt ?? ''); revertOnly({ prompt: baseline.prompt }) } })
+  if (asset.name !== baseline.name) changes.push({ key: 'name', label: '名称改动', revert: () => { setNameField(baseline.name); revertOnly({ name: baseline.name }) } })
+  if (!refsEqual(asset.references, baseline.references) || (asset.selfRefOff ?? false) !== (baseline.selfRefOff ?? false))
+    changes.push({ key: 'refs', label: '参考图改动', revert: () => { setUseSelfRef(baseline.selfRefOff !== true); revertOnly({ references: baseline.references, selfRefOff: baseline.selfRefOff }) } })
+  // 定稿：空壳进来（基线 cover 为空）时，第一张定稿是本次生成顺带确立的，跟素材层绑在一起，不算「改了定稿」。
+  if (baseline.cover && baseUrl(asset.cover ?? '') !== baseUrl(baseline.cover))
+    changes.push({ key: 'cover', label: '定稿改动', revert: () => revertOnly({ cover: baseline.cover }) })
+  if (!voiceEqual(asset.voice, baseline.voice)) changes.push({ key: 'voice', label: '音色改动', revert: () => revertOnly({ voice: baseline.voice }) })
+
+  const hasUnsaved = changes.length > 0
+  // 本次会话新入库的图片张数（素材层）：只用来在气泡里安抚「这些图不会丢」。
+  const newImgCount = Math.max(0, (asset.candidates?.length ?? 0) - baselineRef.current.imgs)
+
+  /** 点「保存」：接受本次全部定义层改动——提示词落一版、把当前状态定为新基线，并闪现「已保存」。 */
   function commitSave() {
     if (promptDirty) setPrompt(asset!.id, promptDraft)
-    setDirty(false)
+    baselineRef.current = { id: asset!.id, snap: { ...snapshotOf(asset!), prompt: promptDraft }, imgs: asset!.candidates?.length ?? 0 }
+    setDirtyOpen(false)
     setPromptSaved(true)
+  }
+
+  /** 请求关闭：生成面板下有未保存的定义层改动才弹确认，否则直接关。素材层的图不拦（它们不会丢）。
+   * 只在 hasGenPanel 才拦——「保存」按钮只在这个模式出；只读资产的改名等本就即时落库，没有基线可回退。 */
+  function requestClose() {
+    if (hasGenPanel && hasUnsaved) { setDirtyOpen(false); setConfirmClose(true); return }
+    onClose?.()
+  }
+  requestCloseRef.current = requestClose
+  /** 退出确认里点「放弃修改」：把定义层整体还原回基线（candidates 不动），然后关闭。 */
+  function discardAndClose() {
+    revertAssetFields(asset!.id, baseline)
+    setConfirmClose(false)
+    onClose?.()
   }
 
   /**
@@ -505,8 +584,10 @@ export function AssetDetail({
       setResult({ ok: false, message: '先写提示词再生成' })
       return
     }
+    // 点生成时提示词随本批图一起落库（配方跟着图走），所以它已经不会丢——
+    // 把基线 prompt 同步推到当前草稿，生成完就不再把这段提示词算作「未保存改动」。
     if (promptDraft !== (asset!.prompt ?? '')) setPrompt(asset!.id, promptDraft)
-    markDirty()
+    if (baselineRef.current) baselineRef.current.snap = { ...baselineRef.current.snap, prompt: promptDraft }
     setGenerating(genCount)
     const src = genSourceOf(asset!, usableRefUrls(world, asset!)[0])
     const urls = Array.from({ length: genCount }, (_, i) => `${src}?g=${Date.now()}${i}`)
@@ -655,6 +736,32 @@ export function AssetDetail({
             >
               确认生成
             </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  /**
+   * 退出确认（对齐 mockup「离开会丢弃」）：只在有未保存的定义层改动时出。
+   * 逐条列出会被丢弃的定义层改动，并点明素材层的图不受影响——用户要的是知道自己在丢什么。
+   */
+  function renderCloseConfirm() {
+    if (!confirmClose) return null
+    return (
+      <div className={styles.msubroot}>
+        <div className={styles.sscrim} onClick={() => setConfirmClose(false)} />
+        <div className={styles.confirmCard}>
+          <div className={`${styles.confirmIcon} ${styles.confirmIconAccent}`}><RegenIcon /></div>
+          <h4 className={styles.confirmTitle}>放弃未保存的改动？</h4>
+          <p className={styles.confirmBody}>
+            这份资产有 <b>{changes.length} 处</b>改动还没保存，直接离开会把它们还原。
+            {newImgCount > 0 && <>已生成的 {newImgCount} 张图片已入库、不受影响。</>}
+          </p>
+          <p className={styles.confirmList}>将丢弃：{changes.map((c) => c.label).join(' · ')}</p>
+          <div className={styles.confirmActions}>
+            <button className={styles.btnGhost} onClick={() => setConfirmClose(false)}>继续编辑</button>
+            <button className={`${styles.btn} ${styles.btnDanger}`} onClick={discardAndClose}>放弃修改</button>
           </div>
         </div>
       </div>
@@ -1183,7 +1290,7 @@ export function AssetDetail({
 
   return (
     <div className={styles.mroot}>
-      <div className={styles.mscrim} onClick={onClose} />
+      <div className={styles.mscrim} onClick={requestClose} />
       <div className={`${styles.modal} ${wide ? styles.modal3 : ''}`}>
         {/* ── 头部：标题 + 改名 + chips + 流转动作 + 关闭 ── */}
         <div className={styles.mhead}>
@@ -1210,10 +1317,6 @@ export function AssetDetail({
                     )}
                     {CATEGORY_LABEL[asset.category]}
                   </span>
-                  {/* 广场是源头，不展示"我从哪来"（血缘 / 参考自）——规则 14。 */}
-                  {asset.scope !== 'plaza' && asset.masterId && (
-                    <span className={`${styles.chip} ${styles.chipCopy}`}>副本 · 源自「{master?.name ?? '母版'}」</span>
-                  )}
                 </div>
               </>
             )}
@@ -1231,21 +1334,55 @@ export function AssetDetail({
               </>
             ) : (
               <>
-                {/* 提示词「未保存改动 + 保存」搬到头部（对齐 mockup）：脏了才出，存完闪一下「已保存」。 */}
+                {/* 未保存改动（对齐 mockup）：呼吸点 +「N 处改动未保存」，悬停展开明细可逐项还原；
+                    存完闪一下「已保存」。素材层的图不进这里——它们不会丢，气泡底部单独安抚一句。 */}
                 {hasGenPanel && (promptSaved ? (
                   <span className={styles.headSaved}>✓ 已保存</span>
                 ) : hasUnsaved ? (
-                  <>
-                    <span className={styles.headDirty}><i className={styles.headDot} />有未保存改动</span>
+                  <div
+                    className={styles.dirtyWrap}
+                    onMouseEnter={() => setDirtyOpen(true)}
+                    onMouseLeave={() => setDirtyOpen(false)}
+                  >
+                    <span className={styles.headDirtyB}>
+                      {changes.length} 处改动未保存
+                    </span>
                     <span className={styles.headSaveWrap}>
                       {/* 淡淡的光晕：一圈脉动的光环绕在「保存」外侧（对齐 mockup 的 ringPulse）。 */}
                       <i className={styles.headSaveRing} aria-hidden />
                       <button className={styles.headSaveBtn} onClick={commitSave}>保存</button>
                     </span>
-                  </>
+                    {dirtyOpen && (
+                      <div className={styles.dirtyPop}>
+                        <div className={styles.dirtyPopHd}>
+                          <span>未保存的改动</span>
+                          <span className={styles.dirtyPopSub}>离开会丢弃</span>
+                        </div>
+                        {changes.map((c) => (
+                          <div key={c.key} className={styles.dirtyItem}>
+                            <i className={styles.dirtyItemDot} />
+                            <span className={styles.dirtyItemT}>{c.label}</span>
+                            <button className={styles.dirtyRevert} onClick={c.revert}>还原</button>
+                          </div>
+                        ))}
+                        {newImgCount > 0 && (
+                          <>
+                            <div className={styles.dirtyDiv} />
+                            <div className={styles.dirtyKept}>
+                              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                                <circle cx="8" cy="8" r="6.2" />
+                                <path d="M5.2 8.3 7.1 10.2l3.7-4" />
+                              </svg>
+                              已生成的 {newImgCount} 张图片已入库，随时可取
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 ) : null)}
                 {headActions()}
-                <button className={styles.close} title="关闭" onClick={onClose}>✕</button>
+                <button className={styles.close} title="关闭" onClick={requestClose}>✕</button>
               </>
             )}
           </div>
@@ -1291,14 +1428,16 @@ export function AssetDetail({
               <div className={`${styles.gfield} ${styles.gfieldGrow}`}>
                 <div className={styles.flabel}>
                   提示词 <span className={styles.req}>*</span>
-                  <button className={styles.expandLink} onClick={() => setPromptExpand(true)} title="展开编辑">⤢ 展开</button>
                 </div>
-                <textarea
-                  className={styles.genPrompt}
-                  value={promptDraft}
-                  onChange={(e) => setPromptDraft(e.target.value)}
-                  placeholder="描述你想要的画面…"
-                />
+                <div className={styles.promptWrap}>
+                  <textarea
+                    className={styles.genPrompt}
+                    value={promptDraft}
+                    onChange={(e) => setPromptDraft(e.target.value)}
+                    placeholder="描述你想要的画面…"
+                  />
+                  <button className={styles.expandCorner} onClick={() => setPromptExpand(true)} title="展开编辑">⤢</button>
+                </div>
               </div>
 
               <div className={styles.gfield}>
@@ -1358,10 +1497,6 @@ export function AssetDetail({
                     <span className={styles.refPlus}>＋</span>
                     <span>添加参考图</span>
                   </button>
-                  {/* 关掉自参考后，给一个恢复入口 */}
-                  {asset.cover && !useSelfRef && (
-                    <button className={styles.refRestore} onClick={() => applySelfRef(true)}>恢复当前定稿</button>
-                  )}
                 </div>
               </div>
 
@@ -1640,6 +1775,7 @@ export function AssetDetail({
         {renderPicker()}
         {renderPromptPanel()}
         {renderDeleteConfirm()}
+        {renderCloseConfirm()}
         {renderGenConfirm()}
         {renderRefPicker()}
         {renderAddPicker()}

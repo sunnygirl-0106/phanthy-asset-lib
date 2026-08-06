@@ -68,7 +68,6 @@
   border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 20px;
   padding: 2px 10px; background: #1b1f27;
 }
-.chipCopy { color: var(--accent); border-color: rgba(var(--accent-rgb), 0.4); }
 /* 类目 tag（严格对齐设计稿「角色」青绿 tag）：图标 + 文字，7px 圆角、accent 描边 + 淡填充。 */
 .chipCat {
   display: inline-flex; align-items: center; gap: 5px;
@@ -87,8 +86,38 @@
 .mheadActions { display: flex; align-items: center; gap: 9px; flex: none; padding-top: 2px; flex-wrap: wrap; justify-content: flex-end; }
 
 /* 头部「未保存改动 + 保存」簇（对齐 mockup）：脏了才出，存完闪一下「已保存」再淡出。 */
-.headDirty { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: rgba(255, 255, 255, 0.55); white-space: nowrap; }
-.headDot { width: 6px; height: 6px; border-radius: 50%; background: #f0b429; flex: none; animation: dotPulse 1.9s ease-in-out infinite; }
+.headDirty { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: rgba(255, 255, 255, 0.55); white-space: nowrap; cursor: default; }
+.headDot { width: 7px; height: 7px; border-radius: 50%; background: #f0b429; flex: none; animation: dotPulse 1.9s ease-in-out infinite; }
+.headDirtyN { color: #f0c368; font-weight: 600; }
+/* B 版：纯文字，无呼吸点、无下划线，悬停提亮。 */
+.headDirtyB {
+  font-size: 12.5px; color: #a89a74; white-space: nowrap; cursor: default; transition: color 0.15s ease;
+}
+.dirtyWrap:hover .headDirtyB { color: #f0c368; }
+
+/* ── 未保存改动：悬停展开的改动明细气泡（对齐 mockup）── */
+.dirtyWrap { position: relative; display: inline-flex; align-items: center; gap: 14px; }
+.dirtyPop {
+  position: absolute; top: 100%; right: 0; margin-top: 10px; z-index: 20;
+  width: 268px; padding: 8px; border-radius: 14px;
+  background: #1e2124; border: 1px solid #33363c; box-shadow: 0 18px 46px rgba(0, 0, 0, 0.6);
+  animation: dirtyPopIn 0.16s ease-out;
+}
+/* 顶部留一条透明缓冲带，鼠标从文字挪到气泡不会因缝隙触发 mouseleave 把它收掉。 */
+.dirtyPop::before { content: ''; position: absolute; bottom: 100%; left: 0; right: 0; height: 12px; }
+.dirtyPopHd { display: flex; align-items: baseline; justify-content: space-between; padding: 6px 10px 8px; }
+.dirtyPopHd > span:first-child { color: #f2f2f4; font-size: 12.5px; font-weight: 600; }
+.dirtyPopSub { color: #7c7c85; font-size: 11px; }
+.dirtyItem { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 10px; }
+.dirtyItem:hover { background: #26292d; }
+.dirtyItemDot { width: 6px; height: 6px; border-radius: 50%; background: #f0b429; flex: none; }
+.dirtyItemT { flex: 1; color: #e4e4e8; font-size: 12.5px; }
+.dirtyRevert { border: none; background: none; color: #8fdcd2; font-size: 11.5px; cursor: pointer; padding: 2px 4px; font-family: inherit; }
+.dirtyRevert:hover { color: #b6ebe4; }
+.dirtyDiv { height: 1px; margin: 6px 10px; background: #2b2e32; }
+.dirtyKept { display: flex; align-items: center; gap: 8px; padding: 2px 10px 8px; color: #8b8b93; font-size: 11.5px; }
+.dirtyKept svg { color: #8fdcd2; flex: none; }
+@keyframes dirtyPopIn { from { opacity: 0; transform: translateY(6px) scale(0.98) } to { opacity: 1; transform: none } }
 /* 「保存」外侧一圈淡淡光晕：脉动光环（对齐 mockup ringPulse）。 */
 .headSaveWrap { position: relative; display: inline-flex; }
 .headSaveRing {
@@ -562,14 +591,18 @@
 .flabel { font-size: 13.5px; font-weight: 500; color: rgba(255, 255, 255, 0.8); display: flex; align-items: center; gap: 5px; }
 .req { color: #ff6b6b; font-size: 13px; }
 
-/* 提示词标签行右端「⤢ 展开」：次级胶囊按钮（对齐设计稿 padding:6 14 · radius:999）。 */
-.expandLink {
-  margin-left: auto; padding: 6px 14px; border-radius: 999px; cursor: pointer;
-  font: inherit; font-size: 12.5px; font-weight: 500; line-height: 1;
-  background: transparent; border: 1px solid rgba(255, 255, 255, 0.16);
-  color: rgba(255, 255, 255, 0.8);
+/* 提示词输入框 + 右下角展开角标：wrapper 接手撑满高度，角标绝对定位坐在框右下角。 */
+.promptWrap { position: relative; flex: 1; min-height: 250px; display: flex; }
+/* 「⤢ 展开」收成框内右下角常驻玻璃角标（无文字、不占标签行）。 */
+.expandCorner {
+  position: absolute; right: 12px; bottom: 12px; z-index: 2;
+  width: 28px; height: 28px; border-radius: 8px; padding: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; line-height: 1; font-size: 15px;
+  background: rgba(20, 22, 28, 0.55); border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.7); backdrop-filter: blur(6px);
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
 }
-.expandLink:hover { border-color: rgba(255, 255, 255, 0.4); color: #f2f2f4; }
+.expandCorner:hover { background: rgba(20, 22, 28, 0.82); color: #f2f2f4; border-color: rgba(255, 255, 255, 0.34); }
 .fhint { font-weight: 400; color: rgba(255, 255, 255, 0.38); font-size: 11px; }
 
 /* 资产名称行（对齐 mockup）：一个 well 里装「名字输入（左，撑满）＋ 内联音色下拉（右）」。 */
@@ -614,10 +647,13 @@
 .genPrompt::placeholder { color: rgba(255, 255, 255, 0.3); }
 
 /* 提示词文本域滑条（提示词很长上下滚动时）：去掉轨道"框框"、极细极淡，尽量弱化存在感。 */
-.genPrompt, .promptEdit { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.14) transparent; }
+/* 默认整条透明（thumb 也透明），hover / focus 到框上才浮出滑块。 */
+.genPrompt, .promptEdit { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+.genPrompt:hover, .genPrompt:focus, .promptEdit:hover, .promptEdit:focus { scrollbar-color: rgba(255, 255, 255, 0.14) transparent; }
 .genPrompt::-webkit-scrollbar, .promptEdit::-webkit-scrollbar { width: 6px; }
 .genPrompt::-webkit-scrollbar-track, .promptEdit::-webkit-scrollbar-track { background: transparent; }
-.genPrompt::-webkit-scrollbar-thumb, .promptEdit::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.13); border-radius: 6px; }
+.genPrompt::-webkit-scrollbar-thumb, .promptEdit::-webkit-scrollbar-thumb { background: transparent; border-radius: 6px; }
+.genPrompt:hover::-webkit-scrollbar-thumb, .genPrompt:focus::-webkit-scrollbar-thumb, .promptEdit:hover::-webkit-scrollbar-thumb, .promptEdit:focus::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.13); }
 .genPrompt::-webkit-scrollbar-thumb:hover, .promptEdit::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.22); }
 
 /* 参考图排（0805 · 改动四 4.3）：120px 缩略图不换行，横向滚动查看；「＋ 上传图片」永远排最后。 */
@@ -625,12 +661,14 @@
   display: flex; gap: 12px; flex-wrap: nowrap; overflow-x: auto;
   padding-bottom: 5px; min-height: 100px; scroll-snap-type: x proximity;
   scrollbar-width: thin;                                   /* Firefox：窄 */
-  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+  scrollbar-color: transparent transparent;                /* 默认整条透明，hover 才现 */
 }
-/* 极细极淡的滑条，只做"还能往右滑"的示意，不抢缩略图注意力。 */
+.refRow:hover { scrollbar-color: rgba(255, 255, 255, 0.12) transparent; }
+/* 极细极淡的滑条，只做"还能往右滑"的示意，不抢缩略图注意力；平时隐藏，hover 到这排才浮出。 */
 .refRow::-webkit-scrollbar { height: 4px; }
 .refRow::-webkit-scrollbar-track { background: transparent; }
-.refRow::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
+.refRow::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
+.refRow:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); }
 .refRow::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
 .refItem { display: flex; flex-direction: column; align-items: center; gap: 5px; flex: none; scroll-snap-align: start; }
 .refSlot { position: relative; width: 92px; height: 92px; border-radius: 12px; overflow: hidden; flex: none; border: 1px solid var(--line-soft); background: #000; }
@@ -652,9 +690,10 @@
 .refSlot:hover .refZoom { display: flex; }
 .refRemove {
   position: absolute; top: 5px; right: 5px; width: 24px; height: 24px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center; z-index: 2;
+  display: none; align-items: center; justify-content: center; z-index: 2;
   background: rgba(0, 0, 0, 0.6); color: #fff; border: none; font-size: 13px; cursor: pointer; backdrop-filter: blur(3px);
 }
+.refSlot:hover .refRemove { display: flex; }
 .refRemove:hover { background: rgba(0, 0, 0, 0.85); }
 .refAdd {
   width: 92px; height: 92px; border-radius: 12px; flex: none; scroll-snap-align: start;
@@ -975,12 +1014,6 @@
 .addText { font-size: 12px; }
 
 /* 预览动作条：当前定稿的不可点状态标（0810，与实体按钮区分）。 */
-/* 参考图区：关掉自参考后的「恢复当前定稿」小链接。 */
-.refRestore {
-  align-self: center; background: none; border: none; color: var(--accent); font-size: 11.5px; cursor: pointer;
-  font-family: inherit; padding: 4px 6px; text-decoration: underline;
-}
-
 /* 窄屏兜底：三栏依次叠成一栏 */
 @media (max-width: 900px) {
   .modal3 { width: min(560px, 96vw); }

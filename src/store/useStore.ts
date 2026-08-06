@@ -19,7 +19,7 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { World, User, Asset, AssetRef, AssetStatus, Canvas, Category, FlatImagePayload, Notification, NotificationKind, Voice } from '../data/types'
+import type { World, User, Asset, AssetRef, AssetSnapshot, AssetStatus, Canvas, Category, FlatImagePayload, Notification, NotificationKind, Voice } from '../data/types'
 import { createSeedWorld, IDS, PROMPT_BY_CATEGORY } from '../data/seed'
 import { DEMO_ASSETS, DEMO_IDS, DEMO_LOOK_IDS } from '../data/demoProject'
 import {
@@ -187,6 +187,19 @@ interface StoreState {
    * 和加/删普通参考图一样即时落库——退出重进即记住，不再复原。
    */
   setSelfRef: (assetId: string, on: boolean) => ActionResult
+  /**
+   * 【0814 · 退出确认】把「定义层」还原到进入详情时的快照——
+   * 用户在退出确认弹窗里点「放弃修改」时调用。
+   *
+   * 两条不变量，改这个函数前先读一遍：
+   *   ① **绝不碰 candidates**。本次生成 / 上传的图属于素材层，是花了星钻换来的
+   *      产出物，任何情况下都保留。退出确认里那句「已生成的 N 张图片会保留」
+   *      就是靠这一条兑现的，说了不做比不说更糟。
+   *   ② **定稿只在快照里确实有值时才还原**。空壳资产被本次生成自动定了稿，
+   *      此时快照里的 cover 是空串；照抄回去会把「有图必有定稿」的状态机不变量
+   *      打破（池子里有图、cover 却是空的）。这种情况保持现状。
+   */
+  revertAssetFields: (assetId: string, snapshot: AssetSnapshot) => ActionResult
   /**
    * 删一个参考槽（0812，原 removeReferenceImage）。按下标从 references 移除。
    * 两分法的直接收益：移除后不再需要同步第二个平行数组。
@@ -847,6 +860,40 @@ export const useStore = create<StoreState>()(
           },
         }))
         return ok(on ? '已恢复以当前定稿为参考' : '本资产将不再以当前定稿为参考')
+      },
+
+      revertAssetFields: (assetId, snap) => {
+        const { world, currentUserId } = get()
+        const user = findUser(world, currentUserId)
+        const asset = findAsset(world, assetId)
+        if (!user || !asset) return fail('数据不存在')
+        // 这里**故意不做权限校验**：还原的目标状态是用户进入详情那一刻就已经存在的状态，
+        // 每一笔正向改动本身都已经过各自 action 的权限门（renameAsset / setVoice / …）。
+        // 若在这里再挡一道 canRegenerate，就会出现「能改名、却退不回去」的死角——
+        // 团队库资产可以改名但不能重新生成，正好会踩中。
+        // 不变量 ②：空壳进来、本次生成自动定了稿 → 快照的空 cover 不能抄回去，
+        // 否则池子里有图而 cover 为空，直接违反 AssetStatus 的状态机不变量。
+        const keepCover = !snap.cover && (asset.candidates?.length ?? 0) > 0
+        set((s) => ({
+          world: {
+            ...s.world,
+            assets: s.world.assets.map((a) =>
+              a.id === assetId
+                ? {
+                    ...a,
+                    // 不变量 ①：candidates 不出现在这里，素材层永远保留。
+                    name: snap.name,
+                    prompt: snap.prompt,
+                    cover: keepCover ? a.cover : snap.cover,
+                    references: snap.references,
+                    selfRefOff: snap.selfRefOff,
+                    voice: snap.voice,
+                  }
+                : a,
+            ),
+          },
+        }))
+        return ok('已放弃未保存的修改')
       },
 
       removeRef: (assetId, index) => {
