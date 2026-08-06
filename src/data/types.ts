@@ -302,6 +302,13 @@ export interface Asset {
    */
   referencedFrom?: string
 
+  /**
+   * 【0813】关掉「当前定稿作为参考图」的第一槽——持久化开关。
+   * 默认不存字段 = 开启（生成时以当前定稿为底）；用户在详情里 ✕ 掉第一槽存 true。
+   * 原来这只是详情组件的本地态、退出重进就复原，与「保存」语义冲突；改为落到资产上，重开即记住。
+   */
+  selfRefOff?: boolean
+
   fields: AssetFields
   tags: string[]        // 本地标签：改了不断链
   voice?: Voice         // 角色音色：1 个；通常随角色走，广场直接复用时可取消；仅角色有

@@ -57,6 +57,28 @@ const CREATE_PLACEHOLDER: Partial<Record<Category, string>> = {
   prop: '输入道具名称，如：折叠伞',
 }
 
+/** 批量生成图标（闪光 / 魔法棒——「一键出图」语义）。 */
+function BatchGenIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3Z" />
+      <path d="M18.5 14.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8Z" />
+    </svg>
+  )
+}
+
+/** 批量删除图标（垃圾桶）。 */
+function BatchTrashIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M3 6h18" />
+      <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6M14 11v6" />
+    </svg>
+  )
+}
+
 export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
   const world = useStore((s) => s.world)
   const renameAsset = useStore((s) => s.renameAsset)
@@ -72,7 +94,7 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
   const [category, setCategory] = useState<Category>('character')
   const [query, setQuery] = useState('')
   const [sortDesc, setSortDesc] = useState(true) // 时间倒序：默认最新在前
-  const [batch, setBatch] = useState(false) // 批量删除模式（勾选卡片）
+  const [selecting, setSelecting] = useState(false) // 选择态（悬停勾选框 + 顶部选择条）
   const [batchMenu, setBatchMenu] = useState(false) // 「批量操作」下拉：批量生成 / 批量删除
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [confirmDelete, setConfirmDelete] = useState(false) // 批量删除二次确认弹窗
@@ -153,7 +175,9 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
       })
   }, [projectAssets, category, query, sortDesc])
 
+  /** 勾选一张卡：进入选择态并翻转该卡的选中。 */
   function toggleSelect(id: string) {
+    setSelecting(true)
     setSelected((prev) => {
       const next = new Set(prev)
       next.has(id) ? next.delete(id) : next.add(id)
@@ -161,8 +185,23 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
     })
   }
 
-  function exitBatch() {
-    setBatch(false)
+  // 当前网格（visible）里的全部 id——「全选」按它算。
+  const visibleIds = useMemo(() => visible.map((a) => a.id), [visible])
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selected.has(id))
+
+  /** 全选 / 取消全选：对当前类目可见的这批卡整体翻转。 */
+  function toggleSelectAll() {
+    setSelecting(true)
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (visibleIds.every((id) => next.has(id))) visibleIds.forEach((id) => next.delete(id))
+      else visibleIds.forEach((id) => next.add(id))
+      return next
+    })
+  }
+
+  function exitSelect() {
+    setSelecting(false)
     setSelected(new Set())
   }
 
@@ -180,7 +219,7 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
     }
     setConfirmDelete(false)
     showToast(done > 0 ? `已删除 ${done} 项` : '没有可删除的资产')
-    exitBatch()
+    exitSelect()
   }
 
   /** 批量操作 · 批量生成：喂全量生产类资产 + 当前 Tab 作为初始作用域，弹窗内可一键扩到全部。 */
@@ -218,21 +257,24 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
   /** 卡片网格（支持批量勾选）——普通类目 &「其他」的图片/视频/文本子分区共用。 */
   function renderGrid(items: Asset[]) {
     return (
-      <div className={styles.grid}>
+      <div className={`${styles.grid} ${selecting ? styles.gridSelecting : ''}`}>
         {items.map((a) => (
           <div
             key={a.id}
-            className={`${styles.cell} ${batch && selected.has(a.id) ? styles.cellSelected : ''}`}
+            className={`${styles.cell} ${selected.has(a.id) ? styles.cellSelected : ''}`}
           >
-            <AssetCard
-              asset={a}
-              onClick={batch ? () => toggleSelect(a.id) : () => openAsset(a)}
-            />
-            {batch && (
-              <span className={`${styles.check} ${selected.has(a.id) ? styles.checkOn : ''}`}>
-                {selected.has(a.id) ? '✓' : ''}
-              </span>
-            )}
+            {/* 卡片主体点击照常开详情——不再模式互斥；选择只走左上角勾选框。 */}
+            <AssetCard asset={a} onClick={() => openAsset(a)} />
+            {/* 勾选框：hover 浮出、选择态常驻；点它翻转选中并进入选择态（阻止冒泡不触发开详情）。 */}
+            <button
+              type="button"
+              className={`${styles.check} ${selected.has(a.id) ? styles.checkOn : ''}`}
+              title={selected.has(a.id) ? '取消选择' : '选择'}
+              aria-pressed={selected.has(a.id)}
+              onClick={(e) => { e.stopPropagation(); toggleSelect(a.id) }}
+            >
+              {selected.has(a.id) ? '✓' : ''}
+            </button>
           </div>
         ))}
       </div>
@@ -267,27 +309,14 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
         </div>
 
         <div className={styles.tools}>
-          {/* 批量删除模式：勾选卡片后在这里确认删除（批量生成不走勾选，由弹窗内选） */}
-          {batch && (
-            <>
-              <span className={styles.batchStatus}>
-                已选 {selected.size} 项
-                <button className={styles.batchCancel} onClick={exitBatch}>取消</button>
-              </span>
-              <button className={styles.btnDanger} disabled={selected.size === 0} onClick={() => setConfirmDelete(true)}>
-                删除选中（{selected.size}）
-              </button>
-            </>
-          )}
-
-          {CREATABLE.includes(category) && !batch && (
+          {CREATABLE.includes(category) && !selecting && (
             <button className={`${styles.btn} ${styles.btnAccent}`} onClick={() => { setNewName(''); setCreateErr(null); setCreating(true) }}>
               ＋ 新增{CAT_LABEL[category]}
             </button>
           )}
 
-          {/* 批量操作（§6）：点开后二选一——批量生成（走弹窗、在里面挑资产）/ 批量删除（勾选卡片）。 */}
-          {!batch && (
+          {/* 批量操作（§6）：点开后二选一——批量生成（走弹窗、在里面挑资产）/ 批量删除（进入选择态）。 */}
+          {!selecting && (
             <div className={styles.batchWrap}>
               <button
                 className={`${styles.btn} ${batchMenu ? styles.btnOn : ''}`}
@@ -306,19 +335,15 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
                       disabled={allProducible.length === 0}
                       onClick={() => { setBatchMenu(false); openBatchModal() }}
                     >
+                      <span className={styles.batchMenuIcon}><BatchGenIcon /></span>
                       <span>批量生成</span>
-                      <span className={styles.batchMenuHint}>
-                        {PRODUCTION_CATS.includes(category)
-                          ? `当前：${CAT_LABEL[category]}（${counts[category]}）· 可在弹窗内扩到全部`
-                          : `全部生产类资产（${allProducible.length}）`}
-                      </span>
                     </button>
                     <button
                       className={styles.batchMenuItem}
-                      onClick={() => { setBatchMenu(false); setBatch(true) }}
+                      onClick={() => { setBatchMenu(false); setSelecting(true) }}
                     >
+                      <span className={styles.batchMenuIcon}><BatchTrashIcon /></span>
                       <span>批量删除</span>
-                      <span className={styles.batchMenuHint}>勾选卡片后删除</span>
                     </button>
                   </div>
                 </>
@@ -343,6 +368,33 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
           </div>
         </div>
       </header>
+
+      {/* ── 选择态顶部条（Option A）：全选 · 已选 N · 删除 · 完成 ── */}
+      {selecting && (
+        <div className={styles.selectBar}>
+          <button
+            type="button"
+            className={styles.selectAll}
+            onClick={toggleSelectAll}
+            aria-pressed={allVisibleSelected}
+          >
+            <span className={`${styles.selectAllBox} ${allVisibleSelected ? styles.selectAllBoxOn : ''}`}>
+              {allVisibleSelected ? '✓' : ''}
+            </span>
+            {allVisibleSelected ? '取消全选' : '全选'}
+          </button>
+          <span className={styles.selectCount}>已选 {selected.size} 项</span>
+          <span className={styles.selectSpacer} />
+          <button
+            className={styles.btnDanger}
+            disabled={selected.size === 0}
+            onClick={() => setConfirmDelete(true)}
+          >
+            删除选中（{selected.size}）
+          </button>
+          <button type="button" className={styles.selectDone} onClick={exitSelect}>完成</button>
+        </div>
+      )}
 
       {/* ── 类目 Tab（独立一行） ── */}
       <nav className={styles.tabs}>
@@ -428,7 +480,7 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
       {confirmDelete && (
         <div className={styles.msubroot}>
           <div className={styles.sscrim} onClick={() => setConfirmDelete(false)} />
-          <div className={styles.createCard} onKeyDown={(e) => { if (e.key === 'Escape') setConfirmDelete(false) }}>
+          <div className={`${styles.createCard} ${styles.confirmDeleteCard}`} onKeyDown={(e) => { if (e.key === 'Escape') setConfirmDelete(false) }}>
             <h4 className={styles.createTitle}>删除选中的 {selected.size} 项？</h4>
             <p className={styles.createDesc}>
               这些资产会被整份删除，连同它们的全部图片、候选池与提示词一起清掉，<b>不可恢复</b>。

@@ -11,9 +11,11 @@
 .batchMenu {
   position: absolute;
   top: calc(100% + 6px);
-  right: 0;
+  /* 从按钮左缘往右伸展（靠右）。只剩两行标题，宽度按内容收紧。 */
+  left: 0;
+  right: auto;
   z-index: 21;
-  min-width: 220px;
+  min-width: 176px;
   padding: 6px;
   border-radius: 10px;
   background: var(--panel-2, #1a1e25);
@@ -25,9 +27,9 @@
 }
 .batchMenuItem {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 9px 11px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
   border: none;
   border-radius: 7px;
   background: transparent;
@@ -38,7 +40,16 @@
 }
 .batchMenuItem:hover:not(:disabled) { background: rgba(var(--accent-rgb), 0.12); }
 .batchMenuItem:disabled { opacity: 0.45; cursor: not-allowed; }
-.batchMenuHint { font-size: 11px; color: var(--text-muted); }
+/* 左侧图标：无底色、中性描边，跟着文字色走（不抢眼）。 */
+.batchMenuIcon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+.batchMenuItem:hover:not(:disabled) .batchMenuIcon { color: var(--text-body); }
+.batchMenuIcon svg { width: 18px; height: 18px; display: block; }
 
 /* 引导条已移除（0812 · §6.5 收回）：参考图就位改由自动淡出的 toast 告知，不再常驻。 */
 
@@ -298,29 +309,98 @@
   border-radius: 8px;
 }
 
-/* 批量选择勾选框 */
+/* 悬停勾选框（Option A）：左上角圆钮。默认隐藏，hover 卡片 / 选择态常驻 / 已选时点亮。 */
 .check {
   position: absolute;
   top: 10px;
-  right: 10px;
+  left: 10px;
   z-index: 3;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.7);
-  background: rgba(0, 0, 0, 0.4);
-  color: var(--bg);
-  font-size: 13px;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--accent-ink);
+  font-family: inherit;
+  font-size: 14px;
   font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
   pointer-events: none;
+  transition: opacity 0.12s ease, background 0.12s ease, border-color 0.12s ease;
 }
-.checkOn {
+.cell:hover .check,
+.gridSelecting .check,
+.check.checkOn { opacity: 1; pointer-events: auto; }
+.check.checkOn {
   background: var(--accent);
   border-color: var(--accent);
 }
+
+/* 选择态顶部条：全选 · 已选 N · 删除 · 完成 */
+.selectBar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+}
+.selectAll {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-body);
+}
+.selectAllBox {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  border: 1.5px solid rgba(255, 255, 255, 0.5);
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+.selectAllBoxOn {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.selectCount {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.selectSpacer { flex: 1; }
+.selectDone {
+  padding: 7px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-body);
+  background: transparent;
+  border: 1px solid var(--line-soft);
+}
+.selectDone:hover { border-color: rgba(255, 255, 255, 0.4); }
 
 .empty {
   padding: 80px 0;
@@ -462,6 +542,8 @@
   background: #12161c; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 14px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
+/* 批量删除确认框：比「新增资产」窄一号（不改共用的 .createCard）。 */
+.confirmDeleteCard { width: 300px; }
 .createTitle { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
 .createDesc { margin: 0 0 14px; font-size: 12px; line-height: 1.6; color: rgba(255, 255, 255, 0.55); }
 .createInput {

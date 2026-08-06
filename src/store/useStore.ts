@@ -182,6 +182,12 @@ interface StoreState {
   /** 编辑提示词（左栏 textarea 失焦 / 生成时提交）。只改这一份的 prompt。 */
   setPrompt: (assetId: string, prompt: string) => ActionResult
   /**
+   * 【0813】开关「当前定稿作为参考图」第一槽，并持久化到资产（selfRefOff）。
+   * on=false 时存 selfRefOff:true（不以定稿为底）；on=true 清掉字段回到默认开启。
+   * 和加/删普通参考图一样即时落库——退出重进即记住，不再复原。
+   */
+  setSelfRef: (assetId: string, on: boolean) => ActionResult
+  /**
    * 删一个参考槽（0812，原 removeReferenceImage）。按下标从 references 移除。
    * 两分法的直接收益：移除后不再需要同步第二个平行数组。
    * 移除后打 fields.refsTouched = true（用户手动改过，工作流不再覆盖）。
@@ -825,6 +831,22 @@ export const useStore = create<StoreState>()(
           },
         }))
         return ok('提示词已更新')
+      },
+
+      setSelfRef: (assetId, on) => {
+        const { world, currentUserId } = get()
+        const user = findUser(world, currentUserId)
+        const asset = findAsset(world, assetId)
+        if (!user || !asset) return fail('数据不存在')
+        if (!canRegenerate(user, asset)) return fail('你没有权限编辑这份资产的参考图')
+        set((s) => ({
+          world: {
+            ...s.world,
+            // on=true 回到默认（清字段）；on=false 存 selfRefOff:true。
+            assets: s.world.assets.map((a) => (a.id === assetId ? { ...a, selfRefOff: on ? undefined : true } : a)),
+          },
+        }))
+        return ok(on ? '已恢复以当前定稿为参考' : '本资产将不再以当前定稿为参考')
       },
 
       removeRef: (assetId, index) => {

@@ -17,7 +17,7 @@
 import { useEffect, useState } from 'react'
 import type { Category, Voice, Scope } from '../data/types'
 import { useStore, useCurrentUser, type ActionResult } from '../store/useStore'
-import { canDirectReuse, canFavorite, canReuseFromTeam, canRemovePlazaAsset, canDeleteLibraryAsset, canViewPrompt, canRegenerate, isAdmin } from '../services/permission'
+import { canDirectReuse, canFavorite, canReuseFromTeam, canRemovePlazaAsset, canDeleteLibraryAsset, canViewPrompt, canRegenerate, canContributeToPlaza, isAdmin } from '../services/permission'
 import { coverOf, resolveRefs, pendingRefs as pendingRefsOf, usableRefUrls } from '../services/assetService'
 import { COST_PER_IMAGE } from '../data/pricing'
 import { PRESET_VOICES } from '../data/presetVoices'
@@ -243,6 +243,7 @@ export function AssetDetail({
   const runSetFinal = useStore((s) => s.runSetFinal)
   const appendCandidates = useStore((s) => s.appendCandidates)
   const setPrompt = useStore((s) => s.setPrompt)
+  const setSelfRef = useStore((s) => s.setSelfRef)
   const removeRef = useStore((s) => s.removeRef)
   const addImageRefs = useStore((s) => s.addImageRefs)
   const clearAssetImages = useStore((s) => s.clearAssetImages)
@@ -293,8 +294,9 @@ export function AssetDetail({
   const [sendImg, setSendImg] = useState<{ url: string; scope: 'team' | 'plaza' } | null>(null)
   // 图片列表加号（0810）：null=关；'menu'=从素材库/本地二选一；'library'=从素材库挑图。
   const [addPicker, setAddPicker] = useState<'menu' | 'library' | null>(null)
-  // 参考图第一槽：本次生成要不要以当前定稿为底（派生，不入库）。切换资产时重置为 true。
-  const [useSelfRef, setUseSelfRef] = useState(true)
+  // 参考图第一槽：要不要以当前定稿为底（派生，不入 references）。
+  // 【0813】初值 / 切资产时都从资产上的 selfRefOff 读取——已持久化，退出重进保持。
+  const [useSelfRef, setUseSelfRef] = useState(asset?.selfRefOff !== true)
   // 生成软拦截二次确认（0812 §8.3）：有 pending 槽时弹一次「这次参考不到这 N 份」。
   const [confirmGen, setConfirmGen] = useState(false)
   // 预览动作条「分享」下拉（对齐设计稿）：收纳「存入团队库 / 贡献到素材广场」两个单张流转。
@@ -341,7 +343,7 @@ export function AssetDetail({
     setAddPicker(null)
     setShareOpen(false)
     setDirty(false)
-    setUseSelfRef(true)
+    setUseSelfRef(asset?.selfRefOff !== true)
     setPromptDraft(asset?.prompt ?? '')
     setPromptSaved(false)
     setPromptExpand(false)
@@ -555,13 +557,20 @@ export function AssetDetail({
    * 存进去的 url 统一去掉 ?g=N 后缀，跟图级槽的既有格式对齐——
    * 否则同一张图会以两个字符串身份存在，判重和「已是参考图」都会失灵。
    */
+  /** 切「当前定稿作为参考」第一槽：本地即时反映 + 即时持久化到资产（0813）。 */
+  function applySelfRef(on: boolean) {
+    setUseSelfRef(on)
+    markDirty()
+    setResult(setSelfRef(asset!.id, on))
+  }
+
   function toggleAsReference(cand: { url: string }) {
     markDirty()
     const key = baseUrl(cand.url)
     // 当前定稿走"自参考第一槽"这条派生路径：加/移只翻 useSelfRef，不往 references 里塞一份重复的
     //    （与第一槽上那个 ✕ 同一个开关，行为对称）。
     if (key === baseUrl(asset!.cover ?? '')) {
-      setUseSelfRef((v) => !v)
+      applySelfRef(!useSelfRef)
       return
     }
     const i = references.findIndex((r) => r.kind === 'image' && baseUrl((r as { url: string }).url) === key)
@@ -919,7 +928,14 @@ export function AssetDetail({
           </>
         )}
         {asset!.scope === 'team' && (
-          <button className={`${styles.btn} ${styles.btnLead}`} onClick={() => openPicker('reuse')}>添加到项目</button>
+          <>
+            <button className={`${styles.btn} ${styles.btnLead}`} onClick={() => openPicker('reuse')}>添加到项目</button>
+            {/* 0813 补漏：主账号可把团队库资产贡献到素材广场（权限/数据层一直支持，0810 下沉时漏了入口）。
+                复用单张送出弹窗（sendImg）走 plaza 投稿，交 admin 审核。 */}
+            {canContributeToPlaza(user, asset!) && !!coverImg && (
+              <button className={styles.btn} onClick={() => setSendImg({ url: coverImg, scope: 'plaza' })}>贡献到素材广场</button>
+            )}
+          </>
         )}
         {/* 0810：项目库的「存入团队库 / 贡献到素材广场」下沉到中栏预览动作条——按单张图送出，不再是资产级动作。 */}
       </>
@@ -1302,7 +1318,7 @@ export function AssetDetail({
                       <div className={styles.refSlot}>
                         <img src={selfRef.url} alt="当前定稿" loading="lazy" />
                         <button className={styles.refZoom} title="放大查看" onClick={() => setPreview({ src: selfRef.url, name: selfRef.label })}><ZoomIcon /></button>
-                        <button className={styles.refRemove} title="本次生成不以当前定稿为底" onClick={() => { setUseSelfRef(false); markDirty() }}>✕</button>
+                        <button className={styles.refRemove} title="不再以当前定稿为底（已保存）" onClick={() => applySelfRef(false)}>✕</button>
                       </div>
                       <span className={styles.refLabel}>{selfRef.label}</span>
                     </div>
@@ -1352,7 +1368,7 @@ export function AssetDetail({
                   </button>
                   {/* 关掉自参考后，给一个恢复入口 */}
                   {asset.cover && !useSelfRef && (
-                    <button className={styles.refRestore} onClick={() => { setUseSelfRef(true); markDirty() }}>恢复当前定稿</button>
+                    <button className={styles.refRestore} onClick={() => applySelfRef(true)}>恢复当前定稿</button>
                   )}
                 </div>
               </div>
