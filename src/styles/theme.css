@@ -8,17 +8,25 @@
 :root {
   color-scheme: dark;
 
-  /* 底与面板层次（越大越"浮"越亮） */
-  --bg: #050505;
+  /* 底与面板层次（越大越"浮"越亮）——对齐「角色弹窗-3a」设计稿配色。 */
+  --bg: #08080a;
   --panel: #181a1c;
   --panel-2: #141618;
-  --panel-3: #1c1e20;
+  --panel-3: #0e0e11;
   --panel-soft: rgba(32, 36, 40, 0.4);
   --panel-float: rgba(36, 38, 40, 0.95);
-  --field: rgba(0, 0, 0, 0.4);
+  --field: #17171b;
+
+  /* 角色生成弹窗（modal3）表面分层：弹窗面板取中性灰，字段 / 预览台更深一档形成"凹陷舞台"，
+     缩略列再浅一档，分隔线用实色。只作用于生成弹窗，别的弹窗仍走 --panel-3 那套。 */
+  --gen-surface: #1c1e20;
+  --gen-well: #111213;
+  --gen-rail: #17191b;
+  --gen-line: #26282a;
+  --gen-divider: #27292b;
 
   /* 描边（由弱到强） */
-  --line-soft: rgba(255, 255, 255, 0.05);
+  --line-soft: rgba(255, 255, 255, 0.09);
   --line-mid: rgba(255, 255, 255, 0.1);
   --line-strong: rgba(255, 255, 255, 0.2);
 
@@ -31,15 +39,19 @@
   /* 强调色（青色）——全局单一真相：改这一处，全站的 accent 跟着变。
      · --accent-rgb 是裸 RGB 通道，用来在任意透明度下派生：rgba(var(--accent-rgb), .12)
      · --accent 是实心色；--accent-ink 是"实心 accent 底上的深色文字"。
-     组件里一律引用这些变量，不要再写死 #00d8dc / #28d6d6 / rgba(0,216,220,…)。 */
-  --accent-rgb: 0, 216, 220;
+     组件里一律引用这些变量，不要再写死 #8fdcd2 / rgba(143,220,210,…)。 */
+  --accent-rgb: 143, 220, 210;
   --accent: rgb(var(--accent-rgb));
-  --accent-ink: #04211b;
+  --accent-ink: #0b2e29;
   /* 常用派生（半透明填充 / 描边）——语义化，省得每处手写 rgba */
   --accent-soft: rgba(var(--accent-rgb), 0.12);
   --accent-soft-hover: rgba(var(--accent-rgb), 0.18);
   --accent-line: rgba(var(--accent-rgb), 0.4);
   --accent-line-strong: rgba(var(--accent-rgb), 0.6);
+
+  /* 次强调色（紫）——「所属库」位置标签 / 分享等流转语义用；同样只引用变量，别写死 #b8a4e8。 */
+  --violet-rgb: 184, 164, 232;
+  --violet: rgb(var(--violet-rgb));
   --cta-top: #c2f2ff;
   --cta-bottom: #cef4ff;
   --danger: #ff8f8f;

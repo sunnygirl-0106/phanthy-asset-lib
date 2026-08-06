@@ -10,7 +10,7 @@
  * 点卡片开 AssetDetail（存入团队库等操作都在详情里，本次不改）。
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Category, Asset } from '../data/types'
 import { useStore } from '../store/useStore'
 import { refsReady } from '../services/assetService'
@@ -80,7 +80,7 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
   const [demoOpen, setDemoOpen] = useState(false) // 演示控件收起/展开
   const [toast, setToast] = useState<string | null>(null)
   // 生成前确认弹窗（0812 · §6）：三个入口统一走它，各自喂不同的候选 id 列表。
-  const [batchModal, setBatchModal] = useState<{ title: string; ids: string[] } | null>(null)
+  const [batchModal, setBatchModal] = useState<{ title: string; ids: string[]; cat: Category | null } | null>(null)
   // 「其他」视频：不进详情弹窗，直接大屏播放（§用户口径：视频就直接大屏播放，不用这么麻烦）。
   const [videoAsset, setVideoAsset] = useState<Asset | null>(null)
   // 新增资产弹窗（0808）：只填名称，建完直接开详情页。
@@ -107,13 +107,14 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
     return m
   }, [projectAssets])
 
-  // 本项目全部没图的生产类资产（跨类目）——「一键生成全部资产」的候选池。
-  const allNoImage = useMemo(
-    () => projectAssets.filter((a) => a.status === 'empty' && PRODUCTION_CATS.includes(a.category)),
+  // 批量生成的候选池：本项目全部生产类资产，不按 status 过滤——已生成的也要进弹窗，
+  // 由弹窗分区展示、默认不勾（列出来 ≠ 默认勾上）。
+  const allProducible = useMemo(
+    () => projectAssets.filter((a) => PRODUCTION_CATS.includes(a.category)),
     [projectAssets],
   )
 
-  // 引导条（§6.5）：status==='empty' 且挂了参考槽 且 refsReady（状态 #2）——参考图已全部就位、可以生成。
+  // 「参考图就位」判据（状态 #2）：status==='empty' 且挂了参考槽 且 refsReady——可以生成。
   // 判据是通用的：用户手动新建、自己从素材库挂了参考图的资产同样会被捞出来，这是对的（它陈述的是事实）。
   const readyToGen = useMemo(
     () =>
@@ -122,6 +123,20 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
       ),
     [projectAssets, world],
   )
+
+  // 参考图从「未就位」变到「就位」的那一刻，弹一条会自动淡出的 toast 告知（不再常驻引导条）。
+  // 用 mounted 守卫跳过首帧：只在真正发生 0→N 的更新时报，避免重进页面（已就位）时误弹。
+  const mountedRef = useRef(false)
+  const prevReadyRef = useRef(0)
+  useEffect(() => {
+    const n = readyToGen.length
+    if (mountedRef.current && prevReadyRef.current === 0 && n > 0) {
+      showToast(`参考图准备完成，共 ${n} 份资产待生成`)
+    }
+    mountedRef.current = true
+    prevReadyRef.current = n
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readyToGen.length])
 
   // 类目 → 搜索 → 排序，派生出当前网格要摆的资产。
   const visible = useMemo(() => {
@@ -168,16 +183,14 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
     exitBatch()
   }
 
-  /** 批量操作 · 批量生成：本项目全部没图的资产，跨类目，喂进弹窗（在弹窗里再挑生成哪些）。 */
-  function openAllModal() {
-    if (allNoImage.length === 0) return
-    setBatchModal({ title: '批量生成', ids: allNoImage.map((a) => a.id) })
-  }
-
-  /** 入口三「生成这 N 份」（引导条）：参考图已就位的那些，喂进弹窗。 */
-  function openReadyModal() {
-    if (readyToGen.length === 0) return
-    setBatchModal({ title: '生成这 ' + readyToGen.length + ' 份资产', ids: readyToGen.map((a) => a.id) })
+  /** 批量操作 · 批量生成：喂全量生产类资产 + 当前 Tab 作为初始作用域，弹窗内可一键扩到全部。 */
+  function openBatchModal() {
+    if (allProducible.length === 0) return
+    setBatchModal({
+      title: '批量生成',
+      ids: allProducible.map((a) => a.id),
+      cat: PRODUCTION_CATS.includes(category) ? category : null,
+    })
   }
 
   /** 建完直接打开详情页——用户接着就要写提示词、点生成，别让他再去网格里找一遍。 */
@@ -290,11 +303,15 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
                   <div className={styles.batchMenu}>
                     <button
                       className={styles.batchMenuItem}
-                      disabled={allNoImage.length === 0}
-                      onClick={() => { setBatchMenu(false); openAllModal() }}
+                      disabled={allProducible.length === 0}
+                      onClick={() => { setBatchMenu(false); openBatchModal() }}
                     >
                       <span>批量生成</span>
-                      <span className={styles.batchMenuHint}>本项目全部没图的资产（{allNoImage.length}）</span>
+                      <span className={styles.batchMenuHint}>
+                        {PRODUCTION_CATS.includes(category)
+                          ? `当前：${CAT_LABEL[category]}（${counts[category]}）· 可在弹窗内扩到全部`
+                          : `全部生产类资产（${allProducible.length}）`}
+                      </span>
                     </button>
                     <button
                       className={styles.batchMenuItem}
@@ -344,14 +361,8 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
             基础素材全出完」的语义打架；语义被工具条主 CTA「一键生成全部资产」覆盖。 */}
       </nav>
 
-      {/* 引导条（§6.5）：常驻一条（不是 toast，toast 会跑掉），只陈述状态、不提「下一步」。
-          判据通用：status==='empty' 且挂了参考槽 且 refsReady（状态 #2）。 */}
-      {readyToGen.length > 0 && !batch && (
-        <div className={styles.guide}>
-          <span className={styles.guideText}>{readyToGen.length} 份资产的参考图已全部就位</span>
-          <button className={styles.guideBtn} onClick={openReadyModal}>生成这 {readyToGen.length} 份</button>
-        </div>
-      )}
+      {/* 参考图就位不再用常驻引导条：改由 useEffect 在 0→N 那一刻弹一条会淡出的 toast（见上）。
+          批量生成入口仍在工具条「一键生成全部资产」与批量菜单里，未丢失。 */}
 
       {/* ── 网格 ── */}
       {visible.length === 0 ? (
@@ -436,6 +447,7 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
         <BatchGenerateModal
           title={batchModal.title}
           assetIds={batchModal.ids}
+          initialCat={batchModal.cat}
           onClose={() => setBatchModal(null)}
           onDone={showToast}
         />

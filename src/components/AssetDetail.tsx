@@ -56,7 +56,7 @@ function genSourceOf(a: { cover: string; fields?: { lookUrl?: unknown } }, usabl
 const RATIO_OPTS = ['3 : 4', '1 : 1', '9 : 16', '16 : 9']
 const COUNT_OPTS = [4, 1, 2, 6]
 const QUALITY_OPTS = ['2K', '1K', '4K']
-const MODEL_OPTS = ['即梦 5.0', '即梦 4.0', 'Seedream 3.0']
+const MODEL_OPTS = ['phan nano Image 3', 'phan nano Image 2 Pro', 'Seedream 3.0']
 
 // 弹出的"目标选择"面板处于哪种模式
 type PickerMode = 'directReuse' | 'reuse' | 'favorite' | 'voice' | null
@@ -120,6 +120,39 @@ function DownloadIcon() {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M12 3v12M7 10l5 5 5-5" />
       <path d="M5 21h14" />
+    </svg>
+  )
+}
+
+/** 分享入口图标（三点连线）。 */
+function ShareIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="11.8" cy="3.6" r="1.9" />
+      <circle cx="4.2" cy="8" r="1.9" />
+      <circle cx="11.8" cy="12.4" r="1.9" />
+      <path d="M10.1 4.6L5.9 7M5.9 9l4.2 2.4" />
+    </svg>
+  )
+}
+
+/** 存入团队库（文件夹）。 */
+function FolderIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M1.9 4.6h4L7.1 6.3H14.1v7.1H1.9z" />
+      <path d="M1.9 4.6V2.9h3.3" />
+    </svg>
+  )
+}
+
+/** 贡献到素材广场（上传）。 */
+function UploadIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M8 11V2.6" />
+      <path d="M5.1 5.5L8 2.6l2.9 2.9" />
+      <path d="M2.6 9.8v2.8c0 .5.4.9.9.9h9c.5 0 .9-.4.9-.9V9.8" />
     </svg>
   )
 }
@@ -237,7 +270,11 @@ export function AssetDetail({
   const [cloneName, setCloneName] = useState('')
   // 提示词子面板：查看 / 编辑定稿提示词
   const [promptOpen, setPromptOpen] = useState(!!openBasePromptOnMount)
+  // 提示词全屏「展开」编辑（对齐 mockup ⤢）
+  const [promptExpand, setPromptExpand] = useState(false)
   const [promptDraft, setPromptDraft] = useState(asset?.prompt ?? '')
+  // 提示词「已保存」闪现标（1.6s 后自动消失）
+  const [promptSaved, setPromptSaved] = useState(false)
   const [copied, setCopied] = useState(false)
   const [preview, setPreview] = useState<{ src: string; name: string } | null>(null) // 放大查看灯箱
 
@@ -248,6 +285,8 @@ export function AssetDetail({
   const [centerKeptId, setCenterKeptId] = useState<string | null>(null)
   // 生成参数（纯展示，仅「生成数量」驱动本次生成的张数）。
   const [genCount, setGenCount] = useState(4)
+  // 图像模型（受控）：title 能带全名兜底，也给未来「不同模型不同价」留钩子。
+  const [model, setModel] = useState(MODEL_OPTS[0])
   // 参考图选择器（0804）：null=关；'menu'=二选一；'library'=从素材库多选。
   const [refPicker, setRefPicker] = useState<'menu' | 'library' | null>(null)
   // 图片级流转（0810）：选中一张图送出 → 打开统一上传弹窗（只出一层）。
@@ -258,15 +297,23 @@ export function AssetDetail({
   const [useSelfRef, setUseSelfRef] = useState(true)
   // 生成软拦截二次确认（0812 §8.3）：有 pending 槽时弹一次「这次参考不到这 N 份」。
   const [confirmGen, setConfirmGen] = useState(false)
+  // 预览动作条「分享」下拉（对齐设计稿）：收纳「存入团队库 / 贡献到素材广场」两个单张流转。
+  const [shareOpen, setShareOpen] = useState(false)
+  // 本次会话「有改动」软标志：定稿 / 参考 / 参数 / 生成 / 音色 / 改名等任一动作都点亮头部「未保存」，
+  // 点「保存」清零。切换资产重置。纯 UI 提示（各动作本身已即时写入 store）。
+  const [dirty, setDirty] = useState(false)
+  const markDirty = () => setDirty(true)
 
   // Esc：先收子面板 / 改名，再关整扇弹窗
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      if (sendImg) setSendImg(null)
+      if (shareOpen) setShareOpen(false)
+      else if (sendImg) setSendImg(null)
       else if (confirmGen) setConfirmGen(false)
       else if (addPicker) setAddPicker(null)
       else if (preview) setPreview(null)
+      else if (promptExpand) setPromptExpand(false)
       else if (refPicker) setRefPicker(null)
       else if (promptOpen) setPromptOpen(false)
       else if (picker) setPicker(null)
@@ -275,7 +322,16 @@ export function AssetDetail({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [sendImg, confirmGen, addPicker, preview, refPicker, promptOpen, picker, renaming, onClose])
+  }, [shareOpen, sendImg, confirmGen, addPicker, preview, promptExpand, refPicker, promptOpen, picker, renaming, onClose])
+
+  // 「分享」下拉：点面板外任意处收起（对齐设计稿的 document click 关闭）。
+  useEffect(() => {
+    if (!shareOpen) return
+    const onDown = () => setShareOpen(false)
+    // 延到下一帧再挂，避免触发它打开的那次 click 立刻把它关掉。
+    const t = window.setTimeout(() => document.addEventListener('click', onDown), 0)
+    return () => { window.clearTimeout(t); document.removeEventListener('click', onDown) }
+  }, [shareOpen])
 
   // 切换到另一份资产时，清掉三栏面板的本地态（生成中 / 中栏选中 / 提示词草稿）。
   useEffect(() => {
@@ -283,11 +339,22 @@ export function AssetDetail({
     setCenterKeptId(null)
     setRefPicker(null)
     setAddPicker(null)
+    setShareOpen(false)
+    setDirty(false)
     setUseSelfRef(true)
     setPromptDraft(asset?.prompt ?? '')
+    setPromptSaved(false)
+    setPromptExpand(false)
     setNameField(asset?.name ?? '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assetId])
+
+  // 提示词「已保存」闪现标：1.6s 后自动消失。
+  useEffect(() => {
+    if (!promptSaved) return
+    const t = window.setTimeout(() => setPromptSaved(false), 1600)
+    return () => window.clearTimeout(t)
+  }, [promptSaved])
 
   // 结果提示 3 秒自动消失（浮层，不占布局）。
   useEffect(() => {
@@ -331,7 +398,6 @@ export function AssetDetail({
   const showCoverTrash = isEmpty || canRemovePlaza || (canDeleteLib && !!coverImg)
 
   const master = asset.masterId ? world.assets.find((a) => a.id === asset.masterId) : undefined
-  const referencedFrom = asset.referencedFrom ? world.assets.find((a) => a.id === asset.referencedFrom) : undefined
 
   // 执行一个动作后：记录结果、收起选择面板
   function done(r: ActionResult) {
@@ -405,6 +471,17 @@ export function AssetDetail({
   // 定稿一换第一槽自动跟着换（因为是派生的）；关掉只影响本次生成，退出重进恢复。
   const selfRef = asset.cover && useSelfRef ? { url: baseUrl(asset.cover), label: '当前定稿' } : null
 
+  // 提示词是否被改动（用于「保存」时决定要不要落一版提示词）。
+  const promptDirty = promptDraft !== (asset.prompt ?? '')
+  // 头部「未保存」：提示词改了、或本次会话做过任一动作（dirty）都算。
+  const hasUnsaved = dirty || promptDirty
+  /** 点「保存」：提示词若有改动落一版，清掉「未保存」并闪现「已保存」。 */
+  function commitSave() {
+    if (promptDirty) setPrompt(asset!.id, promptDraft)
+    setDirty(false)
+    setPromptSaved(true)
+  }
+
   /**
    * 点「生成」：软拦截（0812 §8.3）。有 pending 槽（上游没出图）时不禁用按钮，
    * 弹一次二次确认（§6.4 第二种），确认后照常生成——参考槽是空的、模型本就拿不到，
@@ -428,6 +505,7 @@ export function AssetDetail({
       return
     }
     if (promptDraft !== (asset!.prompt ?? '')) setPrompt(asset!.id, promptDraft)
+    markDirty()
     setGenerating(genCount)
     const src = genSourceOf(asset!, usableRefUrls(world, asset!)[0])
     const urls = Array.from({ length: genCount }, (_, i) => `${src}?g=${Date.now()}${i}`)
@@ -453,12 +531,14 @@ export function AssetDetail({
     if (!file) return
     const url = URL.createObjectURL(file)
     setResult(appendCandidates(asset!.id, [url]))
+    markDirty()
   }
 
   /** 图片列表加号：从素材库挑一张图并入这份资产。 */
   function confirmAddFromLibrary(pickedItems: PickedRef[]) {
     if (pickedItems.length === 0) return setAddPicker(null)
     setResult(appendCandidates(asset!.id, [pickedItems[0].cover]))
+    markDirty()
     setAddPicker(null)
   }
 
@@ -476,6 +556,7 @@ export function AssetDetail({
    * 否则同一张图会以两个字符串身份存在，判重和「已是参考图」都会失灵。
    */
   function toggleAsReference(cand: { url: string }) {
+    markDirty()
     const key = baseUrl(cand.url)
     // 当前定稿走"自参考第一槽"这条派生路径：加/移只翻 useSelfRef，不往 references 里塞一份重复的
     //    （与第一槽上那个 ✕ 同一个开关，行为对称）。
@@ -495,6 +576,7 @@ export function AssetDetail({
   function confirmRefPick(pickedItems: PickedRef[]) {
     if (pickedItems.length === 0) return setRefPicker(null)
     setResult(addImageRefs(asset!.id, pickedItems.map((p) => p.cover)))
+    markDirty()
     setRefPicker(null)
   }
 
@@ -503,6 +585,7 @@ export function AssetDetail({
     if (!file) return
     const url = URL.createObjectURL(file)
     setResult(addImageRefs(asset!.id, [url]))
+    markDirty()
     setRefPicker(null)
   }
 
@@ -678,18 +761,16 @@ export function AssetDetail({
             {canEditVoice && (
               <>
                 <button className={styles.vset} onClick={() => { setVoiceTab('preset'); setPicker('voice') }}>更换</button>
-                <button className={styles.vset} onClick={() => clearVoice(asset!.id)}>清除</button>
+                <button className={styles.vset} onClick={() => { clearVoice(asset!.id); markDirty() }}>清除</button>
               </>
             )}
           </div>
         ) : (
-          <div className={`${styles.vbar} ${styles.vbarOff}`}>
-            <div className={styles.vi}><MicOffIcon /></div>
-            <div className={styles.vmeta}><div className={styles.vunset}>音色 · 未设置</div></div>
-            {canEditVoice && (
-              <button className={styles.vset} onClick={() => { setVoiceTab('preset'); setPicker('voice') }}>＋ 设置音色</button>
-            )}
-          </div>
+          canEditVoice ? (
+            <button className={styles.voiceAddLite} onClick={() => { setVoiceTab('preset'); setPicker('voice') }}>
+              <MicOffIcon /> ＋ 设置音色
+            </button>
+          ) : null
         )}
         {asset!.voice?.type === 'cloned' && !asset!.voice.providerVoiceId && (
           <p className={styles.note}>复刻音色将在接入语音模型后生效（当前为上传原音试听）。</p>
@@ -795,7 +876,8 @@ export function AssetDetail({
     if (!v || v === asset!.name) { setNameField(asset!.name); return }
     const r = renameAsset(asset!.id, v)
     setResult(r)
-    if (!r.ok) setNameField(asset!.name)
+    if (r.ok) markDirty()
+    else setNameField(asset!.name)
   }
 
   function renderLightbox() {
@@ -830,14 +912,14 @@ export function AssetDetail({
       <>
         {asset!.scope === 'plaza' && (
           <>
-            <button className={`${styles.btn} ${styles.btnLead}`} onClick={() => openPicker('directReuse')}>直接复用到项目</button>
+            <button className={`${styles.btn} ${styles.btnLead}`} onClick={() => openPicker('directReuse')}>直接添加到项目</button>
             {canFavorite(user) && (
               <button className={styles.btn} onClick={() => done(runFavorite(asset!.id))}>收藏进团队库</button>
             )}
           </>
         )}
         {asset!.scope === 'team' && (
-          <button className={`${styles.btn} ${styles.btnLead}`} onClick={() => openPicker('reuse')}>复用到项目</button>
+          <button className={`${styles.btn} ${styles.btnLead}`} onClick={() => openPicker('reuse')}>添加到项目</button>
         )}
         {/* 0810：项目库的「存入团队库 / 贡献到素材广场」下沉到中栏预览动作条——按单张图送出，不再是资产级动作。 */}
       </>
@@ -852,7 +934,7 @@ export function AssetDetail({
     if (picker === 'directReuse') {
       inner = (
         <>
-          <h4 className={styles.subH}>用到我的项目</h4>
+          <h4 className={styles.subH}>添加到我的项目</h4>
           {asset!.voice && (
             <button
               type="button"
@@ -875,7 +957,7 @@ export function AssetDetail({
     } else if (picker === 'reuse') {
       inner = (
         <>
-          <h4 className={styles.subH}>用到我的项目</h4>
+          <h4 className={styles.subH}>添加到我的项目</h4>
           <p className={styles.subD}>放到哪个项目？</p>
           <ProjectChips projects={projectsForReuse} onPick={(pid) => done(runReuse(asset!.id, pid))} />
         </>
@@ -902,7 +984,7 @@ export function AssetDetail({
                   <div className={styles.pn}>{v.name}{v.gender && <span className={styles.gtag}>{v.gender}</span>}</div>
                 </div>
                 <PlayButton src={v.previewUrl} />
-                <button className={`${styles.btn} ${styles.btnPri} ${styles.btnSm}`} onClick={() => { setVoice(asset!.id, { ...v }); setPicker(null) }}>选用</button>
+                <button className={`${styles.btn} ${styles.btnPri} ${styles.btnSm}`} onClick={() => { setVoice(asset!.id, { ...v }); markDirty(); setPicker(null) }}>选用</button>
               </div>
             ))
           ) : (
@@ -934,6 +1016,7 @@ export function AssetDetail({
                       providerVoiceId: undefined,
                     }
                     setVoice(asset!.id, voice)
+                    markDirty()
                     setCloneFile(null)
                     setCloneName('')
                     setPicker(null)
@@ -1100,19 +1183,28 @@ export function AssetDetail({
               />
             ) : (
               <>
+                {/* 名字 + 类目/范围 tag 同一行（省纵向空间）：tag 贴在名字右边。 */}
                 <div className={styles.mtitleRow}>
                   <span className={styles.mtitle}>{asset.name}</span>
-                  {/* 头部小铅笔已去掉：可编辑资产在左栏有「资产名称」字段改名，不再重复给一个图标。 */}
-                </div>
-                <div className={styles.chips}>
-                  <span className={styles.chip}>{CATEGORY_LABEL[asset.category]}</span>
-                  <span className={styles.chip}>{SCOPE_LABEL[asset.scope]}</span>
+                  <span className={`${styles.chip} ${styles.chipCat}`}>
+                    {isCharacter && (
+                      <svg className={styles.chipCatIco} width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <circle cx="8" cy="5" r="2.6" />
+                        <path d="M2.8 13.4c.5-2.6 2.6-4 5.2-4s4.7 1.4 5.2 4" />
+                      </svg>
+                    )}
+                    {CATEGORY_LABEL[asset.category]}
+                  </span>
+                  <span className={`${styles.chip} ${styles.chipScope}`}>
+                    <svg className={styles.chipScopeIco} width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="M2 4.4h4l1.2 1.7H14v7H2z" />
+                      <path d="M2 4.4V2.9h3.3" />
+                    </svg>
+                    {SCOPE_LABEL[asset.scope]}
+                  </span>
                   {/* 广场是源头，不展示"我从哪来"（血缘 / 参考自）——规则 14。 */}
                   {asset.scope !== 'plaza' && asset.masterId && (
                     <span className={`${styles.chip} ${styles.chipCopy}`}>副本 · 源自「{master?.name ?? '母版'}」</span>
-                  )}
-                  {asset.scope !== 'plaza' && referencedFrom && (
-                    <span className={styles.chip}>参考自「{referencedFrom.name}」</span>
                   )}
                 </div>
               </>
@@ -1131,6 +1223,15 @@ export function AssetDetail({
               </>
             ) : (
               <>
+                {/* 提示词「未保存改动 + 保存」搬到头部（对齐 mockup）：脏了才出，存完闪一下「已保存」。 */}
+                {hasGenPanel && (promptSaved ? (
+                  <span className={styles.headSaved}>✓ 已保存</span>
+                ) : hasUnsaved ? (
+                  <>
+                    <span className={styles.headDirty}><i className={styles.headDot} />有未保存改动</span>
+                    <button className={styles.headSaveBtn} onClick={commitSave}>保存</button>
+                  </>
+                ) : null)}
                 {headActions()}
                 <button className={styles.close} title="关闭" onClick={onClose}>✕</button>
               </>
@@ -1144,26 +1245,46 @@ export function AssetDetail({
           {/* ═══ 左栏：生成面板（有生成能力才出）═══ */}
           {hasGenPanel && (
             <div className={styles.genLeft}>
-              {/* 资产名称（对齐 Figma）：把名字单独列成一个可编辑字段，比头部小铅笔更好找。 */}
+              {/* 资产名称 + 内联音色（对齐 mockup）：角色的音色收进名称行右侧的下拉，不再单列一条 bar。 */}
               <div className={styles.gfield}>
-                <div className={styles.flabel}>资产名称 <span className={styles.req}>*</span></div>
-                <input
-                  className={styles.nameField}
-                  value={nameField}
-                  onChange={(e) => setNameField(e.target.value)}
-                  onBlur={commitNameField}
-                  onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-                  placeholder="给这份资产起个名字"
-                />
+                <div className={styles.flabel}>{isCharacter ? '角色名称' : '资产名称'} <span className={styles.req}>*</span></div>
+                <div className={styles.nameRow}>
+                  <input
+                    className={styles.nameField}
+                    value={nameField}
+                    onChange={(e) => setNameField(e.target.value)}
+                    onBlur={commitNameField}
+                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                    placeholder="给这份资产起个名字"
+                  />
+                  {isCharacter && (canEditVoice ? (
+                    <button
+                      className={`${styles.voicePill} ${asset.voice ? '' : styles.voicePillEmpty}`}
+                      onClick={() => { setVoiceTab('preset'); setPicker('voice') }}
+                      title={asset.voice ? `音色：${asset.voice.name}` : '设置音色'}
+                    >
+                      {asset.voice ? <MicIcon /> : <MicOffIcon />}
+                      <span className={styles.voicePillName}>{asset.voice ? asset.voice.name : '设置音色'}</span>
+                      <span className={styles.voicePillCaret}>⌄</span>
+                    </button>
+                  ) : asset.voice ? (
+                    <span className={`${styles.voicePill} ${styles.voicePillRo}`} title={`音色：${asset.voice.name}`}>
+                      <MicIcon />
+                      <span className={styles.voicePillName}>{asset.voice.name}</span>
+                    </span>
+                  ) : null)}
+                </div>
               </div>
 
               <div className={`${styles.gfield} ${styles.gfieldGrow}`}>
-                <div className={styles.flabel}>提示词 <span className={styles.req}>*</span></div>
+                <div className={styles.flabel}>
+                  提示词 <span className={styles.req}>*</span>
+                  <button className={styles.expandLink} onClick={() => setPromptExpand(true)} title="展开编辑">⤢ 展开</button>
+                </div>
                 <textarea
                   className={styles.genPrompt}
                   value={promptDraft}
                   onChange={(e) => setPromptDraft(e.target.value)}
-                  onBlur={() => { if (promptDraft !== (asset.prompt ?? '')) setResult(setPrompt(asset.id, promptDraft)) }}
                   placeholder="描述你想要的画面…"
                 />
               </div>
@@ -1177,7 +1298,7 @@ export function AssetDetail({
                       <div className={styles.refSlot}>
                         <img src={selfRef.url} alt="当前定稿" loading="lazy" />
                         <button className={styles.refZoom} title="放大查看" onClick={() => setPreview({ src: selfRef.url, name: selfRef.label })}><ZoomIcon /></button>
-                        <button className={styles.refRemove} title="本次生成不以当前定稿为底" onClick={() => setUseSelfRef(false)}>✕</button>
+                        <button className={styles.refRemove} title="本次生成不以当前定稿为底" onClick={() => { setUseSelfRef(false); markDirty() }}>✕</button>
                       </div>
                       <span className={styles.refLabel}>{selfRef.label}</span>
                     </div>
@@ -1192,7 +1313,7 @@ export function AssetDetail({
                           <div className={styles.refSlot}>
                             <img src={src} alt="参考图" loading="lazy" />
                             <button className={styles.refZoom} title="放大查看" onClick={() => setPreview({ src, name: '参考图' })}><ZoomIcon /></button>
-                            <button className={styles.refRemove} title="移除参考图" onClick={() => setResult(removeRef(asset.id, i))}>✕</button>
+                            <button className={styles.refRemove} title="移除参考图" onClick={() => { setResult(removeRef(asset.id, i)); markDirty() }}>✕</button>
                           </div>
                         </div>
                       )
@@ -1204,7 +1325,7 @@ export function AssetDetail({
                           <div className={styles.refSlot}>
                             <img src={r.url} alt={r.label ?? '参考'} loading="lazy" />
                             <button className={styles.refZoom} title="放大查看" onClick={() => setPreview({ src: r.url, name: r.label ?? '参考' })}><ZoomIcon /></button>
-                            <button className={styles.refRemove} title="移除参考" onClick={() => setResult(removeRef(asset.id, i))}>✕</button>
+                            <button className={styles.refRemove} title="移除参考" onClick={() => { setResult(removeRef(asset.id, i)); markDirty() }}>✕</button>
                           </div>
                           <span className={styles.refLabel}>{r.label}</span>
                         </div>
@@ -1215,7 +1336,7 @@ export function AssetDetail({
                       <div key={i} className={styles.refItem}>
                         <div className={`${styles.refSlot} ${styles.refSlotPending}`}>
                           <div className={styles.refPendingBox} aria-hidden />
-                          <button className={styles.refRemove} title="移除参考" onClick={() => setResult(removeRef(asset.id, i))}>✕</button>
+                          <button className={styles.refRemove} title="移除参考" onClick={() => { setResult(removeRef(asset.id, i)); markDirty() }}>✕</button>
                         </div>
                         <span className={styles.refLabel}>{r.label} ·{r.state === 'pending' ? '待生成' : '已删除'}</span>
                       </div>
@@ -1227,7 +1348,7 @@ export function AssetDetail({
                   </button>
                   {/* 关掉自参考后，给一个恢复入口 */}
                   {asset.cover && !useSelfRef && (
-                    <button className={styles.refRestore} onClick={() => setUseSelfRef(true)}>恢复当前定稿</button>
+                    <button className={styles.refRestore} onClick={() => { setUseSelfRef(true); markDirty() }}>恢复当前定稿</button>
                   )}
                 </div>
               </div>
@@ -1236,23 +1357,21 @@ export function AssetDetail({
               <div className={styles.paramGrid}>
                 <label className={styles.selWrap}>
                   <span className={styles.subLabel}>生成比例</span>
-                  <select className={styles.sel} defaultValue={RATIO_OPTS[0]}>{RATIO_OPTS.map((o) => <option key={o}>{o}</option>)}</select>
+                  <select className={styles.sel} defaultValue={RATIO_OPTS[0]} onChange={markDirty}>{RATIO_OPTS.map((o) => <option key={o}>{o}</option>)}</select>
                 </label>
                 <label className={styles.selWrap}>
                   <span className={styles.subLabel}>生成数量</span>
-                  <select className={styles.sel} value={genCount} onChange={(e) => setGenCount(Number(e.target.value))}>
+                  <select className={styles.sel} value={genCount} onChange={(e) => { setGenCount(Number(e.target.value)); markDirty() }}>
                     {COUNT_OPTS.map((o) => <option key={o} value={o}>{o} 张</option>)}
                   </select>
                 </label>
                 <label className={styles.selWrap}>
                   <span className={styles.subLabel}>图片清晰度</span>
-                  <select className={styles.sel} defaultValue={QUALITY_OPTS[0]}>{QUALITY_OPTS.map((o) => <option key={o}>{o}</option>)}</select>
-                </label>
-                <label className={styles.selWrap}>
-                  <span className={styles.subLabel}>模型</span>
-                  <select className={styles.sel} defaultValue={MODEL_OPTS[0]}>{MODEL_OPTS.map((o) => <option key={o}>{o}</option>)}</select>
+                  <select className={styles.sel} defaultValue={QUALITY_OPTS[0]} onChange={markDirty}>{QUALITY_OPTS.map((o) => <option key={o}>{o}</option>)}</select>
                 </label>
               </div>
+
+              {/* 图像模型已移到通栏底栏（对齐 mockup）；参数区到此结束。 */}
 
               {/* 有 pending 槽时的警示行（0812 §8.2）：确定的事用确定的语气。 */}
               {pendingList.length > 0 && (
@@ -1261,26 +1380,36 @@ export function AssetDetail({
                 </div>
               )}
 
-              {/* 底部一行：预计消耗星钻 + 生成（软拦截：不禁用，点击时若有 pending 槽先弹二次确认） */}
-              <div className={styles.genFoot}>
-                <span className={styles.costHint}>预计消耗 <b>{genCount * COST_PER_IMAGE}</b> 星钻</span>
-                <button
-                  className={`${styles.genBtn} ${!asset.cover ? styles.genBtnPulse : ''}`}
-                  disabled={generating !== null}
-                  onClick={requestGenerate}
-                >
-                  {generating !== null ? '生成中…' : '生成'}
-                </button>
-              </div>
+              {/* 计价 + 生成 + 模型下拉已下沉到通栏底栏（见 mbody 之后的 genFootBar）。 */}
             </div>
           )}
 
+          {/* ═══ 右侧深色舞台：中栏预览台 + 右栏全部图片，合成一块（对齐设计稿）═══ */}
+          <div className={styles.genStage}>
+
           {/* ═══ 中栏：预览台（生成中骨架 / 空态 / 预览大图）+ 动作 + 音色 ═══ */}
           <div className={styles.genCenter}>
-            <div className={styles.stageTitle}>
-              {isOther ? OTHER_MEDIA_LABEL[otherMedia!] : isEmpty ? '待生成' : '预览'}
-            </div>
-            <div className={styles.bigframe}>
+            {/* 「预览」标题只在生成面板里有意义；团队库 / 广场只读态不写它（省地方）。
+                右端计数「第 N 张 / 共 M 张 · 未/已定稿」对齐设计稿，只在有候选、非生成中时出。 */}
+            {(hasGenPanel || isOther || isEmpty) && (
+              <div className={styles.stageHead}>
+                <div className={styles.stageHeadL}>
+                  <span className={styles.stageTitle}>
+                    {isOther ? OTHER_MEDIA_LABEL[otherMedia!] : isEmpty ? '待生成' : '预览'}
+                  </span>
+                  {/* 「当前定稿」标从图上移到这里（预览标题右边），不再遮挡大图。 */}
+                  {hasGenPanel && !isEmpty && !isOther && generating === null && showFinalBadge && centerIsFinal && (
+                    <span className={styles.finalChip}>★ 当前定稿</span>
+                  )}
+                </div>
+                {hasGenPanel && !isEmpty && !isOther && generating === null && centerCand && candidates.length > 0 && (
+                  <span className={styles.stageCount}>
+                    第 {candidates.findIndex((c) => c.id === centerCand.id) + 1} 张 / 共 {candidates.length} 张
+                  </span>
+                )}
+              </div>
+            )}
+            <div className={`${styles.bigframe} ${showFinalBadge && centerIsFinal ? styles.bigframeFinal : ''}`}>
               {isOther ? (
                 otherMedia === 'text' ? (
                   <div className={styles.otherTextBig}>{(asset.fields.text as string) || '（暂无正文）'}</div>
@@ -1307,8 +1436,7 @@ export function AssetDetail({
                 <div className={styles.bigImgWrap}>
                   <img src={centerUrl} alt={asset.name} />
 
-                  {/* 定稿徽章：半透明黑底 + 青绿字。有图必有定稿，只在项目库出（规则 25）。 */}
-                  {showFinalBadge && centerIsFinal && <span className={styles.finalBadge}>★ 定稿</span>}
+                  {/* 「当前定稿」标已移到预览头部（stageHead），此处不再叠在大图上。 */}
 
                   {/* 图片自身的操作一律 hover 浮在图上（规则 17）。 */}
                   <div className={styles.thumbIcons}>
@@ -1343,23 +1471,50 @@ export function AssetDetail({
                 >
                   {isCenterInRefs ? '✓ 已是参考图' : '＋ 添加至参考图'}
                 </button>
-                {centerIsFinal ? (
-                  // 当前定稿：不可点的状态标（0810：换定稿只能"换"，不能"取消"）。
-                  <span className={styles.pvCurrent}>★ 当前定稿</span>
-                ) : (
+                {/* 当前定稿态不再在动作条重复标记（左上角已有「★ 当前定稿」徽章）；只有非定稿才给「设为定稿」。 */}
+                {!centerIsFinal && (
                   <button
                     className={`${styles.pvBtn} ${styles.pvBtnPri}`}
-                    onClick={() => setResult(runSetFinal(asset.id, centerCand.id))}
+                    onClick={() => { setResult(runSetFinal(asset.id, centerCand.id)); markDirty() }}
                   >
                     ★ 设为定稿
                   </button>
                 )}
-                <button className={styles.pvBtn} onClick={() => setSendImg({ url: centerCand.url, scope: 'team' })}>
-                  存入团队库
-                </button>
-                <button className={styles.pvBtn} onClick={() => setSendImg({ url: centerCand.url, scope: 'plaza' })}>
-                  贡献到素材广场
-                </button>
+                {/* 单张流转收进「分享」下拉（对齐设计稿）：存入团队库 / 贡献到素材广场。 */}
+                <div className={styles.pvShareWrap}>
+                  <button
+                    className={`${styles.pvBtn} ${styles.pvShareBtn} ${shareOpen ? styles.pvShareOpen : ''}`}
+                    onClick={(e) => { e.stopPropagation(); setShareOpen((v) => !v) }}
+                  >
+                    <ShareIcon /> 分享 <span className={styles.pvShareCaret}>{shareOpen ? '⌃' : '⌄'}</span>
+                  </button>
+                  {shareOpen && (
+                    <div className={styles.pvSharePop} onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className={styles.pvShareItem}
+                        onClick={() => { setShareOpen(false); setSendImg({ url: centerCand.url, scope: 'team' }) }}
+                      >
+                        <span className={styles.pvShareIco}><FolderIcon /></span>
+                        <span className={styles.pvShareText}>
+                          <span className={styles.pvShareTitle}>存入团队库</span>
+                          <span className={styles.pvShareSub}>团队成员可以直接复用</span>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.pvShareItem}
+                        onClick={() => { setShareOpen(false); setSendImg({ url: centerCand.url, scope: 'plaza' }) }}
+                      >
+                        <span className={styles.pvShareIco}><UploadIcon /></span>
+                        <span className={styles.pvShareText}>
+                          <span className={styles.pvShareTitle}>贡献到素材广场</span>
+                          <span className={styles.pvShareSub}>公开给所有人使用</span>
+                        </span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -1370,8 +1525,9 @@ export function AssetDetail({
               </div>
             )}
 
-            {/* 音色（角色专用）：中栏最底部常驻（规则 4b）。 */}
-            {isCharacter && renderVoice()}
+            {/* 音色（角色专用）：有生成面板时收进左栏「角色名称」行的内联下拉（对齐 mockup）；
+                没有生成面板时（团队库 / 广场 / 只读）音色仍留在中栏这条 bar 里，别弄丢。 */}
+            {isCharacter && !hasGenPanel && renderVoice()}
 
             {/* 「其他」留存物说明 */}
             {isOther && (
@@ -1418,11 +1574,13 @@ export function AssetDetail({
                     return (
                       <div
                         key={c.id}
-                        className={`${styles.look} ${isCur ? styles.thumbCurrent : ''}`}
+                        className={`${styles.look} ${showFinalBadge && isFinal ? styles.lookFinal : ''} ${isCur && !(showFinalBadge && isFinal) ? styles.thumbCurrent : ''}`}
                         onClick={() => setCenterKeptId(c.id)}
                       >
                         <img src={c.url} alt={asset.name} loading="lazy" />
-                        {showFinalBadge && isFinal && <span className={styles.finalBadgeSm}>★ 定稿</span>}
+                        {showFinalBadge && isFinal && <span className={styles.finalBarSm}>★ 定稿</span>}
+                        {/* 正在中栏预览、且不是定稿的那张：底部标「查看中」（对齐设计稿；定稿条优先）。 */}
+                        {isCur && !(showFinalBadge && isFinal) && <span className={styles.viewingBar}>查看中</span>}
                         {canDeleteLib && (
                           <button type="button" className={styles.cardDelete} title="删除这张图片" onClick={(e) => { e.stopPropagation(); deleteCandidate(c.id) }}>
                             <TrashIcon />
@@ -1435,7 +1593,29 @@ export function AssetDetail({
               )}
             </div>
           )}
+          </div>{/* /genStage */}
         </div>
+
+        {/* ── 通栏底栏（对齐 mockup）：左＝图像模型下拉，右＝预计消耗 + 生成 ── */}
+        {hasGenPanel && (
+          <div className={styles.genFootBar}>
+            <label className={styles.footModel} title={model}>
+              <select className={styles.footSel} value={model} onChange={(e) => { setModel(e.target.value); markDirty() }}>
+                {MODEL_OPTS.map((o) => <option key={o}>{o}</option>)}
+              </select>
+            </label>
+            <div className={styles.footRight}>
+              <span className={styles.costHint}>预计消耗 <b>{genCount * COST_PER_IMAGE}</b> 星钻</span>
+              <button
+                className={`${styles.genBtn} ${!asset.cover ? styles.genBtnPulse : ''}`}
+                disabled={generating !== null}
+                onClick={requestGenerate}
+              >
+                {generating !== null ? '生成中…' : '生成'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* 结果提示：浮在弹窗顶部，不占布局、3 秒自动消失。 */}
         {result && (
@@ -1450,6 +1630,28 @@ export function AssetDetail({
         {renderGenConfirm()}
         {renderRefPicker()}
         {renderAddPicker()}
+
+        {/* 提示词全屏「展开」编辑（对齐 mockup）：编辑的是同一份 promptDraft，收起后草稿保留。 */}
+        {promptExpand && (
+          <div className={styles.promptExpand} onClick={() => setPromptExpand(false)}>
+            <div className={styles.promptExpandBox} onClick={(e) => e.stopPropagation()}>
+              <div className={styles.promptExpandHead}>
+                <span>提示词</span>
+                <button className={styles.close} title="收起" onClick={() => setPromptExpand(false)}>✕</button>
+              </div>
+              <textarea
+                className={styles.promptExpandArea}
+                value={promptDraft}
+                onChange={(e) => setPromptDraft(e.target.value)}
+                placeholder="描述你想要的画面…"
+                autoFocus
+              />
+              <div className={styles.promptExpandFoot}>
+                <button className={styles.btnGhost} onClick={() => setPromptExpand(false)}>收起</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
       {renderLightbox()}
       {/* 图片级流转（0810）：把选中的这张图送出去。只出一层（团队库 / 广场），不出保存方式段。 */}

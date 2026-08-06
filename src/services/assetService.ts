@@ -261,7 +261,7 @@ export function directReuse(
   targetProjectId: string,
   includeVoice = true,
 ): Asset {
-  assertHasImage(source, '直接复用')
+  assertHasImage(source, '直接添加到项目')
   return cloneForCopy(source, {
     scope: 'project',
     scopeId: targetProjectId,
@@ -285,7 +285,7 @@ export function favorite(source: Asset, targetTeamId: string): Asset {
  * 复用：团队库 → 项目。同样是一份独立副本（只带定稿图）。
  */
 export function reuse(source: Asset, targetProjectId: string): Asset {
-  assertHasImage(source, '复用')
+  assertHasImage(source, '添加到项目')
   return cloneForCopy(source, {
     scope: 'project',
     scopeId: targetProjectId,

@@ -16,7 +16,7 @@
 
 .modal {
   position: relative;
-  width: min(960px, 96vw);
+  width: min(720px, 94vw);
   max-height: 88vh;
   background: var(--panel-3);
   border: 1px solid var(--line-soft);
@@ -39,8 +39,16 @@
   border-bottom: 1px solid var(--line-soft);
 }
 .mtitleWrap { flex: 1; min-width: 0; }
-.mtitleRow { display: flex; align-items: center; gap: 8px; }
-.mtitle { font-size: 20px; font-weight: 700; line-height: 1.2; }
+.mtitleRow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; row-gap: 6px; }
+.mtitle { font-size: 20px; font-weight: 700; line-height: 1.2; color: #f5f5f7; }
+/* 生成面板弹窗头部对齐设计稿 padding:20 28 18 */
+.modal3 .mhead { padding: 20px 28px 18px; }
+
+/* ── 只读态（团队库 / 广场，非三栏生成面板）：单栏，给回内边距、预览别撑太大 ──
+   生成面板的三栏靠 mbody3 统一留边；只读态没有 mbody3，中栏得自己带边距，否则贴边挤成一团。 */
+.mbody:not(.mbody3) .genCenter { padding: 8px 24px 24px; gap: 16px; }
+/* 上面有放大镜可看大图，预览给个适中固定高度即可，弹窗整体就矮下来了。 */
+.mbody:not(.mbody3) .bigframe { flex: none; height: min(52vh, 440px); min-height: 0; }
 .pencil {
   width: 26px; height: 26px; border-radius: 7px;
   display: inline-flex; align-items: center; justify-content: center;
@@ -55,15 +63,40 @@
 }
 .rnInput:focus { outline: none; }
 
-.chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
 .chip {
   font-size: 11.5px; color: rgba(255, 255, 255, 0.55);
   border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 20px;
   padding: 2px 10px; background: #1b1f27;
 }
 .chipCopy { color: var(--accent); border-color: rgba(var(--accent-rgb), 0.4); }
+/* 类目 tag（严格对齐设计稿「角色」青绿 tag）：图标 + 文字，7px 圆角、accent 描边 + 淡填充。 */
+.chipCat {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px 4px 8px; border-radius: 7px; font-size: 12px; line-height: 1.4;
+  color: var(--accent); border-color: rgba(var(--accent-rgb), 0.3); background: rgba(var(--accent-rgb), 0.07);
+}
+.chipCatIco { flex: none; display: block; }
+/* 「所属库」位置标签（项目资产库 / 团队资产库 / 素材广场）：紫色 tag，对齐设计稿。 */
+.chipScope {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px 4px 8px; border-radius: 7px; font-size: 12px; line-height: 1.4;
+  color: var(--violet); border-color: rgba(var(--violet-rgb), 0.32); background: rgba(var(--violet-rgb), 0.09);
+}
+.chipScopeIco { flex: none; display: block; }
 
 .mheadActions { display: flex; align-items: center; gap: 9px; flex: none; padding-top: 2px; flex-wrap: wrap; justify-content: flex-end; }
+
+/* 头部「未保存改动 + 保存」簇（对齐 mockup）：脏了才出，存完闪一下「已保存」再淡出。 */
+.headDirty { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: rgba(255, 255, 255, 0.55); white-space: nowrap; }
+.headDot { width: 6px; height: 6px; border-radius: 50%; background: #f0b429; flex: none; }
+.headSaveBtn {
+  height: 34px; padding: 0 26px; border-radius: 999px; cursor: pointer; font-family: inherit;
+  font-size: 14px; font-weight: 600; white-space: nowrap;
+  background: rgba(240, 180, 41, 0.13); border: 1px solid #f0b429; color: #f6c65a;
+}
+.headSaveBtn:hover { background: rgba(240, 180, 41, 0.22); }
+.headSaved { font-size: 12.5px; font-weight: 600; color: var(--accent); white-space: nowrap; animation: savedFade 1.6s ease forwards; }
+@keyframes savedFade { 0%, 60% { opacity: 1 } 100% { opacity: 0 } }
 
 /* 按钮组 */
 .btn {
@@ -180,7 +213,6 @@
   display: flex; align-items: center; gap: 10px; padding: 9px 11px;
   border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 10px; background: rgba(255, 255, 255, 0.03);
 }
-.vbarOff { background: rgba(255, 255, 255, 0.03); }
 .vi {
   width: 28px; height: 28px; border-radius: 50%; flex: none;
   background: rgba(255, 255, 255, 0.08); display: flex; align-items: center; justify-content: center; font-size: 14px;
@@ -190,12 +222,22 @@
 .vn { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 7px; line-height: 1.2; }
 .gtag { font-size: 10.5px; font-weight: 500; color: rgba(255, 255, 255, 0.6); border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 20px; padding: 0 7px; }
 .vsub { font-size: 10.5px; color: rgba(255, 255, 255, 0.38); margin-top: 2px; }
-.vunset { font-size: 12.5px; color: rgba(255, 255, 255, 0.55); }
 .vset {
   font-size: 12px; color: var(--accent); padding: 5px 9px; border-radius: 8px;
   border: 1px solid rgba(var(--accent-rgb), 0.4); background: rgba(var(--accent-rgb), 0.1); flex: none; cursor: pointer; font-family: inherit;
 }
 .vset:hover { background: var(--accent); color: var(--accent-ink); }
+
+/* 音色空态：按信息量给空间，跟「＋ 添加参考图」同一量级 */
+.voiceAddLite {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 9px; cursor: pointer;
+  font: inherit; font-size: 12px;
+  background: transparent; border: 1px dashed rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.6);
+}
+.voiceAddLite:hover { border-color: var(--accent); color: var(--accent); border-style: solid; }
+.voiceAddLite svg { width: 14px; height: 14px; }
 
 /* 试听按钮 */
 .playBtn {
@@ -219,14 +261,22 @@
 /* 定稿徽章：半透明黑底 + 青绿字（0807 · 用户指定）。中栏一号、缩略图小一号。 */
 .finalBadge, .finalBadgeSm {
   position: absolute; z-index: 3;
-  display: inline-flex; align-items: center; gap: 4px;
-  background: rgba(0, 0, 0, 0.62); backdrop-filter: blur(4px);
-  color: var(--accent); border: 1px solid rgba(var(--accent-rgb), 0.45);
-  border-radius: 20px; font-weight: 600; letter-spacing: .2px;
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(10, 10, 12, 0.6); backdrop-filter: blur(4px);
+  color: var(--accent); border: 1px solid var(--accent);
+  border-radius: 999px; font-weight: 600; letter-spacing: .2px;
 }
-/* 0808：徽章挪到左上角，避开右上角的 hover 工具条（.bigImgWrap .thumbIcons）。 */
-.finalBadge   { top: 10px; left: 10px; font-size: 11.5px; padding: 4px 11px; }
-.finalBadgeSm { top: 6px;  left: 6px;  font-size: 10px;   padding: 2px 7px; }
+/* 0808：徽章挪到左上角，避开右上角的 hover 工具条（.bigImgWrap .thumbIcons）。对齐设计稿 padding:6 14 · 13px。 */
+.finalBadge   { top: 14px; left: 14px; font-size: 13px; padding: 6px 14px; }
+.finalBadgeSm { top: 6px;  left: 6px;  font-size: 10px; padding: 2px 7px; border-color: rgba(var(--accent-rgb), 0.45); }
+
+/* 右栏定稿缩略图（严格对齐设计稿）：2px 青绿描边 + 微发光 + 底部通栏「★ 定稿」条。 */
+.lookFinal { border-color: var(--accent) !important; box-shadow: inset 0 0 0 1px var(--accent); }
+.finalBarSm {
+  position: absolute; inset: auto 0 0 0; z-index: 3;
+  background: var(--accent); color: var(--accent-ink);
+  font-size: 11px; font-weight: 700; text-align: center; padding: 3px 0; letter-spacing: .2px;
+}
 
 .coverBadge {
   position: absolute; top: 6px; left: 6px; font-size: 10.5px; font-weight: 600;
@@ -480,38 +530,77 @@
  *   左：提示词 + 参考图 + 参数 + 生成 ｜ 中：定稿大图 + 动作 + 音色 ｜ 右：本次生成 + 已保留
  * 只读态 / 「其他」退化成「中 + 右」两栏，宽度维持 960。
  * ═══════════════════════════════════════════════════════════════════════ */
-/* 三栏生成态给一个稳定高度：点「生成」前后不再忽长忽短（各栏内部自己滚动）。 */
-.modal3 { width: min(1160px, 96vw); height: min(780px, 88vh); }
-.mbody3 { min-height: 0; }
+/* 三栏生成态给一个稳定高度（对齐设计稿 1220×900）：点「生成」前后不忽长忽短（各栏内部自己滚动）。 */
+/* 生成弹窗表面取中性灰（--gen-surface），字段 / 预览台会更深一档形成凹陷舞台。 */
+.modal3 { width: min(1220px, 96vw); height: min(900px, 92vh); border-radius: 18px; background: var(--gen-surface); }
+.modal3 .mhead { border-bottom-color: var(--gen-divider); }
+/* 主体全出血：左栏自带内边距坐在弹窗面色上，右侧「预览 + 缩略列」深色舞台顶到弹窗右 / 下边缘。 */
+.mbody3 { min-height: 0; padding: 0; gap: 0; }
 
-/* ── 左栏：生成面板（0804：整体收窄到 340，把省下的宽度让给中栏结果区）── */
+/* ── 左栏：生成面板（对齐设计稿 452 宽，坐在弹窗面色上、自带内边距）── */
 .genLeft {
-  width: 340px; flex: none; border-right: 1px solid var(--line-soft);
-  padding: 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px;
+  width: 452px; flex: none; padding: 20px 24px 20px 28px;
+  overflow-y: auto; display: flex; flex-direction: column; gap: 16px;
 }
+/* ── 右侧深色舞台（对齐设计稿）：预览（中）+ 全部图片（右）合成一块 --gen-well，顶到弹窗边缘。
+   只读态（非 mbody3）不需要舞台：display:contents 让这层壳消失，中区退回 mbody 直接子元素。 */
+.genStage { display: contents; }
+.mbody3 .genStage { display: flex; flex: 1; min-width: 0; background: var(--gen-well); }
 .genLeft::-webkit-scrollbar { width: 8px; }
 .genLeft::-webkit-scrollbar-thumb { background: #2b323c; border-radius: 8px; }
-.gfield { display: flex; flex-direction: column; gap: 8px; }
+.gfield { display: flex; flex-direction: column; gap: 9px; }
 /* 提示词那一格吃满左栏剩余高度（0805 · 改动四 4.1）：参考图 / 参数 / 底部被挤到下方。 */
 .gfieldGrow { flex: 1; min-height: 0; }
-.flabel { font-size: 12.5px; font-weight: 600; color: #e9ecf1; display: flex; align-items: center; gap: 5px; }
-.req { color: var(--danger); font-size: 12px; }
+.flabel { font-size: 13.5px; font-weight: 500; color: rgba(255, 255, 255, 0.8); display: flex; align-items: center; gap: 5px; }
+.req { color: #ff6b6b; font-size: 13px; }
+
+/* 提示词标签行右端「⤢ 展开」：次级胶囊按钮（对齐设计稿 padding:6 14 · radius:999）。 */
+.expandLink {
+  margin-left: auto; padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  font: inherit; font-size: 12.5px; font-weight: 500; line-height: 1;
+  background: transparent; border: 1px solid rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.8);
+}
+.expandLink:hover { border-color: rgba(255, 255, 255, 0.4); color: #f2f2f4; }
 .fhint { font-weight: 400; color: rgba(255, 255, 255, 0.38); font-size: 11px; }
 
-/* 资产名称输入框（对齐 Figma node 47:18）：黑透明底 + 白字半粗，与提示词同一套 well 观感。 */
-.nameField {
-  width: 100%; box-sizing: border-box;
-  background: var(--field); border: 1px solid var(--line-soft); border-radius: 8px;
-  color: #fff; font-family: inherit; font-size: 14px; font-weight: 600; padding: 12px 13px;
+/* 资产名称行（对齐 mockup）：一个 well 里装「名字输入（左，撑满）＋ 内联音色下拉（右）」。 */
+.nameRow {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--gen-well); border: 1px solid var(--gen-line); border-radius: 12px;
+  padding: 0 8px 0 16px; min-height: 46px;
 }
-.nameField:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1); }
+.nameRow:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1); }
+.nameField {
+  flex: 1; min-width: 0; background: transparent; border: none; padding: 12px 0;
+  color: #f2f2f4; font-family: inherit; font-size: 15px; font-weight: 500;
+}
+.nameField:focus { outline: none; }
 .nameField::placeholder { color: rgba(255, 255, 255, 0.3); font-weight: 400; }
+
+/* 内联音色下拉入口：一颗青绿描边小胶囊，名字长了自身省略、不撑破名称行。 */
+.voicePill {
+  display: inline-flex; align-items: center; gap: 6px; flex: none; max-width: 46%;
+  height: 32px; padding: 0 10px; border-radius: 9px; cursor: pointer; font-family: inherit;
+  font-size: 12.5px; line-height: 1;
+  color: var(--accent); border: 1px solid rgba(var(--accent-rgb), 0.35); background: rgba(var(--accent-rgb), 0.07);
+}
+.voicePill:hover { background: rgba(var(--accent-rgb), 0.14); }
+.voicePill svg { width: 14px; height: 14px; flex: none; }
+.voicePillName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.voicePillCaret { color: rgba(var(--accent-rgb), 0.8); flex: none; margin-left: 1px; }
+/* 未设置态：中性虚线，不用青绿抢眼（还没有内容） */
+.voicePillEmpty { color: rgba(255, 255, 255, 0.6); border-style: dashed; border-color: rgba(255, 255, 255, 0.22); background: transparent; }
+.voicePillEmpty:hover { border-color: var(--accent); color: var(--accent); }
+/* 只读态：无交互、无箭头 */
+.voicePillRo { cursor: default; }
+.voicePillRo:hover { background: rgba(var(--accent-rgb), 0.07); }
 
 /* 提示词吃满左栏所有剩余高度（0805 · 改动四 4.1）：不再固定 160px。 */
 .genPrompt {
-  width: 100%; box-sizing: border-box; flex: 1; min-height: 120px; resize: none;
-  background: var(--field); border: 1px solid var(--line-soft); border-radius: 11px;
-  color: #e9ecf1; font-family: inherit; font-size: 13px; line-height: 1.65; padding: 12px 13px;
+  width: 100%; box-sizing: border-box; flex: 1; min-height: 250px; resize: none;
+  background: var(--gen-well); border: 1px solid var(--gen-line); border-radius: 14px;
+  color: #d6d6dc; font-family: inherit; font-size: 14px; line-height: 1.9; padding: 16px 18px;
 }
 .genPrompt:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1); }
 .genPrompt::placeholder { color: rgba(255, 255, 255, 0.3); }
@@ -525,8 +614,8 @@
 
 /* 参考图排（0805 · 改动四 4.3）：120px 缩略图不换行，横向滚动查看；「＋ 上传图片」永远排最后。 */
 .refRow {
-  display: flex; gap: 8px; flex-wrap: nowrap; overflow-x: auto;
-  padding-bottom: 5px; min-height: 125px; scroll-snap-type: x proximity;
+  display: flex; gap: 12px; flex-wrap: nowrap; overflow-x: auto;
+  padding-bottom: 5px; min-height: 100px; scroll-snap-type: x proximity;
   scrollbar-width: thin;                                   /* Firefox：窄 */
   scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
 }
@@ -536,9 +625,9 @@
 .refRow::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
 .refRow::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
 .refItem { display: flex; flex-direction: column; align-items: center; gap: 5px; flex: none; scroll-snap-align: start; }
-.refSlot { position: relative; width: 120px; height: 120px; border-radius: 12px; overflow: hidden; flex: none; border: 1px solid rgba(255, 255, 255, 0.1); background: #000; }
+.refSlot { position: relative; width: 92px; height: 92px; border-radius: 12px; overflow: hidden; flex: none; border: 1px solid var(--line-soft); background: #000; }
 .refSlot img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.refLabel { font-size: 11px; color: rgba(255, 255, 255, 0.6); line-height: 1.3; text-align: center; max-width: 120px; }
+.refLabel { font-size: 11.5px; color: rgba(255, 255, 255, 0.48); line-height: 1.3; text-align: center; max-width: 92px; }
 
 /* 资产级槽 · pending / missing（0812 §6.3）：整颗灰化 —— 灰方块 + 名字 + ·待生成/·已删除。 */
 .refSlotPending { border-style: dashed; opacity: 0.75; }
@@ -560,14 +649,14 @@
 }
 .refRemove:hover { background: rgba(0, 0, 0, 0.85); }
 .refAdd {
-  width: 120px; height: 120px; border-radius: 12px; flex: none; scroll-snap-align: start;
-  border: 1.5px dashed rgba(255, 255, 255, 0.2); background: var(--field);
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
-  color: rgba(255, 255, 255, 0.55); font-size: 11px; text-align: center; cursor: pointer; font-family: inherit;
+  width: 92px; height: 92px; border-radius: 12px; flex: none; scroll-snap-align: start;
+  border: 1px dashed rgba(255, 255, 255, 0.22); background: transparent;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  color: rgba(255, 255, 255, 0.48); font-size: 12px; text-align: center; cursor: pointer; font-family: inherit;
   transition: border-color 0.14s ease, color 0.14s ease, background 0.14s ease;
 }
-.refAdd:hover { border-color: var(--accent); color: var(--accent); background: #12161c; }
-.refPlus { font-size: 22px; font-weight: 300; line-height: 1; }
+.refAdd:hover { border-color: var(--accent); color: var(--accent); }
+.refPlus { font-size: 18px; font-weight: 300; line-height: 1; }
 .refFrom { font-size: 11px; color: rgba(255, 255, 255, 0.42); }
 .refFrom b { color: var(--accent); font-weight: 500; }
 
@@ -593,30 +682,47 @@
 /* 参数选择 */
 .threeSel { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
 /* 4 个参数（比例 / 数量 / 清晰度 / 模型）统一挤在一行，占一小条、不抢提示词的地方。 */
-.paramGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; flex: none; }
-.paramGrid .subLabel { font-size: 11px; }
-.paramGrid .sel { padding: 8px 20px 8px 8px; font-size: 12px; background-position: right 6px center; }
-.selWrap { display: flex; flex-direction: column; gap: 6px; }
-.subLabel { font-size: 11.5px; color: rgba(255, 255, 255, 0.55); font-weight: 500; }
+.paramGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; flex: none; }
+.selWrap { display: flex; flex-direction: column; gap: 8px; }
+.subLabel { font-size: 13px; color: rgba(255, 255, 255, 0.8); font-weight: 500; }
+/* 出图规格下拉（对齐设计稿：42 高 · radius 12 · 13.5px） */
 .sel {
   appearance: none; -webkit-appearance: none; width: 100%; box-sizing: border-box;
-  background: var(--field); border: 1px solid var(--line-soft); border-radius: 10px;
-  color: #e9ecf1; font: inherit; font-size: 12.5px; padding: 9px 28px 9px 11px; cursor: pointer;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7078' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 9px center;
+  background: var(--gen-well); border: 1px solid var(--gen-line); border-radius: 12px;
+  color: #e4e4e8; font: inherit; font-size: 13.5px; height: 42px; padding: 0 34px 0 14px; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237c7c85' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 14px center;
 }
 .sel:hover { border-color: rgba(255, 255, 255, 0.24); }
 .sel:focus { outline: none; border-color: var(--accent); }
 
-/* 底部一行：预计消耗星钻（左）+ 生成按钮（右） */
-.genFoot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 4px; }
-.costHint { font-size: 12px; color: rgba(255, 255, 255, 0.55); }
-.costHint b { color: var(--accent); font-weight: 700; font-size: 13px; }
+/* 通栏底栏（对齐 mockup）：左＝图像模型下拉，右＝预计消耗 + 生成。整条横跨弹窗、带上边线。 */
+.genFootBar {
+  flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 16px 28px; border-top: 1px solid var(--gen-divider); background: var(--gen-surface);
+}
+.footRight { display: flex; align-items: center; gap: 18px; }
+/* 底栏模型下拉：胶囊形，宽度随内容（长模型名不再被四等分挤截断）。 */
+.footModel { display: inline-flex; }
+.footSel {
+  appearance: none; -webkit-appearance: none; box-sizing: border-box;
+  height: 42px; padding: 0 34px 0 16px; border-radius: 999px; cursor: pointer;
+  background: var(--field); border: 1px solid var(--line-soft); color: #e9ecf1;
+  font: inherit; font-size: 13.5px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7078' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 14px center;
+}
+.footSel:hover { border-color: rgba(255, 255, 255, 0.24); }
+.footSel:focus { outline: none; border-color: var(--accent); }
+
+.costHint { font-size: 13px; color: rgba(255, 255, 255, 0.55); }
+.costHint b { color: #f2f2f4; font-weight: 600; font-size: 13px; }
 .genBtn {
-  border: none; border-radius: 10px; background: var(--accent); color: var(--accent-ink);
-  font-size: 14px; font-weight: 700; padding: 11px 28px; cursor: pointer; font-family: inherit;
+  border: none; border-radius: 999px; background: var(--accent); color: var(--accent-ink);
+  font-size: 15px; font-weight: 700; padding: 12px 46px; cursor: pointer; font-family: inherit;
   display: inline-flex; align-items: center; justify-content: center; gap: 8px; flex: none;
 }
+.genBtn:disabled { cursor: default; opacity: 0.6; }
 .genBtn:hover { filter: brightness(1.08); }
 .genBtnPulse { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.5); animation: genpulse 2s infinite; }
 @keyframes genpulse {
@@ -625,15 +731,46 @@
   100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0); }
 }
 
-/* ── 中栏：定稿大图 + 动作 + 音色 ── */
+/* 提示词全屏「展开」编辑（对齐 mockup）：盖住整扇弹窗的大编辑面板。 */
+.promptExpand {
+  position: absolute; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center;
+  padding: 40px; background: rgba(6, 6, 8, 0.72);
+}
+.promptExpandBox {
+  width: min(760px, 100%); max-height: 100%; display: flex; flex-direction: column; gap: 16px;
+  background: var(--panel-3); border: 1px solid var(--line-soft); border-radius: 16px; padding: 22px 24px;
+  box-shadow: var(--shadow-float);
+}
+.promptExpandHead { display: flex; align-items: center; justify-content: space-between; }
+.promptExpandHead span { font-size: 16px; font-weight: 600; color: #f2f2f4; }
+.promptExpandArea {
+  flex: 1; min-height: 380px; resize: none; box-sizing: border-box;
+  background: var(--field); border: 1px solid var(--line-soft); border-radius: 14px; padding: 16px 18px;
+  color: #e9ecf1; font-family: inherit; font-size: 15px; line-height: 1.9;
+}
+.promptExpandArea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1); }
+.promptExpandFoot { display: flex; justify-content: flex-end; }
+
+/* ── 中栏：定稿大图 + 动作 + 音色（对齐设计稿：无背景、无内边距，坐在弹窗底色上）── */
 .genCenter {
-  flex: 1; min-width: 0; padding: 18px 20px; overflow-y: auto;
-  display: flex; flex-direction: column; gap: 13px;
-  background: var(--panel-2);
+  flex: 1; min-width: 0; overflow-y: auto; overflow-x: hidden;
+  display: flex; flex-direction: column; gap: 14px;
 }
 .genCenter::-webkit-scrollbar { width: 8px; }
 .genCenter::-webkit-scrollbar-thumb { background: #2b323c; border-radius: 8px; }
-.stageTitle { font-size: 12.5px; color: rgba(255, 255, 255, 0.55); font-weight: 600; }
+/* 舞台里的中区自带内边距（对齐设计稿 18 20）；只读态由 .mbody:not(.mbody3) 另给边距。 */
+.mbody3 .genStage .genCenter { padding: 18px 20px; }
+/* 预览头一行：左「预览」标题（+ 当前定稿标），右「第 N 张 / 共 M 张」计数。 */
+.stageHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: none; }
+.stageHeadL { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.stageTitle { font-size: 13.5px; color: rgba(255, 255, 255, 0.8); font-weight: 500; }
+.stageCount { font-size: 12.5px; color: var(--text-muted); white-space: nowrap; }
+/* 「当前定稿」从图上移到预览头部（对齐用户要求）：青绿描边胶囊，不遮挡预览大图。 */
+.finalChip {
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+  padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; letter-spacing: .2px;
+  color: var(--accent); border: 1px solid var(--accent); background: var(--accent-soft);
+}
 /* ── 预览比例口径（0810 · §6）──
  * 缩略 / 网格位（卡片、图片列表格、参考图槽）：正方形 + object-fit: cover。
  *   这里是"认图"，网格整齐比完整重要，裁一点无所谓。
@@ -641,12 +778,23 @@
  *   理由：生成参数里有 3:4 / 1:1 / 9:16 / 16:9 四种比例。预览台一旦锁死一个比例，
  *   用户选 9:16 生成出来看到被裁的图，会以为模型出错了。 */
 .bigframe {
-  position: relative; width: 100%; flex: 1; min-height: 360px; padding: 12px;
-  background: var(--field); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 14px;
+  position: relative; width: 100%; flex: 1; min-height: 360px; padding: 18px;
+  background: #101014; border: 1.5px solid var(--line-soft); border-radius: 16px;
   display: grid; place-items: center; overflow: hidden;
 }
-.bigImgWrap { position: relative; width: 100%; height: 100%; display: grid; place-items: center; }
+/* 只有当前预览的就是「定稿」时才亮青绿描边 + 内发光（对齐设计稿的定稿态）。 */
+.bigframeFinal { border-color: var(--accent); box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.10) inset; }
+/* 预览大图外层收紧到图片实际尺寸（object-fit:contain 会留边）：hover 工具条锚在这层，
+   就能贴住图片右上角，而不是飘在预览框的留白区里。由 .bigframe 的 place-items:center 居中。 */
+.bigImgWrap { position: relative; display: inline-flex; max-width: 100%; max-height: 100%; }
 .bigImgWrap > img { width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; display: block; border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45); }
+
+/* 生成弹窗预览：不加任何框（定稿也不描边）——大图直接浮在深色舞台上，object-fit:contain 居中。
+   「当前定稿」由头部那颗「★ 当前定稿」标识，不靠边框。bigImgWrap 收紧到图片尺寸，
+   只是为了让 hover 工具条贴住图片右上角。 */
+.modal3 .bigframe { background: transparent; border: none; box-shadow: none; padding: 0; }
+.modal3 .bigImgWrap { border: none; border-radius: 0; overflow: visible; }
+.modal3 .bigImgWrap > img { border-radius: 8px; box-shadow: none; }
 .bigframe .bigMediaWrap { display: grid; place-items: center; max-width: 100%; max-height: 100%; }
 .bigframe .bigMediaWrap img { width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 12px; display: block; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45); }
 .bigframe .otherTextBig { width: min(80%, 340px); aspect-ratio: auto; max-height: 100%; }
@@ -667,15 +815,41 @@
 .bigImgWrap:hover .thumbIcons { opacity: 1; transform: none; }
 
 /* 预览动作条（0810）：预览大图下方一排按钮，承接"参考图 / 设为定稿 / 存入团队库 / 贡献广场"。 */
-.previewActs { display: flex; gap: 8px; justify-content: center; margin-top: 12px; flex: none; }
+.previewActs { display: flex; gap: 8px; justify-content: center; flex: none; flex-wrap: wrap; }
 .pvBtn {
-  padding: 7px 14px; border-radius: 9px; font-size: 12.5px; font-weight: 500; cursor: pointer;
-  background: #12161c; border: 1px solid rgba(255, 255, 255, 0.14); color: #e9ecf1;
-  transition: border-color .15s, background .15s;
+  padding: 9px 16px; border-radius: 999px; font-size: 12.5px; font-weight: 500; cursor: pointer; white-space: nowrap;
+  background: transparent; border: 1px solid rgba(255, 255, 255, 0.16); color: #c9c9d1;
+  transition: border-color .15s, background .15s, color .15s;
 }
 .pvBtn:hover { border-color: var(--accent); color: var(--accent); }
 .pvBtnPri { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .pvBtnPri:hover { filter: brightness(1.08); color: var(--accent-ink); }
+
+/* 分享入口（对齐设计稿）：把「存入团队库 / 贡献到素材广场」两个单张流转收进一个下拉，
+   动作行只留三颗胶囊，不再四颗平铺换行。 */
+.pvShareWrap { position: relative; display: inline-flex; }
+.pvShareBtn { display: inline-flex; align-items: center; gap: 6px; }
+.pvShareBtn.pvShareOpen { border-color: var(--accent); color: var(--accent); }
+.pvShareCaret { font-size: 11px; opacity: 0.8; }
+.pvSharePop {
+  position: absolute; bottom: calc(100% + 10px); right: 0; z-index: 5; width: 246px; padding: 6px;
+  border-radius: 14px; background: #1e2124; border: 1px solid #33363c;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6); animation: pop 0.14s ease-out;
+}
+.pvShareItem {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px;
+  border-radius: 10px; cursor: pointer; text-align: left; font-family: inherit;
+  background: transparent; border: none; transition: background 0.14s ease;
+}
+.pvShareItem:hover { background: #26292d; }
+.pvShareIco {
+  flex: none; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px;
+  border-radius: 9px; background: var(--accent-soft); color: var(--accent);
+}
+.pvShareIco svg { width: 15px; height: 15px; display: block; }
+.pvShareText { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pvShareTitle { color: #f2f2f4; font-size: 12.5px; }
+.pvShareSub { color: rgba(255, 255, 255, 0.48); font-size: 11px; }
 
 .centerActs { display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap; }
 .centerActs .btn { min-width: 96px; }
@@ -716,17 +890,17 @@
 
 .voiceWrap { width: 100%; }
 
-/* ── 右栏：全部图片（候选池只属于项目层 · 规则 14；宽 260）── */
+/* ── 右栏：全部图片（候选池只属于项目层 · 规则 14；对齐设计稿 216 宽，缩略列比舞台再浅一档）── */
 .genRight {
-  width: 260px; flex: none; border-left: 1px solid var(--line-soft);
-  padding: 18px; overflow-y: auto; display: flex; flex-direction: column;
-  background: var(--panel-2);
+  width: 216px; flex: none; background: var(--gen-rail); padding: 18px 16px;
+  overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column;
 }
 .genRight::-webkit-scrollbar { width: 8px; }
 .genRight::-webkit-scrollbar-thumb { background: #2b323c; border-radius: 8px; }
-.rsecHead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-.rsecT { font-size: 13px; font-weight: 600; }
-.rsecT b { color: var(--accent); font-weight: 600; }
+.rsecHead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.rsecT { font-size: 14px; font-weight: 600; color: #f2f2f4; }
+.rsecT b { color: rgba(255, 255, 255, 0.42); font-weight: 400; }
+
 /* 右栏「＋ 上传」：从本地上传一张，直接进这份资产（0807）。 */
 .rUpload {
   font-size: 12px; color: var(--accent); padding: 4px 10px; border-radius: 8px; flex: none;
@@ -742,8 +916,14 @@
 
 /* 右栏两列缩略网格 */
 .thumbsGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-/* 光晕加厚，让"这张正在中栏预览"一眼可见（0807）。 */
-.thumbCurrent { border-color: var(--accent) !important; box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.2); }
+/* "这张正在中栏预览"一眼可见：白色内描边高亮（对齐设计稿的「查看中」态）。 */
+.thumbCurrent { border-color: rgba(255, 255, 255, 0.95) !important; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.95); }
+/* 缩略图底部状态通栏条：「查看中」用半透明深底（与青绿的「★ 定稿」区分）。 */
+.viewingBar {
+  position: absolute; inset: auto 0 0 0; z-index: 3;
+  background: rgba(8, 9, 10, 0.78); color: #e8e8ec;
+  font-size: 11px; text-align: center; padding: 3px 0; letter-spacing: .2px;
+}
 
 /* 生成中骨架格（0807）：流光扫过。 */
 .thumbSkeleton {
@@ -753,25 +933,24 @@
 }
 @keyframes gshine { to { background-position: -220% 0 } }
 
-/* 缩略网格位统一正方形（0810 · §6：认图优先，cover 裁切无妨） */
-.thumbsGrid .look { aspect-ratio: 1 / 1; cursor: pointer; }
+/* 缩略网格位统一正方形（0810 · §6：认图优先，cover 裁切无妨）；圆角对齐设计稿 12。 */
+/* 非当前预览的缩略图压暗到 72%，当前那张满亮——点谁谁亮，其余略灰（对齐设计稿）。 */
+.thumbsGrid .look { aspect-ratio: 1 / 1; cursor: pointer; border-radius: 12px; opacity: 0.72; transition: opacity 0.15s ease; }
+.thumbsGrid .look:hover { opacity: 0.9; }
+.thumbsGrid .look.thumbCurrent, .thumbsGrid .look.lookFinal { opacity: 1; }
 .thumbsGrid .look img { aspect-ratio: 1 / 1; }
 
 /* 图片列表加号格（0810）：与 .look 同尺寸的正方形虚线框，固定排第一位。 */
 .addTile {
   aspect-ratio: 1 / 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
-  border: 1px dashed rgba(255, 255, 255, 0.2); border-radius: 12px; background: #12161c;
-  color: rgba(255, 255, 255, 0.55); cursor: pointer; font-family: inherit; transition: border-color .15s, color .15s;
+  border: 1px dashed rgba(255, 255, 255, 0.22); border-radius: 12px; background: transparent;
+  color: rgba(255, 255, 255, 0.48); cursor: pointer; font-family: inherit; transition: border-color .15s, color .15s;
 }
 .addTile:hover { border-color: var(--accent); color: var(--accent); }
-.addPlus { font-size: 22px; line-height: 1; }
-.addText { font-size: 11px; }
+.addPlus { font-size: 17px; line-height: 1; }
+.addText { font-size: 12px; }
 
 /* 预览动作条：当前定稿的不可点状态标（0810，与实体按钮区分）。 */
-.pvCurrent {
-  display: inline-flex; align-items: center; padding: 7px 14px; border-radius: 9px; font-size: 12.5px; font-weight: 600;
-  background: rgba(var(--accent-rgb), 0.14); border: 1px solid var(--accent-line); color: var(--accent); cursor: default;
-}
 /* 参考图区：关掉自参考后的「恢复当前定稿」小链接。 */
 .refRestore {
   align-self: center; background: none; border: none; color: var(--accent); font-size: 11.5px; cursor: pointer;

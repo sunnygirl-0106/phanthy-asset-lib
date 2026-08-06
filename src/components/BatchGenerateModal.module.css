@@ -18,7 +18,7 @@
 .hint {
   margin: 14px 20px 0; padding: 10px 12px; border-radius: 8px;
   background: rgba(245, 194, 107, 0.12); border: 1px solid rgba(245, 194, 107, 0.28);
-  font-size: 12.5px; line-height: 1.7; color: #f5c26b;
+  font-size: 13.5px; line-height: 1.7; color: #f5c26b;
 }
 .hint b { color: #ffd489; font-weight: 600; }
 
@@ -35,24 +35,39 @@
 
 .group { margin-top: 14px; }
 .groupHead { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.groupLabel { font-size: 12px; color: var(--text-muted); font-weight: 500; }
-.groupCount { font-size: 11px; color: var(--text-muted); }
+.groupLabel { font-size: 13px; color: var(--text-muted); font-weight: 500; }
+.groupCount { font-size: 12px; color: var(--text-muted); }
 .groupRule { flex: 1; height: 1px; background: var(--line-soft); }
+.groupNote { font-size: 12px; color: var(--text-muted); flex: none; }
+
+/* 作用域切换器 */
+.scopeBar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 20px 0; }
+.scopeBtn {
+  padding: 5px 12px; border-radius: 8px; cursor: pointer; font: inherit; font-size: 13px;
+  background: transparent; border: 1px solid var(--line-soft); color: var(--text-main);
+}
+.scopeBtn:hover { border-color: rgba(255, 255, 255, 0.28); }
+.scopeBtnOn { background: rgba(var(--accent-rgb), 0.14); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+/* 重新生成行标记 */
+.rowRegen { opacity: 0.92; }
+.regenTag { font-size: 11.5px; color: #f5c26b; padding: 1px 7px; border-radius: 6px; background: rgba(245, 194, 107, 0.12); }
+.footNote { font-size: 12.5px; color: var(--text-muted); }
 
 .row { padding: 10px 0; border-bottom: 1px dashed rgba(255, 255, 255, 0.06); }
 .rowDone { opacity: 0.6; }
 .rowHead { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .rowHead input { width: 15px; height: 15px; accent-color: var(--accent, #4cc2c4); }
-.rowName { font-size: 13.5px; color: var(--text-main); font-weight: 500; }
-.rowChip { font-size: 10.5px; padding: 1px 7px; border-radius: var(--radius-pill, 999px); background: rgba(255, 255, 255, 0.08); color: var(--text-muted); }
-.doneTag { font-size: 11px; color: var(--text-muted); margin-left: auto; }
+.rowName { font-size: 14.5px; color: var(--text-main); font-weight: 500; }
+.rowChip { font-size: 11.5px; padding: 1px 7px; border-radius: var(--radius-pill, 999px); background: rgba(255, 255, 255, 0.08); color: var(--text-muted); }
+.doneTag { font-size: 12px; color: var(--text-muted); margin-left: auto; }
 
 .promptWrap { display: flex; gap: 8px; margin-top: 8px; padding-left: 23px; }
-.promptLabel { font-size: 11px; color: var(--text-muted); padding-top: 6px; flex: none; }
+.promptLabel { font-size: 12.5px; color: var(--text-muted); padding-top: 6px; flex: none; }
 .promptEdit {
   flex: 1; resize: vertical; min-height: 40px;
-  padding: 6px 9px; border-radius: 7px; border: 1px solid var(--line-soft);
-  background: var(--field, #12151b); color: var(--text-main); font-size: 12px; line-height: 1.6; font-family: inherit;
+  padding: 7px 10px; border-radius: 7px; border: 1px solid var(--line-soft);
+  background: var(--field, #12151b); color: var(--text-main); font-size: 13.5px; line-height: 1.65; font-family: inherit;
   /* 同款细窄、无轨道框滚动条 */
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
@@ -64,22 +79,28 @@
 .promptEdit::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.3); }
 
 .refs { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding-left: 23px; }
-.refsLabel { font-size: 11px; color: var(--text-muted); }
+.refsLabel { font-size: 12px; color: var(--text-muted); }
 .refThumb { width: 26px; height: 26px; border-radius: 6px; object-fit: cover; border: 1px solid var(--line-soft); }
 .refPill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px 2px 2px; border-radius: var(--radius-pill, 999px); background: rgba(255, 255, 255, 0.06); }
 .refPillThumb { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
 .refPillBox { width: 22px; height: 22px; border-radius: 50%; background: repeating-linear-gradient(135deg, rgba(255,255,255,0.06) 0 5px, rgba(255,255,255,0.12) 5px 10px); }
-.refPillName { font-size: 11px; color: var(--text-main); }
+.refPillName { font-size: 12px; color: var(--text-main); }
 .refPillPending { opacity: 0.7; }
 .refPillPending .refPillName { color: var(--text-muted); }
 
 .empty { padding: 40px 0; text-align: center; color: var(--text-muted); font-size: 13px; }
 
 .foot { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--line-soft); background: var(--panel-3, #14171d); flex-wrap: wrap; }
-.footSel { font-size: 12.5px; color: var(--text-main); }
+.selectAll {
+  padding: 5px 12px; border-radius: 8px; cursor: pointer; font: inherit; font-size: 12.5px;
+  background: transparent; border: 1px solid var(--line-soft); color: var(--text-main);
+}
+.selectAll:hover:not(:disabled) { border-color: rgba(255, 255, 255, 0.28); }
+.selectAll:disabled { opacity: 0.4; cursor: not-allowed; }
+.footSel { font-size: 13.5px; color: var(--text-main); }
 .params { display: flex; gap: 6px; margin-left: auto; }
-.sel { padding: 5px 8px; border-radius: 7px; border: 1px solid var(--line-soft); background: var(--field, #12151b); color: var(--text-main); font-size: 11.5px; }
-.cost { font-size: 12.5px; color: #f5c26b; }
+.sel { padding: 5px 8px; border-radius: 7px; border: 1px solid var(--line-soft); background: var(--field, #12151b); color: var(--text-main); font-size: 12.5px; }
+.cost { font-size: 13.5px; color: #f5c26b; }
 .genBtn { padding: 8px 18px; border-radius: 9px; border: none; background: var(--accent, #4cc2c4); color: #06222a; font-size: 13px; font-weight: 600; cursor: pointer; }
 .genBtn:disabled { opacity: 0.45; cursor: not-allowed; }
 .genBtn:not(:disabled):hover { filter: brightness(1.06); }

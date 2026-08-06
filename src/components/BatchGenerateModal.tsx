@@ -36,12 +36,15 @@ const PLACEHOLDER = assetUrl('assets/canvas/image-placeholder.svg')
 export function BatchGenerateModal({
   title,
   assetIds,
+  initialCat,
   onClose,
   onDone,
 }: {
   title: string
-  /** 候选池：这些 id 里，没图的会列进"待生成"，有图的列进"已生成"（不重复生成）。 */
+  /** 候选池：本项目全部生产类资产（不按 status 过滤，弹窗内自己分区）。 */
   assetIds: string[]
+  /** 初始作用域：当前类目 Tab；音频 /「其他」等无生产语义的 Tab 传 null → 落到「全部」。 */
+  initialCat: Category | null
   onClose: () => void
   /** 生成动作已触发后回调（把结果 message 抛给页面 toast）。 */
   onDone: (message: string) => void
@@ -59,14 +62,36 @@ export function BatchGenerateModal({
     [assetIds, world],
   )
 
-  // 没图 / 有图两分：有图的进「已生成」分区（不重复生成）。
-  const noImage = assets.filter((a) => a.status === 'empty' || a.status === 'generating')
-  const hasImage = assets.filter((a) => a.status === 'done' || a.status === 'failed')
-
-  // 默认勾选（§2）：没图，且不等任何人（refsReady）→ 默认勾选。#3（有 pending 槽）默认不勾。
-  const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(noImage.filter((a) => refsReady(world, a)).map((a) => a.id)),
+  // 作用域：当前类目 ↔ 全部生产类目。默认跟随打开时所在的 Tab（与批量删除的作用域对齐）。
+  const [scope, setScope] = useState<Category | 'all'>(initialCat ?? 'all')
+  const scoped = useMemo(
+    () => (scope === 'all' ? assets : assets.filter((a) => a.category === scope)),
+    [assets, scope],
   )
+  // 作用域选项：始终「全部」打头，其后按 CAT_ORDER（角色→服装→场景→道具）。
+  const scopeOpts: { key: Category | 'all'; label: string }[] = [
+    { key: 'all', label: '全部' },
+    ...CAT_ORDER.map((c) => ({ key: c, label: CATEGORY_LABEL[c] })),
+  ]
+  const scopeCount = (k: Category | 'all') =>
+    k === 'all' ? assets.length : assets.filter((a) => a.category === k).length
+
+  // 三分：没图（可勾）/ 生成中（只展示、不可勾）/ 已生成（可勾 = 重新生成）。
+  const noImage = scoped.filter((a) => a.status === 'empty')
+  const generatingNow = scoped.filter((a) => a.status === 'generating')
+  const hasImage = scoped.filter((a) => a.status === 'done' || a.status === 'failed')
+
+  /** 默认勾选（§2）：没图、且不等任何人 → 勾。已生成的一律不勾（避免白烧星钻）。 */
+  function defaultsFor(list: Asset[]) {
+    return new Set(list.filter((a) => a.status === 'empty' && refsReady(world, a)).map((a) => a.id))
+  }
+  const [selected, setSelected] = useState<Set<string>>(() => defaultsFor(scoped))
+
+  function switchScope(next: Category | 'all') {
+    setScope(next)
+    const nextScoped = next === 'all' ? assets : assets.filter((a) => a.category === next)
+    setSelected(defaultsFor(nextScoped)) // 切作用域 = 重算默认，可预期优先（会丢手动勾/取消）
+  }
   const [count, setCount] = useState(COUNT_OPTS[0])
   // 二次确认：null=不弹；'together'=有资产要参考本批内的（§6.4 第一种）；'unreachable'=参考不到（第二种）。
   const [confirm, setConfirm] = useState<'together' | 'unreachable' | null>(null)
@@ -96,13 +121,23 @@ export function BatchGenerateModal({
     })
     .filter((g) => g.items.length > 0)
 
-  const selectedCount = [...selSet].filter((id) => noImage.some((a) => a.id === id)).length
+  // 勾中的里，哪些是新生成（空壳）、哪些是重新生成（已有图）——底部说明和费用都要用。
+  const pickedNew = noImage.filter((a) => selSet.has(a.id))
+  const pickedRegen = hasImage.filter((a) => selSet.has(a.id))
+  const selectedCount = pickedNew.length + pickedRegen.length
   const cost = selectedCount * count * COST_PER_IMAGE
+
+  // 全选：作用域内所有可勾的（没图 + 已生成，生成中不可勾）。全勾时按钮变「取消全选」。
+  const selectable = [...noImage, ...hasImage]
+  const allPicked = selectable.length > 0 && selectable.every((a) => selSet.has(a.id))
+  function toggleAll() {
+    setSelected(allPicked ? new Set() : new Set(selectable.map((a) => a.id)))
+  }
 
   /** 点「生成」：按 §6.4 决定要不要弹二次确认。 */
   function requestGenerate() {
     if (selectedCount === 0) return
-    const picked = noImage.filter((a) => selSet.has(a.id))
+    const picked = [...pickedNew, ...pickedRegen]
     // 这次参考不到的：有 pending 槽、且该上游不在本批次勾选内。
     const unreachable = picked.filter((a) =>
       pendingRefs(world, a).some((r) => !selSet.has(r.assetId)),
@@ -117,7 +152,7 @@ export function BatchGenerateModal({
   }
 
   function doGenerate() {
-    const ids = noImage.filter((a) => selSet.has(a.id)).map((a) => a.id)
+    const ids = [...pickedNew, ...pickedRegen].map((a) => a.id)
     const r = batchGenerate(ids, PLACEHOLDER, count)
     setConfirm(null)
     onDone(r.message)
@@ -157,15 +192,18 @@ export function BatchGenerateModal({
     )
   }
 
-  /** 一行：勾选 + 名字 + 类目 chip + 可编辑提示词 + 参考 pill。 */
-  function renderRow(a: Asset) {
+  /** 一行：勾选 + 名字 + 类目 chip + 可编辑提示词 + 参考 pill。isRegen=已有图、重新生成。 */
+  function renderRow(a: Asset, isRegen = false) {
     const on = selSet.has(a.id)
     return (
-      <div key={a.id} className={styles.row}>
+      <div key={a.id} className={`${styles.row} ${isRegen ? styles.rowRegen : ''}`}>
         <label className={styles.rowHead}>
           <input type="checkbox" checked={on} onChange={() => toggle(a.id)} />
           <span className={styles.rowName}>{a.name}</span>
           <span className={styles.rowChip}>{CATEGORY_LABEL[a.category]}</span>
+          {isRegen && (
+            <span className={styles.regenTag}>已有 {a.candidates?.length ?? 1} 张 · 重新生成</span>
+          )}
         </label>
         <div className={styles.promptWrap}>
           <span className={styles.promptLabel}>提示词</span>
@@ -194,6 +232,19 @@ export function BatchGenerateModal({
           <button className={styles.close} title="关闭" onClick={onClose}>✕</button>
         </div>
 
+        {/* 作用域切换器：始终「全部」打头，默认高亮打开时所在的 Tab（无生产语义则默认「全部」）。 */}
+        <div className={styles.scopeBar}>
+          {scopeOpts.map((o) => (
+            <button
+              key={o.key}
+              className={`${styles.scopeBtn} ${scope === o.key ? styles.scopeBtnOn : ''}`}
+              onClick={() => switchScope(o.key)}
+            >
+              {o.label}（{scopeCount(o.key)}）
+            </button>
+          ))}
+        </div>
+
         {/* 顶部提示条（§6.4）：仅当列表里存在 #3 状态的资产。 */}
         {hasWaiting && (
           <div className={styles.hint}>
@@ -202,7 +253,7 @@ export function BatchGenerateModal({
           </div>
         )}
 
-        {/* 主体：分组 + 已生成分区 */}
+        {/* 主体：待生成分组 + 生成中 + 已生成分区 */}
         <div className={styles.body}>
           {groups.map((g) => (
             <section key={g.cat} className={styles.group}>
@@ -211,9 +262,28 @@ export function BatchGenerateModal({
                 <span className={styles.groupCount}>{g.items.length}</span>
                 <span className={styles.groupRule} aria-hidden />
               </div>
-              {g.items.map(renderRow)}
+              {g.items.map((a) => renderRow(a))}
             </section>
           ))}
+
+          {generatingNow.length > 0 && (
+            <section className={styles.group}>
+              <div className={styles.groupHead}>
+                <span className={styles.groupLabel}>生成中</span>
+                <span className={styles.groupCount}>{generatingNow.length}</span>
+                <span className={styles.groupRule} aria-hidden />
+              </div>
+              {generatingNow.map((a) => (
+                <div key={a.id} className={`${styles.row} ${styles.rowDone}`}>
+                  <div className={styles.rowHead}>
+                    <span className={styles.rowName}>{a.name}</span>
+                    <span className={styles.rowChip}>{CATEGORY_LABEL[a.category]}</span>
+                    <span className={styles.doneTag}>生成中…</span>
+                  </div>
+                </div>
+              ))}
+            </section>
+          )}
 
           {hasImage.length > 0 && (
             <section className={styles.group}>
@@ -221,27 +291,26 @@ export function BatchGenerateModal({
                 <span className={styles.groupLabel}>已生成</span>
                 <span className={styles.groupCount}>{hasImage.length}</span>
                 <span className={styles.groupRule} aria-hidden />
+                <span className={styles.groupNote}>勾选可重新生成，不覆盖原图</span>
               </div>
-              {hasImage.map((a) => (
-                <div key={a.id} className={`${styles.row} ${styles.rowDone}`}>
-                  <div className={styles.rowHead}>
-                    <span className={styles.rowName}>{a.name}</span>
-                    <span className={styles.rowChip}>{CATEGORY_LABEL[a.category]}</span>
-                    <span className={styles.doneTag}>已生成 · 不重复生成</span>
-                  </div>
-                </div>
-              ))}
+              {hasImage.map((a) => renderRow(a, true))}
             </section>
           )}
 
-          {groups.length === 0 && hasImage.length === 0 && (
+          {groups.length === 0 && generatingNow.length === 0 && hasImage.length === 0 && (
             <div className={styles.empty}>没有可生成的资产。</div>
           )}
         </div>
 
         {/* 底栏：已选 X/Y · 参数 · 星钻 · 生成 */}
         <div className={styles.foot}>
-          <span className={styles.footSel}>已选 {selectedCount}/{noImage.length}</span>
+          <button className={styles.selectAll} disabled={selectable.length === 0} onClick={toggleAll}>
+            {allPicked ? '取消全选' : '全选'}
+          </button>
+          <span className={styles.footSel}>已选 {selectedCount}/{scoped.length}</span>
+          {pickedRegen.length > 0 && (
+            <span className={styles.footNote}>其中 {pickedRegen.length} 份为重新生成，不覆盖原图</span>
+          )}
           <div className={styles.params}>
             <select className={styles.sel} defaultValue={MODEL_OPTS[0]}>{MODEL_OPTS.map((o) => <option key={o}>{o}</option>)}</select>
             <select className={styles.sel} defaultValue={QUALITY_OPTS[0]}>{QUALITY_OPTS.map((o) => <option key={o}>{o}</option>)}</select>
@@ -257,7 +326,7 @@ export function BatchGenerateModal({
         </div>
 
         {/* 二次确认 */}
-        {confirm && <ConfirmLayer kind={confirm} world={world} picked={noImage.filter((a) => selSet.has(a.id))} selSet={selSet} onBack={() => setConfirm(null)} onGo={doGenerate} />}
+        {confirm && <ConfirmLayer kind={confirm} world={world} picked={[...pickedNew, ...pickedRegen]} selSet={selSet} onBack={() => setConfirm(null)} onGo={doGenerate} />}
       </div>
     </div>
   )

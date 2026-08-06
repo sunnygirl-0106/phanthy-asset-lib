@@ -374,15 +374,15 @@ export const useStore = create<StoreState>()(
         const source = findAsset(world, sourceId)
         const project = world.projects.find((p) => p.id === targetProjectId)
         if (!user || !source || !project) return fail('数据不存在')
-        if (!canDirectReuse(user, project)) return fail('你没有权限在该项目里直接复用')
+        if (!canDirectReuse(user, project)) return fail('你没有权限在该项目里直接添加')
         // 去重（v5：库内顶层资产名唯一）：目标项目库已有同名则挡下、提示改名。
         if (libraryHasSameName(world.assets, 'project', targetProjectId, source.name)) {
-          return fail(`该项目已有同名「${source.name}」，请改名后再复用`)
+          return fail(`该项目已有同名「${source.name}」，请改名后再添加`)
         }
         try {
           const copy = directReuse(source, targetProjectId, includeVoice)
           set((s) => ({ world: addAsset(s.world, copy) }))
-          return ok(`已把「${source.name}」直接复用进「${project.name}」（独立副本）`)
+          return ok(`已把「${source.name}」直接添加到「${project.name}」（独立副本）`)
         } catch (e) {
           return fromError(e)
         }
@@ -394,7 +394,7 @@ export const useStore = create<StoreState>()(
         const source = findAsset(world, sourceId)
         if (!user || !source) return fail('数据不存在')
         if (!user.teamId) return fail('当前账号没有团队库')
-        if (!canFavorite(user)) return fail('只有主账号能收藏进团队库（子账号请用"直接复用"）')
+        if (!canFavorite(user)) return fail('只有主账号能收藏进团队库（子账号请用"直接添加到项目"）')
         // 去重把关（v5 改动1）：写团队库的两条路（收藏 / 存入）都去重。
         // 收藏进团队库前，若团队库已有同名，挡下、提示改名（与 runSendImage 一致）。
         if (teamHasSameName(world.assets, user.teamId, source.name)) {
@@ -415,15 +415,15 @@ export const useStore = create<StoreState>()(
         const source = findAsset(world, sourceId)
         const project = world.projects.find((p) => p.id === targetProjectId)
         if (!user || !source || !project) return fail('数据不存在')
-        if (!canReuseFromTeam(user, project)) return fail('你没有权限把它复用进该项目')
+        if (!canReuseFromTeam(user, project)) return fail('你没有权限把它添加到该项目')
         // 去重（v5：库内顶层资产名唯一）：目标项目库已有同名则挡下、提示改名。
         if (libraryHasSameName(world.assets, 'project', targetProjectId, source.name)) {
-          return fail(`该项目已有同名「${source.name}」，请改名后再复用`)
+          return fail(`该项目已有同名「${source.name}」，请改名后再添加`)
         }
         try {
           const copy = reuse(source, targetProjectId)
           set((s) => ({ world: addAsset(s.world, copy) }))
-          return ok(`已把「${source.name}」复用进「${project.name}」（独立副本）`)
+          return ok(`已把「${source.name}」添加到「${project.name}」（独立副本）`)
         } catch (e) {
           return fromError(e)
         }
@@ -920,9 +920,9 @@ export const useStore = create<StoreState>()(
         const user = findUser(world, currentUserId)
         if (!user) return fail('数据不存在')
         const idSet = new Set(assetIds)
-        // 只处理：有权生成、且还没出图（空壳）的资产。有图的、无权的都算跳过。
+        // 只挡"正在生成中"，已出图的允许重新生成（非破坏性，只往候选池追加）。无权的算跳过。
         const targets = world.assets.filter(
-          (a) => idSet.has(a.id) && canRegenerate(user, a) && a.status === 'empty',
+          (a) => idSet.has(a.id) && canRegenerate(user, a) && a.status !== 'generating',
         )
         const skipped = assetIds.filter((id) => !targets.some((t) => t.id === id)).length
         if (targets.length === 0) return fail('没有可生成的资产')
@@ -981,10 +981,12 @@ export const useStore = create<StoreState>()(
                     makeCandidate(`${src}?g=${++seq}`, a.prompt),
                   )
                   // 空壳原本无定稿，本批第一张自动成为定稿（0810：有图必成品）。
+                  // 已有定稿的只追加候选——定稿是用户手挑的，批量路径不许动。
+                  // 空壳 / failed 的 cover 是 ''（非 nullish），用 || 让它落到右侧拿到新定稿。
                   return {
                     ...a,
                     candidates: [...(a.candidates ?? []), ...cands],
-                    cover: cands[0].url,
+                    cover: a.cover || cands[0].url,
                     status: 'done' as AssetStatus,
                   }
                 }),
@@ -995,7 +997,11 @@ export const useStore = create<StoreState>()(
         }
         runWave(0)
 
-        return ok(`已开始生成 ${targets.length} 份资产${skipped ? `（跳过 ${skipped} 份）` : ''}`)
+        // targets 区分空壳（生成）和已有图（重新生成），把结果说清楚。
+        const fresh = targets.filter((a) => a.status === 'empty').length
+        const regen = targets.length - fresh
+        const parts = [fresh > 0 ? `生成 ${fresh} 份` : '', regen > 0 ? `重新生成 ${regen} 份` : ''].filter(Boolean)
+        return ok(`已开始${parts.join(' · ')}${skipped ? `（跳过 ${skipped} 份）` : ''}`)
       },
 
       createShellAsset: (projectId, category, name) => {
