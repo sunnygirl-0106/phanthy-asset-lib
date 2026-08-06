@@ -6,8 +6,17 @@
   /* 面板底色用实心 --panel(#181a1c)：对齐设计稿，也让下面各处「白色半透明」token
      （--line-soft/--text-muted/搜索框等）叠加后正好落到设计稿采样的实色值上。 */
   background: var(--panel);
-  padding: 16px 16px 18px;
+  /* 自身不滚：改成纵向 flex 容器，滚动交给内层 .scrollBody，底部 .pickBar 作为 flex-none 页脚常驻。 */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* 滚动体：承接原 .panel 的内边距与滚动。底部固定条在它之外，故内容再多也不会盖到 / 漏出页脚。 */
+.scrollBody {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  padding: 16px 16px 18px;
 }
 
 /* 标题行：「资产」左、小字右上角对齐——行高由标题决定，小字显隐不撑动布局 */
@@ -273,7 +282,7 @@
 }
 
 .pickBar {
-  position: sticky; bottom: -18px; margin: 12px -16px -18px; padding: 12px 16px;
+  flex: none; padding: 12px 16px;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   background: var(--panel); border-top: 1px solid var(--line-soft);
 }

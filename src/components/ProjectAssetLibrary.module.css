@@ -334,7 +334,7 @@
   pointer-events: none;
   transition: opacity 0.12s ease, background 0.12s ease, border-color 0.12s ease;
 }
-.cell:hover .check,
+/* 勾选框只在选择态（批量操作 → 批量删除）出现——平时 hover 不再冒出来。 */
 .gridSelecting .check,
 .check.checkOn { opacity: 1; pointer-events: auto; }
 .check.checkOn {

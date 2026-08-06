@@ -44,6 +44,10 @@ const SCOPES: { key: Scope; label: string }[] = [
 // 这样它们即使当前只有一张图，也能在详情里看到「造型/其他样式（0）」并放大/下载/新增。
 const STYLE_CATS = new Set(['character', 'scene', 'prop'])
 
+/** 网格展示顺序：角色 → 服装 → 场景 → 道具 → 音频 →「其他」垫底（对齐类目 Tab；其余归到末尾）。 */
+const CAT_RANK: Record<string, number> = { character: 0, costume: 1, scene: 2, prop: 3, audio: 4, other: 5 }
+const catRank = (a: { category: string }) => CAT_RANK[a.category] ?? 9
+
 // 类目下划线 Tab（对齐 Figma 面板头部）；与资产库网格的 CategoryTabs 同一套类目，
 // 这里换成"青色下划线"观感，故在面板内本地渲染，不动共享组件。
 const CATEGORY_TABS: { value: CategoryFilter; label: string }[] = [
@@ -153,6 +157,8 @@ export function CanvasAssetPanel({
     .filter((a) => searching || a.scope === scope)
     .filter((a) => category === 'all' || a.category === category)
     .filter((a) => !searching || a.name.toLowerCase().includes(q))
+    // 类目排序：角色 → 服装 → 场景 → 道具 → 音频 →「其他」垫底（同类目内保持原顺序，sort 稳定）。
+    .sort((a, b) => catRank(a) - catRank(b))
 
   const groupedItems = SCOPES.map((s) => ({ ...s, items: items.filter((a) => a.scope === s.key) }))
   // 「全部」类目分区展示用：图片类走网格、音频类走条状列表（音频只在音频类目，不进「其他」）。
@@ -188,7 +194,7 @@ export function CanvasAssetPanel({
       const on = !!picked[a.id]
       return (
         <div key={a.id} className={`${styles.pickWrap} ${on ? styles.pickWrapOn : ''} ${already ? styles.pickWrapDone : ''}`}>
-          <AssetCard asset={a} hideSub compact onClick={already ? undefined : () => togglePick(a)} />
+          <AssetCard asset={a} hideSub compact hideCount onClick={already ? undefined : () => togglePick(a)} />
           {already ? (
             <span className={styles.pickDone}>✓ 已添加至参考图</span>
           ) : (
@@ -293,6 +299,9 @@ export function CanvasAssetPanel({
 
   return (
     <div className={styles.panel}>
+      {/* 滚动体：标题 / 分段 / 类目 / 搜索 / 网格都在这里滚；底部固定条（选图模式）是它的兄弟节点，
+          不随内容滚动，也不会被内容穿透（旧版 sticky footer 在内容不足时会浮到中间、内容多时又漏出底边）。 */}
+      <div className={styles.scrollBody}>
       {/* 标题行：「资产」（左） + 小字说明（右上角）。小字放右上是为了让标题行高恒定，
           切换 tab 时小字显隐不会把下面的分段/类目顶得上下跳。
           项目库=当前项目名；团队库=当前团队库；广场/搜索不显示。 */}
@@ -404,6 +413,7 @@ export function CanvasAssetPanel({
         // 前五类单类目：无音频，直接卡片网格。
         <div className={styles.grid}>{items.map(renderCard)}</div>
       )}
+      </div>
 
       {/* 选图模式底部固定条：已选 N 张 · 取消 / 确定 */}
       {picking && (

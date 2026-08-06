@@ -51,11 +51,14 @@ export function AssetCard({
   draggable,
   onDragStart,
   hoverActions,
+  hideCount,
 }: {
   asset: Asset
   onClick?: () => void
   /** 画布左侧面板用：隐藏名字下那行小灰字副标题（其它页面默认展示）。 */
   hideSub?: boolean
+  /** 选图模式用：挑的是具体某一张图，不做多图堆叠 / 右下角张数徽章。 */
+  hideCount?: boolean
   /** 紧凑浮层用：缩小卡片内文字与留白，不影响库页的大卡片。 */
   compact?: boolean
   /** 画布左侧面板用：让整张卡可拖（HTML5 DnD）。 */
@@ -85,11 +88,16 @@ export function AssetCard({
 
   const cursor = draggable ? 'grab' : onClick ? 'pointer' : undefined
 
+  // 多图（候选池 > 1）：卡片做堆叠重叠感 + 右下角张数徽章（对齐参考图）。
+  const imgCount = asset.candidates?.length ?? 0
+  const isMulti = imgCount > 1 && !noImage && !isText && !hideCount
+
   return (
     <div
       className={[
         styles.card,
         compact ? styles.compact : '',
+        isMulti ? styles.stacked : '',
       ].filter(Boolean).join(' ')}
       onClick={onClick}
       draggable={draggable}
@@ -134,6 +142,14 @@ export function AssetCard({
         </div>
       )}
 
+      {/* 多图张数徽章（右下角）：图层图标 + 张数（对齐参考图）。 */}
+      {isMulti && (
+        <span className={styles.countBadge} title={`共 ${imgCount} 张`}>
+          <LayersGlyph />
+          {imgCount}
+        </span>
+      )}
+
       {/* hover 行动层：压在封面上浮出「查看 / 使用」（仅画布面板传 hoverActions 时出现） */}
       {hoverActions && <div className={styles.hoverActions}>{hoverActions}</div>}
 
@@ -145,6 +161,16 @@ export function AssetCard({
         </div>
       </div>
     </div>
+  )
+}
+
+/** 多图张数徽章的图层图标（两片叠放）。 */
+function LayersGlyph() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12 3l9 5-9 5-9-5 9-5Z" />
+      <path d="M3 13l9 5 9-5" />
+    </svg>
   )
 }
 

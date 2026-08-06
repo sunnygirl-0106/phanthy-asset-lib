@@ -11,10 +11,48 @@
 }
 
 .card:hover {
-  transform: translateY(-2px);
+  transform: scale(1.02); /* 微微放大即可，不再上浮 */
+  z-index: 1; /* 放大时压住相邻卡，避免被裁 */
   box-shadow: var(--shadow-float);
   border-color: var(--line-mid);
 }
+
+/* 多图堆叠感：两层偏移的「卡片」叠在右下后方（box-shadow 不受 overflow:hidden 裁剪）。
+   面板色太深、同色影子看不出，这里用明显亮一档的灰 + 1px 亮边，近亮远暗做出层次。
+   每层：先填充（-1px，画在上）再亮边（0，在下），露出 1px 边框感。 */
+.stacked {
+  box-shadow:
+    5px 6px 0 -1px #1b1f26, 5px 6px 0 0 rgba(255, 255, 255, 0.12),
+    10px 12px 0 -1px #14181e, 10px 12px 0 0 rgba(255, 255, 255, 0.07);
+}
+.stacked:hover {
+  box-shadow:
+    5px 6px 0 -1px #1b1f26, 5px 6px 0 0 rgba(255, 255, 255, 0.12),
+    10px 12px 0 -1px #14181e, 10px 12px 0 0 rgba(255, 255, 255, 0.07),
+    var(--shadow-float);
+}
+
+/* 右下角张数徽章：半透明深底药丸 + 图层图标 + 数字。 */
+.countBadge {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(4px);
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.countBadge svg { display: block; }
+.compact .countBadge { right: 7px; bottom: 7px; padding: 2px 6px; font-size: 11px; }
 
 .cover {
   position: absolute;

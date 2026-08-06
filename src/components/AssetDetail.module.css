@@ -192,11 +192,11 @@
 /* 详情里的图片卡片删除：hover 才浮出右上角垃圾桶。 */
 .cardDelete {
   position: absolute;
-  top: 7px;
-  right: 7px;
+  top: 6px;
+  right: 6px;
   z-index: 5;
-  width: 27px;
-  height: 27px;
+  width: 21px;
+  height: 21px;
   padding: 0;
   display: flex;
   align-items: center;
@@ -211,7 +211,7 @@
   backdrop-filter: blur(4px);
   transition: opacity 0.14s ease, transform 0.14s ease, background 0.14s ease;
 }
-.cardDelete svg { width: 14px; height: 14px; display: block; }
+.cardDelete svg { width: 12px; height: 12px; display: block; }
 .baseLg:hover .cardDelete,
 .look:hover .cardDelete { opacity: 1; transform: scale(1); }
 .cardDelete:hover { background: rgba(255, 93, 108, 0.2); }
@@ -763,6 +763,9 @@
 .genCenter {
   flex: 1; min-width: 0; overflow-y: auto; overflow-x: hidden;
   display: flex; flex-direction: column; gap: 14px;
+  /* 基础态就占好边框位（透明 1.5px）：定稿态只换边框颜色，不改盒子尺寸，
+     切换定稿/非定稿时「预览」标题不会再上下跳。 */
+  box-sizing: border-box; border: 1.5px solid transparent; border-radius: 6px;
 }
 .genCenter::-webkit-scrollbar { width: 8px; }
 .genCenter::-webkit-scrollbar-thumb { background: #2b323c; border-radius: 8px; }
@@ -770,11 +773,12 @@
 .mbody3 .genStage .genCenter { padding: 18px 20px; }
 /* 定稿态：整块深色预览框描一圈青绿直角边（无圆角，对齐用户要求）。border-box 让边不撑破舞台。 */
 .genCenterFinal {
-  box-sizing: border-box; border: 1.5px solid var(--accent); border-radius: 6px;
-  box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.08) inset;
+  border-color: rgba(var(--accent-rgb), 0.6);
+  box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.07) inset;
 }
 /* 预览头一行：左「预览」标题（+ 当前定稿标），右「第 N 张 / 共 M 张」计数。 */
-.stageHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: none; }
+/* min-height 锁死表头行高（= 定稿胶囊的高度）：定稿态胶囊出现也不会把「预览」标题挤得上下跳。 */
+.stageHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: none; min-height: 28px; }
 .stageHeadL { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .stageTitle { font-size: 13.5px; color: rgba(255, 255, 255, 0.8); font-weight: 500; }
 .stageCount { font-size: 12.5px; color: var(--text-muted); white-space: nowrap; }
@@ -796,7 +800,7 @@
   display: grid; place-items: center; overflow: hidden;
 }
 /* 只有当前预览的就是「定稿」时才亮青绿描边 + 内发光（对齐设计稿的定稿态）。 */
-.bigframeFinal { border-color: var(--accent); box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.10) inset; }
+.bigframeFinal { border-color: rgba(var(--accent-rgb), 0.4); box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.06) inset; }
 /* 预览大图外层收紧到图片实际尺寸（object-fit:contain 会留边）：hover 工具条锚在这层，
    就能贴住图片右上角，而不是飘在预览框的留白区里。由 .bigframe 的 place-items:center 居中。 */
 .bigImgWrap { position: relative; display: inline-flex; max-width: 100%; max-height: 100%; }
@@ -912,7 +916,7 @@
 
 /* ── 右栏：全部图片（候选池只属于项目层 · 规则 14；对齐设计稿 216 宽，缩略列比舞台再浅一档）── */
 .genRight {
-  width: 216px; flex: none; background: var(--gen-rail); padding: 18px 16px;
+  width: 252px; flex: none; background: var(--gen-rail); padding: 18px 16px;
   overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column;
 }
 .genRight::-webkit-scrollbar { width: 8px; }
