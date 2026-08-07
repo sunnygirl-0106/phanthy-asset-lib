@@ -322,8 +322,6 @@ export function AssetDetail({
   const [useSelfRef, setUseSelfRef] = useState(asset?.selfRefOff !== true)
   // 生成软拦截二次确认（0812 §8.3）：有 pending 槽时弹一次「这次参考不到这 N 份」。
   const [confirmGen, setConfirmGen] = useState(false)
-  // 退出确认：关闭时若有未保存的定义层改动，弹一次「放弃修改 / 继续编辑」。
-  const [confirmClose, setConfirmClose] = useState(false)
   // 最新的「请求关闭」逻辑放 ref 里——Esc 处理器闭包不随 hasUnsaved 变，直接读 ref 避免拿到旧值。
   const requestCloseRef = useRef<() => void>(() => {})
   // 预览动作条「分享」下拉（对齐设计稿）：收纳「存入团队库 / 贡献到素材广场」两个单张流转。
@@ -341,8 +339,7 @@ export function AssetDetail({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      if (confirmClose) setConfirmClose(false)
-      else if (shareOpen) setShareOpen(false)
+      if (shareOpen) setShareOpen(false)
       else if (sendImg) setSendImg(null)
       else if (confirmGen) setConfirmGen(false)
       else if (addPicker) setAddPicker(null)
@@ -356,7 +353,7 @@ export function AssetDetail({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [confirmClose, shareOpen, sendImg, confirmGen, addPicker, preview, promptExpand, refPicker, promptOpen, picker, renaming])
+  }, [shareOpen, sendImg, confirmGen, addPicker, preview, promptExpand, refPicker, promptOpen, picker, renaming])
 
   // 「分享」下拉：点面板外任意处收起（对齐设计稿的 document click 关闭）。
   useEffect(() => {
@@ -548,19 +545,13 @@ export function AssetDetail({
     setPromptSaved(true)
   }
 
-  /** 请求关闭：生成面板下有未保存的定义层改动才弹确认，否则直接关。素材层的图不拦（它们不会丢）。
-   * 只在 hasGenPanel 才拦——「保存」按钮只在这个模式出；只读资产的改名等本就即时落库，没有基线可回退。 */
+  /** 请求关闭：不再弹退出确认弹窗，但离开时照旧丢弃未保存的定义层改动——
+   * 直接把定义层还原回基线（candidates 素材层不动），跟顶部「离开会丢弃」提示一致。 */
   function requestClose() {
-    if (hasGenPanel && hasUnsaved) { setDirtyOpen(false); setConfirmClose(true); return }
+    if (hasGenPanel && hasUnsaved) revertAssetFields(asset!.id, baseline)
     onClose?.()
   }
   requestCloseRef.current = requestClose
-  /** 退出确认里点「放弃修改」：把定义层整体还原回基线（candidates 不动），然后关闭。 */
-  function discardAndClose() {
-    revertAssetFields(asset!.id, baseline)
-    setConfirmClose(false)
-    onClose?.()
-  }
 
   /**
    * 点「生成」：软拦截（0812 §8.3）。有 pending 槽（上游没出图）时不禁用按钮，
@@ -736,32 +727,6 @@ export function AssetDetail({
             >
               确认生成
             </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  /**
-   * 退出确认（对齐 mockup「离开会丢弃」）：只在有未保存的定义层改动时出。
-   * 逐条列出会被丢弃的定义层改动，并点明素材层的图不受影响——用户要的是知道自己在丢什么。
-   */
-  function renderCloseConfirm() {
-    if (!confirmClose) return null
-    return (
-      <div className={styles.msubroot}>
-        <div className={styles.sscrim} onClick={() => setConfirmClose(false)} />
-        <div className={styles.confirmCard}>
-          <div className={`${styles.confirmIcon} ${styles.confirmIconAccent}`}><RegenIcon /></div>
-          <h4 className={styles.confirmTitle}>放弃未保存的改动？</h4>
-          <p className={styles.confirmBody}>
-            这份资产有 <b>{changes.length} 处</b>改动还没保存，直接离开会把它们还原。
-            {newImgCount > 0 && <>已生成的 {newImgCount} 张图片已入库、不受影响。</>}
-          </p>
-          <p className={styles.confirmList}>将丢弃：{changes.map((c) => c.label).join(' · ')}</p>
-          <div className={styles.confirmActions}>
-            <button className={styles.btnGhost} onClick={() => setConfirmClose(false)}>继续编辑</button>
-            <button className={`${styles.btn} ${styles.btnDanger}`} onClick={discardAndClose}>放弃修改</button>
           </div>
         </div>
       </div>
@@ -1759,7 +1724,7 @@ export function AssetDetail({
                 disabled={generating !== null}
                 onClick={requestGenerate}
               >
-                {generating !== null ? '生成中…' : '生成'}
+                {generating !== null ? '生成中…' : (candidates.length > 0 ? '重新生成' : '生成')}
               </button>
             </div>
           </div>
@@ -1775,7 +1740,6 @@ export function AssetDetail({
         {renderPicker()}
         {renderPromptPanel()}
         {renderDeleteConfirm()}
-        {renderCloseConfirm()}
         {renderGenConfirm()}
         {renderRefPicker()}
         {renderAddPicker()}
