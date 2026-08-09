@@ -11,7 +11,7 @@
   top: 0;
   right: 0;
   height: 100%;
-  width: 420px;
+  width: 440px;
   max-width: 92vw;
   background: var(--panel-float, #15181e);
   border-left: 1px solid var(--line-mid);
@@ -27,12 +27,11 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 18px 18px 14px;
-  border-bottom: 1px solid var(--line-soft);
+  padding: 18px 20px 12px;
 }
 .headText { min-width: 0; }
-.title { font-size: 17px; font-weight: 700; color: var(--text-main); margin: 0; }
-.sub { font-size: 12px; color: var(--text-faint); margin: 4px 0 0; line-height: 1.5; }
+.title { font-size: 18px; font-weight: 700; color: var(--text-main); margin: 0; }
+.sub { font-size: 12px; color: var(--text-faint); margin: 5px 0 0; line-height: 1.5; }
 .close {
   flex-shrink: 0;
   width: 32px;
@@ -46,42 +45,140 @@
 }
 .close:hover { background: var(--line-soft); color: var(--text-main); }
 
-.result { margin: 12px 18px 0; padding: 9px 11px; border-radius: 8px; font-size: 12.5px; }
+/* ── Tab 条：当前项青绿下划线（青绿只出现在角标 / 主操作描边 / 当前 tab 下划线三处）── */
+.tabs {
+  display: flex;
+  gap: 22px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.tab {
+  position: relative;
+  padding: 10px 0 12px;
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.tab:hover { color: var(--text-body); }
+.tabOn { color: var(--text-main); }
+.tabOn::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.tabBadge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.result { margin: 12px 20px 0; padding: 9px 11px; border-radius: 8px; font-size: 12.5px; }
 .resultOk { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; }
 .resultErr { background: rgba(255, 143, 143, 0.15); color: var(--danger); }
 
 .body {
   flex: 1;
   overflow-y: auto;
-  padding: 14px 18px 24px;
-}
-
-.groupTitle {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text-body);
-  margin: 4px 0 10px;
+  padding: 14px 20px 24px;
 }
 
 .empty {
   font-size: 13px;
   color: var(--text-muted);
   text-align: center;
-  padding: 20px 0;
+  padding: 28px 0;
 }
 
+/* ── 待处理：批量条 ── */
+.batchBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.checkLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-body);
+  cursor: pointer;
+  user-select: none;
+}
+.check {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.batchBtn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--accent-line-strong);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.batchBtn:hover { background: var(--accent-soft-hover); }
+
+/* ── 已处理：子筛选 chip ── */
+.chips { display: flex; gap: 8px; margin-bottom: 12px; }
+.chip {
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-mid);
+  background: var(--panel-3);
+  color: var(--text-faint);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.chip:hover { color: var(--text-body); }
+.chipOn { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
+
+.footNote {
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  padding: 14px 0 4px;
+}
+
+/* ── 行 ── */
 .row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 11px;
   padding: 10px;
   border: 1px solid var(--line-soft);
   border-radius: 12px;
   background: var(--panel);
   margin-bottom: 8px;
 }
+.rowChecked { border-color: var(--accent-line); background: var(--accent-soft); }
 .rowDone { background: var(--panel-2); }
 
+.thumbBtn { padding: 0; border: none; background: none; cursor: pointer; flex-shrink: 0; line-height: 0; }
 .thumb {
   width: 52px;
   height: 52px;
@@ -99,7 +196,19 @@
   border: 1px dashed var(--line-mid);
 }
 
-.rowMain { flex: 1; min-width: 0; }
+/* rowMain 在待处理是 <button>（整块可点开大图），已处理是 <div>；统一清掉按钮默认样式。 */
+.rowMain {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  display: block;
+}
+div.rowMain { cursor: default; }
 .rowName {
   font-size: 14px;
   font-weight: 600;
@@ -108,24 +217,47 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.rowMeta { font-size: 11.5px; color: var(--text-faint); margin-top: 3px; }
+.rowMeta {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.catTag {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--text-body);
+  background: var(--panel-3);
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  padding: 1px 6px;
+}
+.rowTime { font-size: 11px; color: var(--text-muted); margin-top: 5px; }
 .reason { font-size: 11.5px; color: var(--text-muted); margin-top: 4px; }
 
-.rowActions { display: flex; gap: 7px; flex-shrink: 0; }
+.rowActions { display: flex; flex-direction: column; gap: 7px; flex-shrink: 0; }
+
+.rowRight { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+.doneTime { font-size: 11px; color: var(--text-muted); }
 
 .btn {
-  padding: 6px 13px;
+  padding: 6px 15px;
   border-radius: 8px;
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: var(--accent-ink);
+  border: 1px solid var(--accent-line-strong);
+  background: var(--accent-soft);
+  color: var(--accent);
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
 }
-.btn:hover { filter: brightness(1.06); }
+.btn:hover { background: var(--accent-soft-hover); }
 .btnGhost {
-  padding: 6px 13px;
+  padding: 6px 15px;
   border-radius: 8px;
   border: 1px solid var(--line-mid);
   background: var(--panel-3);
@@ -134,23 +266,6 @@
   cursor: pointer;
 }
 .btnGhost:hover { border-color: var(--line-strong); }
-
-.processedToggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin: 14px 0 10px;
-  padding: 4px 2px;
-  border: none;
-  background: none;
-  color: var(--text-faint);
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-}
-.processedToggle:hover { color: var(--text-body); }
-.caret { font-size: 10px; }
 
 .tag {
   flex-shrink: 0;

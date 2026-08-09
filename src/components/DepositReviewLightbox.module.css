@@ -1,0 +1,101 @@
+/* 存入申请大图审核：全屏铺开，左大图右信息。层级压在抽屉(1200)与理由弹窗之上。 */
+.root { position: fixed; inset: 0; z-index: 1400; display: flex; align-items: center; justify-content: center; }
+.scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.82); backdrop-filter: blur(2px); }
+
+.close {
+  position: absolute; top: 18px; right: 20px; z-index: 2;
+  width: 34px; height: 34px; border-radius: 9px;
+  border: none; background: rgba(255, 255, 255, 0.06); color: var(--text-faint);
+  font-size: 16px; cursor: pointer;
+}
+.close:hover { background: rgba(255, 255, 255, 0.12); color: var(--text-main); }
+
+.stage {
+  position: relative; z-index: 1;
+  display: flex; gap: 40px; align-items: stretch;
+  width: min(1160px, 92vw); height: min(760px, 88vh);
+  padding: 8px;
+}
+
+/* ── 左：大图 ── */
+.imageWrap {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #2b333a 0%, #1c2227 100%);
+  border: 1px solid var(--line-soft);
+  overflow: hidden;
+}
+.image { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.imageActual { max-width: none; max-height: none; width: auto; height: auto; }
+.imageEmpty { color: var(--text-muted); font-size: 14px; }
+
+.zoomBar { position: absolute; left: 14px; bottom: 14px; display: flex; gap: 8px; }
+.zoomBtn {
+  padding: 5px 11px; border-radius: 8px;
+  border: 1px solid var(--line-mid); background: rgba(11, 14, 15, 0.72);
+  color: var(--text-body); font-size: 12px; cursor: pointer;
+}
+.zoomBtn:hover { border-color: var(--line-strong); }
+.zoomOn { color: var(--text-main); border-color: var(--line-strong); background: rgba(11, 14, 15, 0.9); }
+
+/* ── 右：信息面板 ── */
+.info { width: 400px; flex-shrink: 0; display: flex; flex-direction: column; padding-top: 40px; }
+
+.infoTop { display: flex; align-items: center; justify-content: space-between; }
+.infoTopLeft { display: flex; align-items: center; gap: 12px; }
+.stateTag {
+  font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: var(--radius-pill);
+  color: var(--accent); border: 1px solid var(--accent-line); background: var(--accent-soft);
+}
+.counter { font-size: 13px; color: var(--text-faint); }
+
+.nav { display: flex; gap: 8px; }
+.navBtn {
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 1px solid var(--line-mid); background: var(--panel-3); color: var(--text-body);
+  font-size: 17px; line-height: 1; cursor: pointer;
+}
+.navBtn:hover:not(:disabled) { border-color: var(--line-strong); color: var(--text-main); }
+.navBtn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.name { font-size: 22px; font-weight: 700; color: var(--text-main); margin: 22px 0 20px; }
+
+.meta { display: flex; flex-direction: column; gap: 14px; margin: 0; }
+.field { display: flex; align-items: baseline; gap: 16px; }
+.fieldLabel { flex-shrink: 0; width: 68px; font-size: 13px; color: var(--text-faint); }
+.fieldValue { font-size: 13.5px; color: var(--text-main); }
+
+.warn {
+  margin-top: 22px; padding: 11px 13px; border-radius: 10px;
+  font-size: 12.5px; line-height: 1.6;
+  color: #e6c07a; background: rgba(214, 158, 46, 0.12); border: 1px solid rgba(214, 158, 46, 0.32);
+}
+
+.actions { display: flex; gap: 12px; margin-top: 28px; }
+.approve {
+  padding: 11px 22px; border-radius: 10px; border: 1px solid var(--accent-line-strong);
+  background: var(--accent-soft); color: var(--accent);
+  font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.approve:hover { background: var(--accent-soft-hover); }
+.reject {
+  padding: 11px 22px; border-radius: 10px; border: 1px solid var(--line-mid);
+  background: var(--panel-3); color: var(--text-body);
+  font-size: 14px; font-weight: 500; cursor: pointer;
+}
+.reject:hover { border-color: var(--line-strong); color: var(--text-main); }
+
+.hint { margin-top: 16px; font-size: 12px; color: var(--text-muted); }
+.hint kbd {
+  display: inline-block; padding: 1px 6px; margin: 0 1px; border-radius: 5px;
+  background: var(--panel-3); border: 1px solid var(--line-mid);
+  font: inherit; font-size: 11px; color: var(--text-faint);
+}
+
+@media (max-width: 820px) {
+  .stage { flex-direction: column; height: auto; max-height: 92vh; overflow-y: auto; gap: 20px; }
+  .info { width: 100%; padding-top: 0; }
+  .imageWrap { min-height: 300px; }
+}

@@ -136,6 +136,8 @@ interface StoreState {
   // ── 团队资产存入审批（仅主账号）──
   /** 通过一条子账号资产存入申请：把资产写入团队库、申请标记 approved（记录处理人/时间）、给申请人发通知。 */
   approveApplication: (applicationId: string) => ActionResult
+  /** 一键全部通过：把当前主账号名下所有待处理申请挨个走 approveApplication，同名/异常的自动跳过并汇总。 */
+  approveAllApplications: () => ActionResult
   /** 驳回一条子账号资产存入申请：申请标记 rejected、记录理由（选填），随通知发给申请人。团队库不动。 */
   rejectApplication: (applicationId: string, reason?: string) => ActionResult
 
@@ -582,6 +584,27 @@ export const useStore = create<StoreState>()(
         } catch (e) {
           return fromError(e)
         }
+      },
+
+      approveAllApplications: () => {
+        const { world, currentUserId, applications } = get()
+        const me = findUser(world, currentUserId)
+        if (!me) return fail('数据不存在')
+        // 只碰「我名下子账号 + 待处理」这一批；挨个复用单条通过，保证行为完全一致。
+        const pendingIds = applications
+          .filter((a) => a.status === 'pending' && findUser(world, a.applicantId)?.parentId === me.id)
+          .map((a) => a.id)
+        if (pendingIds.length === 0) return fail('没有待处理的申请')
+        let okCount = 0
+        const failed: string[] = []
+        for (const id of pendingIds) {
+          const r = get().approveApplication(id)
+          if (r.ok) okCount++
+          else failed.push(get().applications.find((a) => a.id === id)?.payload.name ?? '未知')
+        }
+        if (okCount === 0) return fail(`全部未能通过：${failed.join('、')}（多为同名，请让申请人改名）`)
+        if (failed.length > 0) return ok(`已通过 ${okCount} 条；${failed.length} 条同名跳过：${failed.join('、')}`)
+        return ok(`已全部通过 ${okCount} 条存入申请，写入团队库`)
       },
 
       rejectApplication: (applicationId, reason) => {
@@ -1328,11 +1351,15 @@ export interface DepositReviewRow {
   assetId: string
   name: string
   cover: string
+  category: Category      // 大图审核「类型」用；抽屉行也能带类目角标
   applicantName: string
   fromLabel: string       // 来自哪个项目
   createdAt: number
+  reviewedAt?: number     // 处理时间（已处理行的时间戳走它，没有则回退 createdAt）
   status: 'pending' | 'approved' | 'rejected'
   reason?: string
+  /** 团队库已有同名资产：大图审核里给琥珀提示（现逻辑同名通过会失败，先让审批人知道）。 */
+  sameNameInLibrary: boolean
 }
 
 export function selectDepositRows(state: StoreState): DepositReviewRow[] {
@@ -1349,11 +1376,17 @@ export function selectDepositRows(state: StoreState): DepositReviewRow[] {
         assetId: a.sourceAssetId ?? '',
         name: a.payload.name,
         cover: a.payload.url,
+        category: a.payload.category,
         applicantName: userName(a.applicantId),
         fromLabel: projName(a.fromScopeId),
         createdAt: a.createdAt,
+        reviewedAt: a.reviewedAt,
         status: a.status,
         reason: a.reason,
+        // 只有待处理行才需要提醒同名（已处理的同名早在通过那一刻拦下了）。
+        sameNameInLibrary:
+          a.status === 'pending' &&
+          libraryHasSameName(world.assets, 'team', a.toTeamId, a.payload.name),
       }
     })
     .sort((x, y) => y.createdAt - x.createdAt)

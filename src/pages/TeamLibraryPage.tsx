@@ -10,7 +10,7 @@
  * 类目/搜索/排序/批量都是页面局部状态，切账号后各自重算。
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Category } from '../data/types'
 import { useStore, useCurrentUser } from '../store/useStore'
 import { canSee, canHandleDepositRequests } from '../services/permission'
@@ -57,6 +57,16 @@ export function TeamLibraryPage() {
   const [sortDesc, setSortDesc] = useState(true) // 智能排序：默认最新在前
   const [detailAssetId, setDetailAssetId] = useState<string | null>(null)
 
+  // 存入记录入口「刚处理完」回执：通过 N 条后，入口挂「已通过 N」停 3 秒再回静默态。
+  const [receipt, setReceipt] = useState<number | null>(null)
+  const receiptTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const onDepositApproved = (n: number) => {
+    setReceipt((prev) => (prev ?? 0) + n)
+    if (receiptTimer.current) clearTimeout(receiptTimer.current)
+    receiptTimer.current = setTimeout(() => setReceipt(null), 3000)
+  }
+  useEffect(() => () => { if (receiptTimer.current) clearTimeout(receiptTimer.current) }, [])
+
   // 当前账号在团队库里能看到的全部资产（权限说了算）。
   const teamAssets = useMemo(
     () => world.assets.filter((a) => canSee(world, user, a) && a.scope === 'team'),
@@ -98,16 +108,28 @@ export function TeamLibraryPage() {
           </button>
         ))}
 
-        {/* 存入申请入口（§7）：只在主账号且确有待办时出现——常年挂个「0」比没有更糟，直接不渲染。
+        {/* 存入记录入口（§7）：主账号常驻，名字不随状态变。三态——
+            · 有待审：呼吸绿点 + 青绿描边角标
+            · 刚处理完：「已通过 N」回执停 3 秒（盖过角标）
+            · 无待审：一行普通菜单，无底色无角标。
             贴底（margin-top:auto）+ 上方分隔线，读起来是"另一类东西"，不是第六个类目。 */}
-        {canHandleDepositRequests(user) && pendingDeposits > 0 && (
+        {canHandleDepositRequests(user) && (
           <button
             className={styles.depositEntry}
             onClick={() => navigate({ name: 'team', drawer: 'deposits' })}
           >
-            <img className={styles.navIcon} src={assetUrl('assets/icons/clock.svg')} alt="" aria-hidden />
-            <span className={styles.depositLabel}>资产存入申请</span>
-            <span className={styles.depositCount}>{pendingDeposits}</span>
+            <span
+              className={`${styles.depositDot} ${
+                receipt !== null ? styles.depositDotDone
+                  : pendingDeposits > 0 ? styles.depositDotLive : ''
+              }`}
+            />
+            <span className={styles.depositLabel}>存入记录</span>
+            {receipt !== null ? (
+              <span className={styles.depositReceipt}>已通过 {receipt}</span>
+            ) : pendingDeposits > 0 ? (
+              <span className={styles.depositCount}>{pendingDeposits}</span>
+            ) : null}
           </button>
         )}
       </aside>
@@ -170,7 +192,7 @@ export function TeamLibraryPage() {
       {/* 资产存入申请抽屉（§7.3）：路由 #/team/deposits 时覆盖在网格上。
           守卫 canHandleDepositRequests：子账号手敲这个 hash 也开不出抽屉。 */}
       {drawerOpen && canHandleDepositRequests(user) && (
-        <DepositRequestDrawer onClose={() => navigate({ name: 'team' })} />
+        <DepositRequestDrawer onClose={() => navigate({ name: 'team' })} onApproved={onDepositApproved} />
       )}
     </div>
   )
