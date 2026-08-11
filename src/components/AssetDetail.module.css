@@ -593,15 +593,18 @@
 
 /* 提示词输入框 + 右下角展开角标：wrapper 接手撑满高度，角标绝对定位坐在框右下角。 */
 .promptWrap { position: relative; flex: 1; min-height: 250px; display: flex; }
-/* 「⤢ 展开」收成框内右下角常驻玻璃角标（无文字、不占标签行）。 */
+/* 「⤢ 展开」收成框内右下角玻璃角标（无文字、不占标签行）：hover 提示词框才淡入。 */
 .expandCorner {
   position: absolute; right: 12px; bottom: 12px; z-index: 2;
   width: 28px; height: 28px; border-radius: 8px; padding: 0; cursor: pointer;
   display: flex; align-items: center; justify-content: center; line-height: 1; font-size: 15px;
   background: rgba(20, 22, 28, 0.55); border: 1px solid rgba(255, 255, 255, 0.14);
   color: rgba(255, 255, 255, 0.7); backdrop-filter: blur(6px);
-  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.14s ease, background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
 }
+.promptWrap:hover .expandCorner,
+.expandCorner:focus-visible { opacity: 1; pointer-events: auto; }
 .expandCorner:hover { background: rgba(20, 22, 28, 0.82); color: #f2f2f4; border-color: rgba(255, 255, 255, 0.34); }
 .fhint { font-weight: 400; color: rgba(255, 255, 255, 0.38); font-size: 11px; }
 
