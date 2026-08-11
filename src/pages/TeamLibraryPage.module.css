@@ -185,7 +185,7 @@
 
 .btn:hover { background: rgba(255, 255, 255, 0.1); }
 
-/* 智能排序：设计稿带一圈淡青色外发光 */
+/* 排序按钮：设计稿带一圈淡青色外发光 */
 .btnSort {
   background: transparent;
   box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.2);
@@ -305,4 +305,37 @@
   .content { padding: 16px 16px 120px; }
   .toolbar { flex-wrap: wrap; }
   .search { width: 180px; }
+}
+
+/* 单份删除（0814 · PRD #31）：hover 才浮出的垃圾桶，仅主账号可见。 */
+.del {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(0, 0, 0, 0.5);
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.del svg { width: 14px; height: 14px; }
+.cell:hover .del { opacity: 1; pointer-events: auto; }
+.del:hover { background: rgba(255, 92, 92, 0.9); border-color: #ff6b6b; color: #fff; }
+
+/* 删除结果 toast */
+.toast {
+  position: fixed; bottom: 34px; left: 50%; transform: translateX(-50%);
+  background: var(--accent); color: var(--accent-ink); font-weight: 600; font-size: 13px;
+  padding: 11px 20px; border-radius: 12px; box-shadow: 0 12px 30px rgba(var(--accent-rgb), 0.25);
+  z-index: 2500; max-width: min(560px, 90vw); text-align: center;
 }

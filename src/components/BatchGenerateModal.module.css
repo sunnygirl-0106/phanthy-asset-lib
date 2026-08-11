@@ -39,9 +39,14 @@
 .groupCount { font-size: 12px; color: var(--text-muted); }
 .groupRule { flex: 1; height: 1px; background: var(--line-soft); }
 .groupNote { font-size: 12px; color: var(--text-muted); flex: none; }
+/* 「已生成」分区的口径说明（默认不勾 + 覆盖原图） */
+.groupHint { margin: 6px 0 10px; font-size: 12.5px; line-height: 1.6; color: var(--text-muted); }
+.groupHint b { color: var(--text-1, #e6e8ec); font-weight: 600; }
 
 /* 作用域切换器 */
 .scopeBar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 20px 0; }
+/* 顶部右上角：已选 X/Y + 全选（列表级操作从底栏上移到这里） */
+.scopeRight { margin-left: auto; display: flex; align-items: center; gap: 10px; flex: none; }
 .scopeBtn {
   padding: 5px 12px; border-radius: 8px; cursor: pointer; font: inherit; font-size: 13px;
   background: transparent; border: 1px solid var(--line-soft); color: var(--text-main);
@@ -53,6 +58,8 @@
 .rowRegen { opacity: 0.92; }
 .regenTag { font-size: 11.5px; color: #f5c26b; padding: 1px 7px; border-radius: 6px; background: rgba(245, 194, 107, 0.12); }
 .footNote { font-size: 12.5px; color: var(--text-muted); }
+/* 底栏下方的保存时机说明 */
+.footTip { margin: 0; padding: 0 20px 12px; font-size: 12px; color: var(--text-muted); background: var(--panel-3, #14171d); }
 
 .row { padding: 10px 0; border-bottom: 1px dashed rgba(255, 255, 255, 0.06); }
 .rowDone { opacity: 0.6; }
@@ -90,7 +97,7 @@
 
 .empty { padding: 40px 0; text-align: center; color: var(--text-muted); font-size: 13px; }
 
-.foot { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--line-soft); background: var(--panel-3, #14171d); flex-wrap: wrap; }
+.foot { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--line-soft); background: var(--panel-3, #14171d); }
 .selectAll {
   padding: 5px 12px; border-radius: 8px; cursor: pointer; font: inherit; font-size: 12.5px;
   background: transparent; border: 1px solid var(--line-soft); color: var(--text-main);
@@ -100,8 +107,9 @@
 .footSel { font-size: 13.5px; color: var(--text-main); }
 .params { display: flex; gap: 6px; margin-left: auto; }
 .sel { padding: 5px 8px; border-radius: 7px; border: 1px solid var(--line-soft); background: var(--field, #12151b); color: var(--text-main); font-size: 12.5px; }
-.cost { font-size: 13.5px; color: #f5c26b; }
-.genBtn { padding: 8px 18px; border-radius: 9px; border: none; background: var(--accent, #4cc2c4); color: #06222a; font-size: 13px; font-weight: 600; cursor: pointer; }
+/* 星钻 / 生成 定宽 + 右对齐：数字位数变化时按钮宽度不变，生成钉在同一位置不跳。 */
+.cost { font-size: 13.5px; color: #f5c26b; min-width: 78px; text-align: right; flex: none; }
+.genBtn { min-width: 104px; text-align: center; padding: 8px 18px; border-radius: 9px; border: none; background: var(--accent, #4cc2c4); color: #06222a; font-size: 13px; font-weight: 600; cursor: pointer; flex: none; }
 .genBtn:disabled { opacity: 0.45; cursor: not-allowed; }
 .genBtn:not(:disabled):hover { filter: brightness(1.06); }
 

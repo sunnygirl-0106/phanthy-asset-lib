@@ -206,7 +206,11 @@ export function canRelistPlazaAsset(user: User, asset: Asset): boolean {
  */
 export function canDeleteLibraryAsset(user: User, asset: Asset): boolean {
   if (asset.scope !== 'team' && asset.scope !== 'project') return false
-  return !isAdmin(user)
+  if (isAdmin(user)) return false
+  // 团队库删除仅主账号（0814 · PRD #31）：团队库是团队共同资产，
+  // 删除不可恢复，收口到主账号；子账号连删除键都看不到。
+  if (asset.scope === 'team') return isOwner(user)
+  return true
 }
 
 /**

@@ -40,9 +40,13 @@ const SCOPES: { key: Scope; label: string }[] = [
   { key: 'plaza', label: '广场' },
 ]
 
-// 有"造型/其他样式"能力的品类：一律点进详情选图再用（不走卡片直接使用），
-// 这样它们即使当前只有一张图，也能在详情里看到「造型/其他样式（0）」并放大/下载/新增。
-const STYLE_CATS = new Set(['character', 'scene', 'prop'])
+// 一律点进详情再用（不走卡片直接使用）的品类：
+//   · character / scene / prop —— 有"造型/其他样式"能力，即使当前只有一张图，
+//     也要能在详情里看到「造型/其他样式（0）」并放大 / 下载 / 新增。
+//   · other —— 0814 口径统一（PRD #23/#24）：「其他」里的图片 / 视频 / 文本
+//     点击行为与普通图片资产一致，hover 一律出「查看并使用」，进详情后
+//     既能看提示词、也能把它带到画布，而不是图片直接用、视频另开播放器。
+const STYLE_CATS = new Set(['character', 'scene', 'prop', 'other'])
 
 /** 网格展示顺序：角色 → 服装 → 场景 → 道具 → 音频 →「其他」垫底（对齐类目 Tab；其余归到末尾）。 */
 const CAT_RANK: Record<string, number> = { character: 0, costume: 1, scene: 2, prop: 3, audio: 4, other: 5 }
@@ -217,8 +221,8 @@ export function CanvasAssetPanel({
             <button className={`${styles.actBtn} ${styles.actPrimary}`} onClick={(e) => { e.stopPropagation(); onUse(defaultPayload(a)) }}>
               使用
             </button>
-            {/* 「其他」是存进来的成品、无提示词，不给提示词入口 */}
-            {a.category !== 'other' && canViewPrompt(a) && (
+            {/* 「其他」多数是存进来的成品、本来没有提示词；回存时带了提示词的才给入口 */}
+            {(a.category !== 'other' || !!a.prompt?.trim()) && canViewPrompt(a) && (
               <button className={`${styles.actBtn} ${styles.actGhost}`} onClick={(e) => { e.stopPropagation(); setOpenPromptDirectly(true); setDetailAssetId(a.id) }}>
                 提示词
               </button>

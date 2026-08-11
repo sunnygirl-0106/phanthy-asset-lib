@@ -10,7 +10,8 @@
  *     不套边框、不设左边栏（按截屏来）。
  *
  * 【逻辑照旧、一份没少】素材卡点开的仍是全局 AssetDetail 弹窗（团队库同款好看外壳）：
- *   广场作用域下它天然只读——只出「＋ 直接复用到项目」「☆ 收藏进团队库」两个动作，
+ *   广场作用域下它天然只读——主账号出「＋ 直接复用到项目」「☆ 收藏进团队库」两个动作；
+ *   子账号只出「＋ 直接复用到项目」，收藏入口整个不渲染（0814 · PRD #37 / 权限矩阵），
  *   不显示改名 / 设为封面 / 换音色 / 上传等编辑项（canEditCover·canEditVoice 对 plaza 恒 false）。
  *   所有流转动作仍只调 store（runDirectReuse / runFavorite …），规则留在 services/ 里，这里只管陈列。
  *
@@ -20,7 +21,7 @@
 import { useMemo, useState } from 'react'
 import type { Category } from '../data/types'
 import { useStore, useCurrentUser } from '../store/useStore'
-import { canSee, isListed } from '../services/permission'
+import { canSee, isListed, canFavorite } from '../services/permission'
 import { AssetCard } from '../components/AssetCard'
 import { AssetDetail } from '../components/AssetDetail'
 import { WorkCard } from '../components/WorkCard'
@@ -129,7 +130,11 @@ export function PlazaPage() {
         <div className={styles.secHead}>
           <div>
             <h2 className={styles.secTitle}>精选素材</h2>
-            <p className={styles.secSub}>可收藏进团队库，直接复用到项目</p>
+            {/* 副标题按角色分（PRD #37）：子账号没有「收藏进团队库」这项能力，
+                就不该在页面上读到这句话——文案跟入口一起收，别让人白点一圈。 */}
+            <p className={styles.secSub}>
+              {canFavorite(user) ? '可收藏进团队库，直接复用到项目' : '可直接复用到项目'}
+            </p>
           </div>
         </div>
 

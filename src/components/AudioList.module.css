@@ -167,3 +167,21 @@
   color: #ff7a7a;
   white-space: nowrap;
 }
+
+/* ── 批量选择（0814 · PRD #2：音频也要能进批量删除）── */
+.audioRowSelected { outline: 2px solid var(--accent); outline-offset: 2px; }
+.audioCheck {
+  flex: none;
+  width: 20px; height: 20px; margin-right: 2px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0; border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--accent-ink); font-size: 12px; font-weight: 700; line-height: 1;
+  cursor: pointer; opacity: 0; pointer-events: none;
+  transition: opacity 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+.audioRow:hover .audioCheck,
+.audioCheckShown,
+.audioCheckOn { opacity: 1; pointer-events: auto; }
+.audioCheckOn { background: var(--accent); border-color: var(--accent); }

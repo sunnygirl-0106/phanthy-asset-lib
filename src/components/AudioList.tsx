@@ -42,10 +42,22 @@ export type AudioListMode =
       onDelete: (a: Asset) => void
     }
 
+/**
+ * 批量选择（0814 · PRD #2）：音频与「其他」一样要能进批量删除，
+ * 所以库页在选择态下把勾选框塞到行首。画布模式不传这个 prop，行为不变。
+ */
+export interface AudioListSelection {
+  /** 是否处于选择态（选择态下勾选框常驻，非选择态 hover 才浮出）。 */
+  selecting: boolean
+  isSelected: (a: Asset) => boolean
+  onToggle: (a: Asset) => void
+}
+
 export function AudioList({
   items,
   mode,
-}: { items: Asset[]; mode: AudioListMode }) {
+  selection,
+}: { items: Asset[]; mode: AudioListMode; selection?: AudioListSelection }) {
   // 试听：共享一个 <audio>，同一时刻只播一段。
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [playingId, setPlayingId] = useState<string | null>(null)
@@ -93,10 +105,22 @@ export function AudioList({
         return (
           <div
             key={a.id}
-            className={`${styles.audioRow} ${playing ? styles.audioRowOn : ''}`}
+            className={`${styles.audioRow} ${playing ? styles.audioRowOn : ''} ${selection?.isSelected(a) ? styles.audioRowSelected : ''}`}
             draggable={mode.kind === 'canvas' && !editing}
             onDragStart={mode.kind === 'canvas' ? (e) => mode.onDragStart(e, a) : undefined}
           >
+            {selection && (
+              <button
+                type="button"
+                className={`${styles.audioCheck} ${selection.isSelected(a) ? styles.audioCheckOn : ''} ${selection.selecting ? styles.audioCheckShown : ''}`}
+                title={selection.isSelected(a) ? '取消选择' : '选择'}
+                aria-pressed={selection.isSelected(a)}
+                onClick={(e) => { e.stopPropagation(); selection.onToggle(a) }}
+              >
+                {selection.isSelected(a) ? '✓' : ''}
+              </button>
+            )}
+
             <button
               className={styles.audioPlay}
               onClick={() => togglePlay(a)}

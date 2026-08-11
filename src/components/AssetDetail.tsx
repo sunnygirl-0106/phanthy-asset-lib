@@ -45,6 +45,14 @@ const IMG_PLACEHOLDER = assetUrl('assets/canvas/image-placeholder.svg')
 
 /** 去掉 ?g=N 后缀，拿到图片本体地址。 */
 function baseUrl(u: string): string { return u.split('?')[0] }
+
+/* 本地上传的校验口径（0814 · PRD #6）——三个数写在一处，界面文案与校验读同一份，
+   免得副文案写着 20 张、代码里拦 10 张这种经典对不上。 */
+const UPLOAD_ACCEPT = ['image/png', 'image/jpeg', 'image/webp']
+const UPLOAD_ACCEPT_LABEL = 'png、jpg、webp'
+const UPLOAD_MAX_COUNT = 20
+const UPLOAD_MAX_MB = 20
+const UPLOAD_MAX_BYTES = UPLOAD_MAX_MB * 1024 * 1024
 /** 生成图来源（0812）：定稿 → 真实参考图（就位的槽）→ 造型成品图替身（lookUrl，演示脚手架）→ 通用占位图。 */
 function genSourceOf(a: { cover: string; fields?: { lookUrl?: unknown } }, usableRef?: string): string {
   const look = typeof a.fields?.lookUrl === 'string' ? a.fields.lookUrl : undefined
@@ -64,6 +72,12 @@ const MODEL_OPTS = ['phan nano Image 3', 'phan nano Image 2 Pro', 'Seedream 3.0'
  *   · 定义层 —— 下面 snapshotOf 收窄的这几个字段（名称 / 提示词 / 定稿 / 参考图 / 音色），
  *     回答「这份资产对外是什么」，会被画布节点引用、被同项目的人看到，需用户显式保存。
  * 生成参数（比例 / 数量 / 质量 / 模型）是纯本地 UI 态、压根没进 store，不计入未保存改动。
+ *
+ * 【0814 · 生成即保存】点「生成」= 对定义层做一次完整保存，等价于点了「保存」：
+ * 名称 / 提示词 / 定稿 / 参考图 / 音色全部接受为新基线，退出不再回滚。
+ * 理由是数据一致性而非体验偏好——图一旦生成就已入库、已扣星钻，是既成事实；
+ * 若此时定义层被退出回滚，库里就会留下一张"配方对不上"的图，重新生成还会出另一个东西。
+ * 生成之后再改的，照旧走右上角「N 处改动未保存」那条路。
  *
  * 「有没有未保存改动」不再靠一个布尔 dirty 猜，而是把当前定义层字段和进入详情时的
  * 快照逐条 diff——哪几条不一样就列哪几条，逐项可还原（见 store.revertAssetFields）。 */
@@ -101,17 +115,6 @@ function TrashIcon() {
       <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
       <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
       <path d="M10 11v6M14 11v6" />
-    </svg>
-  )
-}
-
-/** 空壳占位大图图标。 */
-function PlaceholderIcon() {
-  return (
-    <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-      <circle cx="8.5" cy="8.5" r="1.5" />
-      <path d="m21 15-5-5L5 21" />
     </svg>
   )
 }
@@ -537,12 +540,26 @@ export function AssetDetail({
   // 本次会话新入库的图片张数（素材层）：只用来在气泡里安抚「这些图不会丢」。
   const newImgCount = Math.max(0, (asset.candidates?.length ?? 0) - baselineRef.current.imgs)
 
+  /**
+   * 把「当前定义层状态」接受为新基线 = 一次保存。
+   * 「保存」按钮和「生成」共用它——这样两条路径不可能对不齐（0814 · 生成即保存）。
+   * 读 store 最新值而不是闭包里的 asset：调用前可能刚 setPrompt 过一次。
+   */
+  function commitBaseline() {
+    const fresh = useStore.getState().world.assets.find((a) => a.id === asset!.id) ?? asset!
+    baselineRef.current = {
+      id: fresh.id,
+      snap: { ...snapshotOf(fresh), prompt: promptDraft },
+      imgs: fresh.candidates?.length ?? 0,
+    }
+    setPromptSaved(true)
+  }
+
   /** 点「保存」：接受本次全部定义层改动——提示词落一版、把当前状态定为新基线，并闪现「已保存」。 */
   function commitSave() {
     if (promptDirty) setPrompt(asset!.id, promptDraft)
-    baselineRef.current = { id: asset!.id, snap: { ...snapshotOf(asset!), prompt: promptDraft }, imgs: asset!.candidates?.length ?? 0 }
+    commitBaseline()
     setDirtyOpen(false)
-    setPromptSaved(true)
   }
 
   /** 请求关闭：不再弹退出确认弹窗，但离开时照旧丢弃未保存的定义层改动——
@@ -575,10 +592,12 @@ export function AssetDetail({
       setResult({ ok: false, message: '先写提示词再生成' })
       return
     }
-    // 点生成时提示词随本批图一起落库（配方跟着图走），所以它已经不会丢——
-    // 把基线 prompt 同步推到当前草稿，生成完就不再把这段提示词算作「未保存改动」。
+    // 【生成即保存】点生成 = 一次完整保存，不区分字段（0814 口径）。
+    // 提示词是定义层里唯一不即时写 store 的字段，先把草稿落库；
+    // 其余字段（名称 / 定稿 / 参考图 / 音色）本来就即时写了 store，只是会被退出回滚，
+    // 所以这里把基线整份重置成"当前状态"，等于把它们一并接受下来。
     if (promptDraft !== (asset!.prompt ?? '')) setPrompt(asset!.id, promptDraft)
-    if (baselineRef.current) baselineRef.current.snap = { ...baselineRef.current.snap, prompt: promptDraft }
+    commitBaseline()
     setGenerating(genCount)
     const src = genSourceOf(asset!, usableRefUrls(world, asset!)[0])
     const urls = Array.from({ length: genCount }, (_, i) => `${src}?g=${Date.now()}${i}`)
@@ -598,13 +617,46 @@ export function AssetDetail({
 
   /**
    * 上传本地图片作为这份资产的图（不是参考图）：并入图片列表。
-   * 0810：资产原本没图时，这张自动成为定稿（有图必有定稿）。
+   * 0810：资产原本没图时，第一张自动成为定稿（有图必有定稿）。
+   * 0814（PRD #6）：支持一次多选，按「格式 → 大小 → 张数」三道校验后汇总一条结果，
+   * 不合规的逐条说清为什么被跳过，而不是整批失败或者悄悄少几张。
    */
-  function uploadLocalImage(file: File | null) {
-    if (!file) return
-    const url = URL.createObjectURL(file)
-    setResult(appendCandidates(asset!.id, [url]))
+  function uploadLocalImages(files: FileList | null) {
+    if (!files || files.length === 0) return
+    const picked = Array.from(files)
+    const rejects: string[] = []
+
+    const typeOk = picked.filter((f) => {
+      if (UPLOAD_ACCEPT.includes(f.type)) return true
+      rejects.push(`「${f.name}」格式不支持`)
+      return false
+    })
+    const sizeOk = typeOk.filter((f) => {
+      if (f.size <= UPLOAD_MAX_BYTES) return true
+      rejects.push(`「${f.name}」超过 ${UPLOAD_MAX_MB}MB`)
+      return false
+    })
+
+    // 张数上限只截断、不算失败：用户一次拖了 30 张，留前 20 张比整批拒绝有用。
+    const overflow = Math.max(0, sizeOk.length - UPLOAD_MAX_COUNT)
+    const accepted = sizeOk.slice(0, UPLOAD_MAX_COUNT)
+
+    if (accepted.length === 0) {
+      setResult({ ok: false, message: rejects[0] ?? `仅支持 ${UPLOAD_ACCEPT_LABEL}` })
+      return
+    }
+
+    const r = appendCandidates(asset!.id, accepted.map((f) => URL.createObjectURL(f)))
     markDirty()
+    if (!r.ok) { setResult(r); return }
+
+    const tail: string[] = []
+    if (overflow > 0) tail.push(`一次最多上传 ${UPLOAD_MAX_COUNT} 张，已为你保留前 ${UPLOAD_MAX_COUNT} 张`)
+    if (rejects.length > 0) tail.push(`${rejects.length} 张未通过校验：${rejects.join('、')}`)
+    setResult({
+      ok: true,
+      message: tail.length ? `已添加 ${accepted.length} 张图片（${tail.join('；')}）` : `已添加 ${accepted.length} 张图片`,
+    })
   }
 
   /** 图片列表加号：从素材库挑一张图并入这份资产。 */
@@ -810,8 +862,14 @@ export function AssetDetail({
             </button>
             <label className={styles.refChoice} title="本地预览，接后端后落对象存储">
               <b>上传本地图片</b>
-              <span>从本地选一张图，加入这份资产</span>
-              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { uploadLocalImage(e.target.files?.[0] ?? null); setAddPicker(null) }} />
+              <span>支持 {UPLOAD_ACCEPT_LABEL}，可多选，单次最多 {UPLOAD_MAX_COUNT} 张，单张不超过 {UPLOAD_MAX_MB}MB</span>
+              <input
+                type="file"
+                multiple
+                accept={UPLOAD_ACCEPT.join(',')}
+                style={{ display: 'none' }}
+                onChange={(e) => { uploadLocalImages(e.target.files); setAddPicker(null) }}
+              />
             </label>
           </div>
           <div className={styles.inlActions}>
@@ -1129,9 +1187,16 @@ export function AssetDetail({
     )
   }
 
-  // ═══ 画布场景（onUse）：定稿 + 候选池，挑一张图用到画布。 ═══
+  // ═══ 画布场景（onUse）：一个统一图片网格，挑一张图用到画布；音色收进头部 pill。 ═══
   if (onUse) {
     const playVoice = () => { if (asset.voice) new Audio(asset.voice.previewUrl).play().catch(() => {}) }
+    // 画布二级页统一成一个图片网格：项目层用候选池（定稿排第一），团队 / 广场只有定稿一张。
+    const rawImages = hasCandidatePool && candidates.length > 0
+      ? candidates.map((c) => ({ key: c.id, url: c.url, isFinal: showFinalBadge && c.id === finalCandId }))
+      : coverImg
+        ? [{ key: 'cover', url: coverImg, isFinal: false }]
+        : []
+    const gridImages = [...rawImages].sort((a, b) => Number(b.isFinal) - Number(a.isFinal))
     return (
       <div className={styles.cvInline}>
         <div className={styles.cvHead}>
@@ -1139,106 +1204,88 @@ export function AssetDetail({
             <span className={styles.cvTitle}>资产</span>
             <button className={styles.close} title="关闭" onClick={onClose}>✕</button>
           </div>
-          <button className={styles.cvBack} onClick={onBack ?? onClose}>‹ {asset.name}</button>
+          {/* 二级页头：返回 + 名称 + 图片数（左）｜ 音色 pill（右） */}
+          <div className={styles.cvSubHead}>
+            <button className={styles.cvBack} onClick={onBack ?? onClose}>
+              <span className={styles.cvBackArrow}>‹</span>
+              <span className={styles.cvBackName}>{asset.name}</span>
+              {gridImages.length > 0 && <span className={styles.cvBackCount}>{gridImages.length} 张图片</span>}
+            </button>
+            {isCharacter && (
+              asset.voice ? (
+                <div
+                  className={styles.voicePillBar}
+                  draggable={!!onVoiceDragStart}
+                  onDragStart={onVoiceDragStart}
+                  title={`音色：${asset.voice.name}`}
+                >
+                  <span className={styles.vpbIco}><MicIcon /></span>
+                  <span className={styles.vpbName}>
+                    {asset.voice.name}
+                    {asset.voice.gender && <span className={styles.gtag}>{asset.voice.gender}</span>}
+                  </span>
+                  <span className={styles.vpbDivider} aria-hidden />
+                  <button className={styles.vpbPlay} title="试听" onClick={playVoice}>▶</button>
+                  <button
+                    className={styles.vpbAdd}
+                    title="放到画布"
+                    onClick={() => onUse?.({ voice: { url: asset.voice!.previewUrl, name: `${asset.name}·音色` } })}
+                  >
+                    ＋
+                  </button>
+                </div>
+              ) : (
+                <div className={`${styles.voicePillBar} ${styles.voicePillBarOff}`}>
+                  <span className={`${styles.vpbIco} ${styles.vpbIcoOff}`}><MicOffIcon /></span>
+                  <span className={styles.vpbNameOff}>未设置音色</span>
+                </div>
+              )
+            )}
+          </div>
         </div>
 
         <div className={styles.cvBody}>
-          {/* 定稿（左）+ 音色（右）并排 */}
-          <div className={styles.anchorWrap}>
-            <div className={styles.secTag}><span className={styles.secDot} />定稿</div>
-            <div className={styles.anchorRow}>
-              <div className={styles.sumo}>
-                <div className={styles.sumoPic}>
-                  {isEmpty ? (
-                    <div className={styles.emptyBig}><PlaceholderIcon /><span>待生成</span></div>
-                  ) : (
-                    <img src={coverImg} alt={asset.name} />
-                  )}
-                  {!isEmpty && (
+          {isOther && otherMedia === 'text' ? (
+            // 「其他」文本没有封面图，走不了图片网格：单独渲染一张正文卡，
+            // 行为与图片一致——hover 出「使用」，点了落一个文本节点到画布（PRD #23/#24）。
+            <div className={styles.cvGrid}>
+              <div className={styles.cvCard}>
+                <div className={`${styles.cvPic} ${styles.cvPicText}`}>
+                  <div className={styles.otherTextBig}>{(asset.fields.text as string) || '（暂无正文）'}</div>
+                  <div className={styles.cvOv}>
+                    <button
+                      className={styles.lookUse}
+                      onClick={() => onUse({ text: { name: asset.name, content: (asset.fields.text as string) ?? '' } })}
+                    >
+                      使用
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : gridImages.length === 0 ? (
+            <div className={styles.emptyResult}>
+              <span className={styles.emptyResultText}>{EMPTY_HINT_BY_CATEGORY[asset.category] || '你的图将会在这里展示'}</span>
+            </div>
+          ) : (
+            <div className={styles.cvGrid}>
+              {gridImages.map((g, i) => (
+                <div key={g.key} className={styles.cvCard}>
+                  <div className={styles.cvPic}>
+                    <img src={g.url} alt={asset.name} loading="lazy" />
                     <div className={styles.thumbIcons}>
-                      <button className={styles.thumbBtn} title="放大查看" onClick={() => setPreview({ src: coverImg, name: '定稿' })}><ZoomIcon /></button>
-                      <button className={styles.thumbBtn} title="下载原图" onClick={() => downloadImage(coverImg, `${asset.name}·定稿`)}><DownloadIcon /></button>
+                      <button className={styles.thumbBtn} title="放大查看" onClick={() => setPreview({ src: g.url, name: g.isFinal ? '定稿' : '图片' })}><ZoomIcon /></button>
+                      <button className={styles.thumbBtn} title="下载原图" onClick={() => downloadImage(g.url, asset.name)}><DownloadIcon /></button>
                     </div>
-                  )}
-                  {!isEmpty && (
-                    <div className={styles.sumoOvC}>
-                      <button className={styles.lookUse} onClick={() => onUse({ cover: coverImg })}>使用</button>
-                      {canViewPrompt(asset) && (
+                    <div className={styles.cvOv}>
+                      <button className={styles.lookUse} onClick={() => onUse({ cover: g.url })}>使用</button>
+                      {/* 提示词是资产级配方，只在第一张（定稿）卡上给入口，不逐张重复。 */}
+                      {i === 0 && canViewPrompt(asset) && (!isOther || !!asset.prompt?.trim()) && (
                         <button className={styles.sumoPrompt} onClick={openPrompt}>提示词</button>
                       )}
                     </div>
-                  )}
-                </div>
-                <div className={styles.sumoCap}><b>定稿</b></div>
-              </div>
-
-              {isCharacter && (
-                <div className={styles.rightAnchor}>
-                  <div
-                    className={styles.voiceBox}
-                    draggable={!!(asset.voice && onVoiceDragStart)}
-                    onDragStart={asset.voice ? onVoiceDragStart : undefined}
-                  >
-                    {asset.voice ? (
-                      <>
-                        <div className={styles.voiceTop}>
-                          <div className={styles.voiceIco}><MicIcon /></div>
-                          <div className={styles.voiceMeta}>
-                            <div className={styles.voiceName}>
-                              {asset.voice.name}
-                              {asset.voice.gender && <span className={styles.gtag}>{asset.voice.gender}</span>}
-                            </div>
-                            <div className={styles.voiceTag}>
-                              {asset.voice.type === 'cloned' ? '复刻 · 接模型后生效' : '预置音色'}
-                            </div>
-                          </div>
-                          {asset.scope === 'plaza' && <span className={styles.voiceRo}>官方·只读</span>}
-                        </div>
-                        <div className={styles.voiceActions}>
-                          <button className={styles.listen} onClick={playVoice}>▶ 试听</button>
-                          <button
-                            className={styles.useVoice}
-                            onClick={() => onUse?.({ voice: { url: asset.voice!.previewUrl, name: `${asset.name}·音色` } })}
-                          >
-                            ＋ 放到画布
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <div className={styles.voiceTop}>
-                        <div className={`${styles.voiceIco} ${styles.voiceIcoOff}`}><MicOffIcon /></div>
-                        <div className={styles.voiceMeta}>
-                          <div className={styles.voiceNameOff}>音色 · 未设置</div>
-                          <div className={styles.voiceTag}>这个角色还没有声音</div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* 全部图片：挑一张用到画布（规则 14：只有项目层资产有候选池；团队库 / 广场只给定稿 → 使用）。 */}
-          {hasCandidatePool && (
-          <div className={styles.looksHead}>
-            <div className={styles.looksHeadT}>全部图片（{candidates.length}）</div>
-          </div>
-          )}
-          {hasCandidatePool && candidates.length > 0 && (
-            <div className={styles.looksGrid}>
-              {candidates.map((c) => (
-                <div key={c.id} className={styles.lookCard}>
-                  <div className={styles.lookPic}>
-                    <img src={c.url} alt={asset.name} loading="lazy" />
-                    <div className={styles.thumbIcons}>
-                      <button className={styles.thumbBtn} title="放大查看" onClick={() => setPreview({ src: c.url, name: '候选图' })}><ZoomIcon /></button>
-                      <button className={styles.thumbBtn} title="下载原图" onClick={() => downloadImage(c.url, `${asset.name}·候选`)}><DownloadIcon /></button>
-                    </div>
-                    <div className={styles.lookOvC}>
-                      <button className={styles.lookUse} onClick={() => onUse({ cover: c.url })}>使用</button>
-                    </div>
-                    {showFinalBadge && c.id === finalCandId && <span className={styles.finalBadgeSm}>★ 定稿</span>}
+                    {isOther && otherMedia === 'video' && <span className={styles.cvPlayGlyph} aria-hidden>▶</span>}
+                    {g.isFinal && <span className={styles.finalBadgeSm}>★ 定稿</span>}
                   </div>
                 </div>
               ))}
@@ -1528,9 +1575,22 @@ export function AssetDetail({
                   <div className={styles.otherTextBig}>{(asset.fields.text as string) || '（暂无正文）'}</div>
                 ) : (
                   <div className={styles.bigMediaWrap}>
-                    <img src={coverImg} alt={asset.name} />
-                    {otherMedia === 'video' && (
-                      <div className={styles.videoPlayBig} title="视频播放器占位（本期不接真实播放）" aria-hidden>▶</div>
+                    {/* 视频与图片走同一条路径（PRD #23/#24）：都在详情里看。
+                        有真实视频源就原地播放；demo 暂无源时退回"海报 + 播放三角"占位。 */}
+                    {otherMedia === 'video' && !!(asset.fields.videoUrl as string | undefined) ? (
+                      <video
+                        className={styles.bigVideo}
+                        src={asset.fields.videoUrl as string}
+                        poster={coverImg}
+                        controls
+                      />
+                    ) : (
+                      <>
+                        <img src={coverImg} alt={asset.name} />
+                        {otherMedia === 'video' && (
+                          <div className={styles.videoPlayBig} title="视频播放器占位 · 接入视频源后自动生效" aria-hidden>▶</div>
+                        )}
+                      </>
                     )}
                   </div>
                 )
@@ -1718,6 +1778,11 @@ export function AssetDetail({
               </select>
             </label>
             <div className={styles.footRight}>
+              {/* 生成即保存（0814 · PRD #15.1）：把这句写在按钮旁边，
+                  用户就不必先「保存」再「生成」——点生成本身就是一次保存。 */}
+              {hasUnsaved && (
+                <span className={styles.genTip}>点「生成」将一并保存当前的 {changes.length} 处改动</span>
+              )}
               <span className={styles.costHint}>预计消耗 <b>{genCount * COST_PER_IMAGE}</b> 星钻</span>
               <button
                 className={`${styles.genBtn} ${!asset.cover ? styles.genBtnPulse : ''}`}

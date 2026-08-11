@@ -289,16 +289,28 @@ describe('批量生成（0812：拓扑分波 + generating 中间态）', () => {
     store.getState().world.assets.find((a: { id: string }) => a.id === id)
   const P = '/placeholder.png'
 
-  it('空壳批量生成：先进 generating，1200ms 后 done、首张自动定稿；已有成品跳过', () => {
+  it('空壳批量生成：先进 generating，1200ms 后 done、首张自动定稿；已有图的算重新生成', () => {
     vi.useFakeTimers()
     try {
       // d_ajie_suit / d_suke_pajamas 是造型空壳（上游已在 beforeEach 出图 → refsReady）；d_ajie 成品 → 混选
       expect(byId('d_ajie_suit').status).toBe('empty')
       const r = store.getState().batchGenerate(['d_ajie_suit', 'd_suke_pajamas', 'd_ajie'], P)
       expect(r.ok).toBe(true)
-      expect(r.message).toContain('跳过 1 份') // d_ajie 已有图
-      // 立即：进入生成中（异步落地）
-      expect(byId('d_ajie_suit').status).toBe('generating')
+      // 0814 口径（PRD #10）：已有图的资产不再被"跳过"，它照样进批次，只是算【重新生成】。
+      expect(r.message).toContain('生成 2 份')
+      expect(r.message).toContain('重新生成 1 份')
+      expect(r.message).not.toContain('跳过')
+      // 立即：第一波（d_ajie 自己、以及上游不在批次内的 d_suke_pajamas）进 generating；
+      // d_ajie_suit 参考 d_ajie，而 d_ajie 这次也在批次里 → 它被排到第二波，此刻还没动。
+      expect(byId('d_ajie').status).toBe('generating')
+      expect(byId('d_suke_pajamas').status).toBe('generating')
+      expect(byId('d_ajie_suit').status).toBe('empty')
+
+      vi.advanceTimersByTime(1300)
+      expect(byId('d_ajie').status).toBe('done')
+      expect(byId('d_suke_pajamas').status).toBe('done')
+      expect(byId('d_ajie_suit').status).toBe('generating') // 第二波开跑
+
       vi.advanceTimersByTime(1300)
       const trench = byId('d_ajie_suit')
       expect(trench.status).toBe('done') // 有图必成品、首张自动定稿
@@ -306,7 +318,33 @@ describe('批量生成（0812：拓扑分波 + generating 中间态）', () => {
       expect(trench.candidates.length).toBe(1) // 默认每份 1 张
       // 参考槽照留（0812 §8.4）：两个资产级槽不动
       expect(trench.references?.length).toBe(2)
-      expect(byId('d_suke_pajamas').status).toBe('done')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('重新生成 = 覆盖：新图整批替换原候选池与定稿（0814 · PRD #10）', () => {
+    vi.useFakeTimers()
+    try {
+      // 先给 d_ajie 攒够 2 张图，再整份重新生成 3 张——覆盖后应该只剩这 3 张。
+      const before = byId('d_ajie')
+      expect(before.status).toBe('done')
+      const oldUrls = (before.candidates ?? []).map((c: { url: string }) => c.url)
+      expect(oldUrls.length).toBeGreaterThan(0)
+
+      store.getState().batchGenerate(['d_ajie'], P, 3)
+      vi.advanceTimersByTime(1300)
+
+      const after = byId('d_ajie')
+      expect(after.status).toBe('done')
+      expect(after.candidates.length).toBe(3) // 不是 旧的 + 3，而是就 3 张
+      expect(after.cover).toBe(after.candidates[0].url) // 定稿跟着换成本批第一张
+      for (const u of oldUrls) {
+        expect(after.candidates.some((c: { url: string }) => c.url === u)).toBe(false)
+      }
+      // 覆盖只动图，参考槽与提示词不受影响
+      expect(after.prompt).toBe(before.prompt)
+      expect(after.references?.length ?? 0).toBe(before.references?.length ?? 0)
     } finally {
       vi.useRealTimers()
     }
@@ -927,5 +965,100 @@ describe('删除分层（R1：项目库归零 → 空壳；团队库归零 → �
   it('权限：admin 不能清空项目资产（canDeleteLibraryAsset 挡）', () => {
     store.getState().setCurrentUser('u_admin')
     expect(store.getState().clearAssetImages('d_ajie').ok).toBe(false)
+  })
+})
+
+/* ═══════════════ 0814 新增口径（PRD #2 / #15 / #18 / #20 / #31）═══════════════ */
+
+describe('0814 · 删除定稿图由「下一张」接棒（PRD #15）', () => {
+  const byId = (id: string) => store.getState().world.assets.find((a: { id: string }) => a.id === id)
+
+  beforeEach(() => {
+    store.getState().setCurrentUser('u_sunny')
+  })
+
+  it('删掉中间那张定稿 → 定稿变成它后面那张，而不是池里第一张', () => {
+    // 给 d_ajie 造一个 3 张的候选池，并把【第 2 张】设为定稿。
+    store.getState().clearAssetImages('d_ajie')
+    store.getState().appendCandidates('d_ajie', ['/u1.png', '/u2.png', '/u3.png'])
+    const cands = byId('d_ajie').candidates
+    expect(cands.length).toBe(3)
+    store.getState().runSetFinal('d_ajie', cands[1].id)
+    expect(byId('d_ajie').cover).toBe(cands[1].url)
+
+    const r = store.getState().runRemoveCandidate('d_ajie', cands[1].id)
+    expect(r.ok).toBe(true)
+    expect(r.message).toContain('设为新定稿')
+    // 接棒的是原来的第 3 张（删除后落在同一个下标上），不是第 1 张
+    expect(byId('d_ajie').cover).toBe(cands[2].url)
+  })
+
+  it('删掉最后一张定稿 → 由它前面那张接棒', () => {
+    store.getState().clearAssetImages('d_ajie')
+    store.getState().appendCandidates('d_ajie', ['/u1.png', '/u2.png'])
+    const cands = byId('d_ajie').candidates
+    store.getState().runSetFinal('d_ajie', cands[1].id)
+
+    store.getState().runRemoveCandidate('d_ajie', cands[1].id)
+    expect(byId('d_ajie').cover).toBe(cands[0].url)
+  })
+
+  it('删光最后一张 → 资产回到「待生成」', () => {
+    store.getState().clearAssetImages('d_ajie')
+    store.getState().appendCandidates('d_ajie', ['/only.png'])
+    const only = byId('d_ajie').candidates[0]
+    const r = store.getState().runRemoveCandidate('d_ajie', only.id)
+    expect(r.ok).toBe(true)
+    expect(byId('d_ajie').status).toBe('empty')
+    expect(byId('d_ajie').cover).toBe('')
+  })
+})
+
+describe('0814 · 重复提交拦截（PRD #18 / #20）', () => {
+  beforeEach(() => {
+    store.getState().setCurrentUser('u_sunny')
+  })
+
+  const send = (target: 'team' | 'plaza', name: string, url: string) =>
+    store.getState().runSendImage({
+      target,
+      sourceAssetId: 'd_ajie',
+      payload: { name, url, category: 'character' },
+    })
+
+  it('同一张图允许重复提交：既能进团队库、也能投广场', () => {
+    expect(send('team', '阿杰·定稿A', '/same.png?g=1').ok).toBe(true)
+    expect(send('plaza', '阿杰·定稿A广场', '/same.png?g=1').ok).toBe(true)
+  })
+
+  it('已存入团队库的同一张图，再存一次被拦（按裸地址认，忽略 ?g= 后缀）', () => {
+    expect(send('team', '阿杰·定稿B', '/dup.png?g=1').ok).toBe(true)
+    const again = send('team', '阿杰·定稿B改名', '/dup.png?g=9')
+    expect(again.ok).toBe(false)
+    expect(again.message).toContain('已存入团队库')
+  })
+
+  it('广场已在审核中的同一张图，再投一次被拦', () => {
+    expect(send('plaza', '阿杰·投稿C', '/pend.png').ok).toBe(true)
+    const again = send('plaza', '阿杰·投稿C改名', '/pend.png')
+    expect(again.ok).toBe(false)
+    expect(again.message).toContain('等待平台审核')
+  })
+
+  it('子账号提交的存入申请在审批中时，同一张图不能重复提交', () => {
+    store.getState().setCurrentUser('u_lin') // 子账号
+    expect(send('team', '林·提交D', '/sub.png').ok).toBe(true)
+    const again = send('team', '林·提交D改名', '/sub.png')
+    expect(again.ok).toBe(false)
+    expect(again.message).toContain('等待主账号审批')
+  })
+})
+
+describe('0814 · 团队库删除仅主账号（PRD #31）', () => {
+  it('主账号可删团队库资产，子账号不可', () => {
+    store.getState().setCurrentUser('u_lin') // 子账号
+    expect(store.getState().runDeleteAsset('a_suwan').ok).toBe(false)
+    store.getState().setCurrentUser('u_sunny') // 主账号
+    expect(store.getState().runDeleteAsset('a_suwan').ok).toBe(true)
   })
 })

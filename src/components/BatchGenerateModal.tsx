@@ -93,6 +93,10 @@ export function BatchGenerateModal({
     setSelected(defaultsFor(nextScoped)) // 切作用域 = 重算默认，可预期优先（会丢手动勾/取消）
   }
   const [count, setCount] = useState(COUNT_OPTS[0])
+  // 提示词就地编辑（PRD #10）：只存本地草稿，不即时落库。
+  // 直接关闭弹窗 = 不保存；点「生成」时才把改动写回资产（配方跟着这批图走）。
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const promptOf = (a: Asset) => drafts[a.id] ?? a.prompt ?? ''
   // 二次确认：null=不弹；'together'=有资产要参考本批内的（§6.4 第一种）；'unreachable'=参考不到（第二种）。
   const [confirm, setConfirm] = useState<'together' | 'unreachable' | null>(null)
 
@@ -152,7 +156,13 @@ export function BatchGenerateModal({
   }
 
   function doGenerate() {
-    const ids = [...pickedNew, ...pickedRegen].map((a) => a.id)
+    const picked = [...pickedNew, ...pickedRegen]
+    // 提示词草稿在这一刻才落库（PRD #10）：没点生成就关闭 = 改动丢弃。
+    for (const a of picked) {
+      const draft = drafts[a.id]
+      if (draft !== undefined && draft !== (a.prompt ?? '')) setPrompt(a.id, draft)
+    }
+    const ids = picked.map((a) => a.id)
     const r = batchGenerate(ids, PLACEHOLDER, count)
     setConfirm(null)
     onDone(r.message)
@@ -202,7 +212,7 @@ export function BatchGenerateModal({
           <span className={styles.rowName}>{a.name}</span>
           <span className={styles.rowChip}>{CATEGORY_LABEL[a.category]}</span>
           {isRegen && (
-            <span className={styles.regenTag}>已有 {a.candidates?.length ?? 1} 张 · 重新生成</span>
+            <span className={styles.regenTag}>已有 {a.candidates?.length ?? 1} 张 · 重新生成（覆盖）</span>
           )}
         </label>
         <div className={styles.promptWrap}>
@@ -210,8 +220,8 @@ export function BatchGenerateModal({
           <textarea
             className={styles.promptEdit}
             rows={2}
-            defaultValue={a.prompt ?? ''}
-            onBlur={(e) => { if (e.target.value !== (a.prompt ?? '')) setPrompt(a.id, e.target.value) }}
+            value={promptOf(a)}
+            onChange={(e) => setDrafts((d) => ({ ...d, [a.id]: e.target.value }))}
             placeholder="描述你想要的画面…"
           />
         </div>
@@ -232,7 +242,8 @@ export function BatchGenerateModal({
           <button className={styles.close} title="关闭" onClick={onClose}>✕</button>
         </div>
 
-        {/* 作用域切换器：始终「全部」打头，默认高亮打开时所在的 Tab（无生产语义则默认「全部」）。 */}
+        {/* 作用域切换器：始终「全部」打头，默认高亮打开时所在的 Tab（无生产语义则默认「全部」）。
+            右侧收纳「已选 X/Y + 全选」——全选是列表级操作，放顶部 Tab 行右上角，不跟底栏生成挤在一起。 */}
         <div className={styles.scopeBar}>
           {scopeOpts.map((o) => (
             <button
@@ -243,6 +254,12 @@ export function BatchGenerateModal({
               {o.label}（{scopeCount(o.key)}）
             </button>
           ))}
+          <div className={styles.scopeRight}>
+            <span className={styles.footSel}>已选 {selectedCount}/{scoped.length}</span>
+            <button className={styles.selectAll} disabled={selectable.length === 0} onClick={toggleAll}>
+              {allPicked ? '取消全选' : '全选'}
+            </button>
+          </div>
         </div>
 
         {/* 顶部提示条（§6.4）：仅当列表里存在 #3 状态的资产。 */}
@@ -291,7 +308,7 @@ export function BatchGenerateModal({
                 <span className={styles.groupLabel}>已生成</span>
                 <span className={styles.groupCount}>{hasImage.length}</span>
                 <span className={styles.groupRule} aria-hidden />
-                <span className={styles.groupNote}>勾选可重新生成，不覆盖原图</span>
+                <span className={styles.groupNote}>勾选后将重新生成，新图覆盖原图</span>
               </div>
               {hasImage.map((a) => renderRow(a, true))}
             </section>
@@ -302,14 +319,11 @@ export function BatchGenerateModal({
           )}
         </div>
 
-        {/* 底栏：已选 X/Y · 参数 · 星钻 · 生成 */}
+        {/* 底栏：（重新生成说明）· 参数 · 星钻 · 生成。全选/已选已上移到顶部 Tab 行；
+            参数起 margin-left:auto，参数+星钻+生成整组恒定贴右，生成位置固定不随左侧内容跳。 */}
         <div className={styles.foot}>
-          <button className={styles.selectAll} disabled={selectable.length === 0} onClick={toggleAll}>
-            {allPicked ? '取消全选' : '全选'}
-          </button>
-          <span className={styles.footSel}>已选 {selectedCount}/{scoped.length}</span>
           {pickedRegen.length > 0 && (
-            <span className={styles.footNote}>其中 {pickedRegen.length} 份为重新生成，不覆盖原图</span>
+            <span className={styles.footNote}>其中 {pickedRegen.length} 份为重新生成，新图将覆盖原图</span>
           )}
           <div className={styles.params}>
             <select className={styles.sel} defaultValue={MODEL_OPTS[0]}>{MODEL_OPTS.map((o) => <option key={o}>{o}</option>)}</select>

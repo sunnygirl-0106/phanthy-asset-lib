@@ -1039,16 +1039,68 @@
 .cvHead { padding: 16px 20px 0; flex: none; }
 .cvTitleRow { display: flex; align-items: center; justify-content: space-between; }
 .cvTitle { font-size: 19px; font-weight: 600; letter-spacing: 0.5px; }
-.cvBack {
-  display: inline-flex; align-items: center; gap: 6px; margin: 8px 0 2px;
-  padding: 4px 0; border: none; background: none; cursor: pointer;
-  color: rgba(255, 255, 255, 0.6); font-size: 14px; font-family: inherit;
-}
-.cvBack:hover { color: #fff; }
 
-.cvBody { flex: 1; overflow-y: auto; padding: 8px 20px 22px; }
+/* 二级页头：返回 + 名称 + 图片数（左）｜ 音色 pill（右） */
+.cvSubHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0 2px; }
+.cvBack {
+  display: inline-flex; align-items: baseline; gap: 10px; min-width: 0;
+  padding: 2px 0; border: none; background: none; cursor: pointer; font-family: inherit;
+}
+.cvBackArrow { color: rgba(255, 255, 255, 0.5); font-size: 20px; line-height: 1; transition: color 0.14s ease; }
+.cvBackName { color: #fff; font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cvBackCount { color: rgba(255, 255, 255, 0.42); font-size: 12.5px; flex: none; }
+.cvBack:hover .cvBackArrow { color: rgba(255, 255, 255, 0.85); }
+
+/* 音色 pill：话筒 + 名称 ｜ 试听 ▶ + 放到画布 ＋ */
+.voicePillBar {
+  display: inline-flex; align-items: center; gap: 10px; flex: none;
+  height: 40px; padding: 0 6px 0 14px; border-radius: 22px;
+  background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.voicePillBar[draggable="true"] { cursor: grab; }
+.voicePillBar[draggable="true"]:active { cursor: grabbing; }
+.voicePillBarOff { padding-right: 14px; }
+.vpbIco { color: var(--accent); display: flex; }
+.vpbIco svg { width: 16px; height: 16px; display: block; }
+.vpbIcoOff { color: #6b7078; }
+.vpbName { font-size: 14px; font-weight: 600; color: #fff; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.vpbNameOff { font-size: 13.5px; color: #9aa0aa; }
+.vpbDivider { width: 1px; height: 18px; background: rgba(255, 255, 255, 0.14); margin: 0 1px; }
+.vpbPlay {
+  width: 28px; height: 28px; border-radius: 50%; flex: none; cursor: pointer; padding: 0 0 0 2px;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 11px;
+  background: rgba(var(--accent-rgb), 0.9); color: #04110f; border: none;
+  transition: background 0.14s ease, transform 0.14s ease;
+}
+.vpbPlay:hover { background: var(--accent); transform: scale(1.06); }
+.vpbAdd {
+  width: 28px; height: 28px; border-radius: 50%; flex: none; cursor: pointer; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 16px;
+  background: rgba(255, 255, 255, 0.06); color: rgba(255, 255, 255, 0.85); border: 1px solid rgba(255, 255, 255, 0.14);
+  transition: background 0.14s ease, border-color 0.14s ease, transform 0.14s ease;
+}
+.vpbAdd:hover { background: rgba(var(--accent-rgb), 0.2); border-color: rgba(var(--accent-rgb), 0.55); color: #eafeff; transform: scale(1.06); }
+
+.cvBody { flex: 1; overflow-y: auto; padding: 16px 20px 22px; }
 .cvBody::-webkit-scrollbar { width: 8px; }
 .cvBody::-webkit-scrollbar-thumb { background: #2b323c; border-radius: 8px; }
+
+/* 画布二级页统一图片网格：每行 4 张，竖版卡 */
+.cvGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.cvCard {
+  position: relative; background: #202127; border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px; overflow: hidden; transition: 0.15s;
+}
+.cvCard:hover { border-color: rgba(255, 255, 255, 0.16); transform: translateY(-2px); }
+.cvPic { position: relative; aspect-ratio: 3 / 4; }
+.cvPic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cvOv {
+  position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: center;
+  gap: 6px; flex-wrap: nowrap; padding: 12px 8px; opacity: 0; transition: 0.16s;
+  background: linear-gradient(transparent 45%, rgba(4, 8, 10, 0.82));
+}
+.cvCard:hover .cvOv { opacity: 1; }
+.cvOv .lookUse, .cvOv .sumoPrompt { padding-left: 10px; padding-right: 10px; white-space: nowrap; }
 
 /* 身份锚点卡：封面大图（左）+ 音色（右）并排 */
 .anchorWrap {
@@ -1130,6 +1182,7 @@
 }
 .sumoPic:hover .thumbIcons,
 .lookPic:hover .thumbIcons,
+.cvPic:hover .thumbIcons,
 .look:hover .thumbIcons,
 .baseLg:hover .thumbIcons { opacity: 1; transform: none; }
 
@@ -1201,3 +1254,19 @@
   .anchorRow { flex-direction: column; }
   .sumo { flex: none; }
 }
+
+/* ── 「其他」类：视频原地播放 + 画布二级页的视频/文本卡（0814 · PRD #23/#24）── */
+.bigVideo { width: 100%; height: 100%; max-height: 100%; object-fit: contain; display: block; background: #000; border-radius: 10px; }
+/* 画布二级页：文本卡不按 3:4 裁图，改成可读的正文块 */
+.cvPicText { aspect-ratio: auto; min-height: 220px; padding: 14px; overflow: hidden; }
+.cvPicText .otherTextBig { max-height: 260px; overflow: hidden; }
+/* 画布二级页：视频封面中央的播放三角 */
+.cvPlayGlyph {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.5); border: 1px solid rgba(255, 255, 255, 0.55);
+  color: #fff; font-size: 14px; pointer-events: none;
+}
+/* 生成按钮旁的提示词保存口径说明 */
+.genTip { font-size: 12px; color: var(--text-muted); max-width: 320px; line-height: 1.5; }

@@ -3,7 +3,7 @@
  *
  * v6：整页重做，对齐团队资产库 Figma（node 1:2）——
  *   左侧 200px 类目边栏（角色 / 服装 / 场景 / 道具，各带真实数量与图标，当前项青色高亮）
- *   右侧内容：工具条（批量操作 / 智能排序 / 搜索）+ 满幅封面卡片网格。
+ *   右侧内容：工具条（排序 / 搜索）+ 满幅封面卡片网格 + 分页条。
  *
  * 数据仍走「单一数据源 + 派生视图」：只对同一份 world + currentUser 做过滤/排序，不复制数据。
  * 权限判断委托 services/permission.canSee；卡片视觉复用全局 AssetCard；点卡片开 AssetDetail。
@@ -12,12 +12,16 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Category } from '../data/types'
+import type { Asset } from '../data/types'
 import { useStore, useCurrentUser } from '../store/useStore'
 import { canSee, canHandleDepositRequests } from '../services/permission'
 import { useHashRoute } from '../hooks/useHashRoute'
 import { AssetCard } from '../components/AssetCard'
 import { AssetDetail } from '../components/AssetDetail'
 import { AudioList } from '../components/AudioList'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { Pager, PAGE_SIZE } from '../components/Pager'
+import { SortMenu, compareBySort, type SortKey } from '../components/SortMenu'
 import { DepositRequestDrawer } from '../components/DepositRequestDrawer'
 import { assetUrl } from '../utils/assets'
 import styles from './TeamLibraryPage.module.css'
@@ -31,6 +35,7 @@ const CATEGORIES: { key: Category; label: string; icon: string }[] = [
   // TODO: 替换音频 icon（产品后续提供正式链接，先用占位音符图标）
   { key: 'audio', label: '音频', icon: assetUrl('assets/icons/cat-audio.svg') },
 ]
+
 
 export function TeamLibraryPage() {
   const world = useStore((s) => s.world)
@@ -54,8 +59,13 @@ export function TeamLibraryPage() {
 
   const [category, setCategory] = useState<Category>('character')
   const [query, setQuery] = useState('')
-  const [sortDesc, setSortDesc] = useState(true) // 智能排序：默认最新在前
+  // 排序（PRD #31）：与项目资产库同一套四项枚举，"智能排序"这种说不清的说法已下线。
+  const [sortKey, setSortKey] = useState<SortKey>('timeDesc')
+  const [page, setPage] = useState(1)
   const [detailAssetId, setDetailAssetId] = useState<string | null>(null)
+  // 团队库删除（PRD #31）：仅主账号，二次确认后执行。
+  const [confirmDelete, setConfirmDelete] = useState<Asset | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
 
   // 存入记录入口「刚处理完」回执：通过 N 条后，入口挂「已通过 N」停 3 秒再回静默态。
   const [receipt, setReceipt] = useState<number | null>(null)
@@ -88,8 +98,32 @@ export function TeamLibraryPage() {
     return teamAssets
       .filter((a) => a.category === category)
       .filter((a) => (q ? a.name.toLowerCase().includes(q) : true))
-      .sort((a, b) => (sortDesc ? b.createdAt - a.createdAt : a.createdAt - b.createdAt))
-  }, [teamAssets, category, query, sortDesc])
+      .sort((a, b) => compareBySort(a, b, sortKey))
+  }, [teamAssets, category, query, sortKey])
+
+  // 分页（PRD #2/#31）：每页 24 项，切类目 / 搜索 / 排序回到第 1 页。
+  const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE))
+  const safePage = Math.min(page, pageCount)
+  const paged = useMemo(
+    () => visible.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [visible, safePage],
+  )
+  useEffect(() => { setPage(1) }, [category, query, sortKey])
+  useEffect(() => { if (page !== safePage) setPage(safePage) }, [page, safePage])
+
+  function showToast(message: string) {
+    setToast(message)
+    window.setTimeout(() => setToast((t) => (t === message ? null : t)), 2600)
+  }
+
+  /** 删除团队库资产（二次确认后执行）。 */
+  function runConfirmedDelete() {
+    const target = confirmDelete
+    if (!target) return
+    const r = runDeleteAsset(target.id)
+    setConfirmDelete(null)
+    showToast(r.ok ? `已删除「${target.name}」` : r.message)
+  }
 
   return (
     <div className={styles.wrap}>
@@ -140,10 +174,12 @@ export function TeamLibraryPage() {
           <div className={styles.toolbarLeft} />
 
           <div className={styles.toolbarRight}>
-            <button className={`${styles.btn} ${styles.btnSort}`} onClick={() => setSortDesc((v) => !v)}>
-              <img className={styles.btnIcon} src={assetUrl('assets/icons/sort-two.svg')} alt="" aria-hidden />
-              智能排序（{sortDesc ? '最新' : '最早'}）
-            </button>
+            <SortMenu
+              value={sortKey}
+              onChange={setSortKey}
+              className={`${styles.btn} ${styles.btnSort}`}
+              icon={assetUrl('assets/icons/sort-two.svg')}
+            />
 
             <div className={styles.search}>
               <img className={styles.btnIcon} src={assetUrl('assets/icons/filter-search.svg')} alt="" aria-hidden />
@@ -166,21 +202,28 @@ export function TeamLibraryPage() {
         ) : category === 'audio' ? (
           // 音频为一等展示类目（R3）：条状行列表，仅支持改名 / 删除，不进详情、不参与批量。
           <AudioList
-            items={visible}
+            items={paged}
             mode={{
               kind: 'library',
               onRename: (a, name) => renameAsset(a.id, name),
-              onDelete: (a) => runDeleteAsset(a.id),
+              // 删除先弹二次确认（PRD #31），不再点了就没。
+              onDelete: (a) => setConfirmDelete(a),
             }}
           />
         ) : (
           <div className={styles.grid}>
-            {visible.map((a) => (
+            {paged.map((a) => (
               <div key={a.id} className={styles.cell}>
                 <AssetCard asset={a} onClick={() => setDetailAssetId(a.id)} />
+                {/* 最外层网格不再给单份删除入口（hover 垃圾桶）：删除一律点进详情里操作，避免误删。 */}
               </div>
             ))}
           </div>
+        )}
+
+        {/* 分页条：第 a–b 项，共 N 项 + 页码。 */}
+        {visible.length > 0 && (
+          <Pager page={safePage} total={visible.length} onChange={setPage} />
         )}
       </section>
 
@@ -188,6 +231,23 @@ export function TeamLibraryPage() {
       {detailAssetId && (
         <AssetDetail assetId={detailAssetId} onClose={() => setDetailAssetId(null)} />
       )}
+
+      {/* 团队库删除二次确认（PRD #31）：与项目库共用同一套文案口径。 */}
+      {confirmDelete && (
+        <ConfirmDialog
+          title={`删除「${confirmDelete.name}」？`}
+          body={
+            <>
+              该资产将从团队资产库移除，<b>删除后无法恢复</b>。
+              已复用到项目、画布或素材广场的副本不受影响。
+            </>
+          }
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={runConfirmedDelete}
+        />
+      )}
+
+      {toast && <div className={styles.toast}>{toast}</div>}
 
       {/* 资产存入申请抽屉（§7.3）：路由 #/team/deposits 时覆盖在网格上。
           守卫 canHandleDepositRequests：子账号手敲这个 hash 也开不出抽屉。 */}

@@ -155,18 +155,40 @@ export function wouldCycle(world: World, aId: string, targetId: string): boolean
  *   · 删掉最后一张 → 池空、cover 空、status → 'empty'（降级成空壳，提示词等一概保留）。
  */
 export function removeCandidate(source: Asset, candidateId: string): Asset {
-  const removed = source.candidates?.find((c) => c.id === candidateId)
+  const list = source.candidates ?? []
+  const idx = list.findIndex((c) => c.id === candidateId)
+  const removed = list[idx]
   if (!removed) throw new AssetRuleError('候选图不存在')
-  const rest = (source.candidates ?? []).filter((c) => c.id !== candidateId)
+  const rest = list.filter((c) => c.id !== candidateId)
   if (rest.length === 0) {
     return { ...source, candidates: undefined, cover: '', status: 'empty' }
   }
+  // 删掉的正好是定稿 → 由「下一张」接棒（删的是最后一张则回退取前一张），
+  // 而不是无脑顶池里第一张：用户删的是眼前这张，视线自然落在它后面那张上。
+  // 注意：这里只动定稿，不动 references——图片与参考图是两套独立关系（PRD #15），
+  // 这张图若同时被挂成参考图，参考关系保持不变。
   const removedWasFinal = !!source.cover && removed.url === source.cover
+  const successor = rest[Math.min(idx, rest.length - 1)]
   return {
     ...source,
     candidates: rest,
-    cover: removedWasFinal ? rest[0].url : source.cover,
+    cover: removedWasFinal ? successor.url : source.cover,
   }
+}
+
+/**
+ * 删掉某张候选后，接棒成为新定稿的那张在列表里的序号（1 基，用于 toast 文案）。
+ * 不是定稿被删、或删完已空，返回 null。
+ */
+export function successorFinalIndex(source: Asset, candidateId: string): number | null {
+  const list = source.candidates ?? []
+  const idx = list.findIndex((c) => c.id === candidateId)
+  if (idx < 0) return null
+  const removed = list[idx]
+  const rest = list.filter((c) => c.id !== candidateId)
+  if (rest.length === 0) return null
+  if (!source.cover || removed.url !== source.cover) return null
+  return Math.min(idx, rest.length - 1) + 1
 }
 
 /**

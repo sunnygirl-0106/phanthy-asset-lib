@@ -17,8 +17,10 @@ import { refsReady } from '../services/assetService'
 import { AssetCard } from './AssetCard'
 import { AssetDetail } from './AssetDetail'
 import { AudioList } from './AudioList'
-import { OtherVideoPlayer } from './OtherVideoPlayer'
 import { BatchGenerateModal } from './BatchGenerateModal'
+import { ConfirmDialog } from './ConfirmDialog'
+import { Pager, PAGE_SIZE } from './Pager'
+import { SortMenu, compareBySort, type SortKey } from './SortMenu'
 import { assetUrl } from '../utils/assets'
 import styles from './ProjectAssetLibrary.module.css'
 
@@ -93,28 +95,31 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
 
   const [category, setCategory] = useState<Category>('character')
   const [query, setQuery] = useState('')
-  const [sortDesc, setSortDesc] = useState(true) // 时间倒序：默认最新在前
+  // 排序（PRD #2）：固定四项枚举，默认时间倒序。
+  const [sortKey, setSortKey] = useState<SortKey>('timeDesc')
+  // 分页（PRD #2）：每页 24 项。分页存在的意义之一，是让「全选 = 当前页」有明确作用域。
+  const [page, setPage] = useState(1)
   const [selecting, setSelecting] = useState(false) // 选择态（悬停勾选框 + 顶部选择条）
   const [batchMenu, setBatchMenu] = useState(false) // 「批量操作」下拉：批量生成 / 批量删除
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [confirmDelete, setConfirmDelete] = useState(false) // 批量删除二次确认弹窗
+  const [confirmSingle, setConfirmSingle] = useState<Asset | null>(null) // 单份删除二次确认弹窗
   const [detailAssetId, setDetailAssetId] = useState<string | null>(null)
   const [demoOpen, setDemoOpen] = useState(false) // 演示控件收起/展开
   const [toast, setToast] = useState<string | null>(null)
   // 生成前确认弹窗（0812 · §6）：三个入口统一走它，各自喂不同的候选 id 列表。
   const [batchModal, setBatchModal] = useState<{ title: string; ids: string[]; cat: Category | null } | null>(null)
-  // 「其他」视频：不进详情弹窗，直接大屏播放（§用户口径：视频就直接大屏播放，不用这么麻烦）。
-  const [videoAsset, setVideoAsset] = useState<Asset | null>(null)
   // 新增资产弹窗（0808）：只填名称，建完直接开详情页。
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [createErr, setCreateErr] = useState<string | null>(null)
 
-  /** 点开一份资产：「其他」里的视频直接大屏播放，其余（含图片 / 文本）走详情弹窗。 */
-  const openAsset = (a: Asset) => {
-    if (a.category === 'other' && a.fields.media === 'video') setVideoAsset(a)
-    else setDetailAssetId(a.id)
-  }
+  /**
+   * 点开一份资产：统一进详情弹窗（0814 · PRD #23/#24）。
+   * 「其他」里的视频不再单开大屏播放器——它和图片、文本走同一条路径，
+   * 都是"点开 → 详情里看 / 用"，行为一致，用户不用记两套规矩。
+   */
+  const openAsset = (a: Asset) => setDetailAssetId(a.id)
 
   // 本项目资产池（与画布共享同一批数据）。
   const projectAssets = useMemo(
@@ -160,20 +165,31 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readyToGen.length])
 
-  // 类目 → 搜索 → 排序，派生出当前网格要摆的资产。
+  // 类目 → 搜索 → 排序，派生出当前类目要摆的全部资产（分页在这之后做）。
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
     return projectAssets
       .filter((a) => a.category === category)
       .filter((a) => (q ? a.name.toLowerCase().includes(q) : true))
       .sort((a, b) => {
-        // 已生成的成品排在前面、没图的（待生成 / 生成中）排在后面；组内再按时间排序。
+        // 列表恒定把已出图的资产排在待生成之前（这条不随排序项变），
+        // 所选排序（时间倒序/正序、名称 A→Z/Z→A）在组内生效——PRD #2。
         const ae = a.status === 'done' ? 0 : 1
         const be = b.status === 'done' ? 0 : 1
         if (ae !== be) return ae - be
-        return sortDesc ? b.createdAt - a.createdAt : a.createdAt - b.createdAt
+        return compareBySort(a, b, sortKey)
       })
-  }, [projectAssets, category, query, sortDesc])
+  }, [projectAssets, category, query, sortKey])
+
+  // 分页派生：切类目 / 改搜索 / 换排序都回到第 1 页；删到当前页空了也要往回收一页。
+  const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE))
+  const safePage = Math.min(page, pageCount)
+  const paged = useMemo(
+    () => visible.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [visible, safePage],
+  )
+  useEffect(() => { setPage(1) }, [category, query, sortKey])
+  useEffect(() => { if (page !== safePage) setPage(safePage) }, [page, safePage])
 
   /** 勾选一张卡：进入选择态并翻转该卡的选中。 */
   function toggleSelect(id: string) {
@@ -185,17 +201,18 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
     })
   }
 
-  // 当前网格（visible）里的全部 id——「全选」按它算。
-  const visibleIds = useMemo(() => visible.map((a) => a.id), [visible])
-  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selected.has(id))
+  // 「全选」的作用域是【当前页】（PRD #2），不是当前类目、更不是全部——
+  // 页码是用户看得见的边界，用它当作用域，勾了多少心里有数。
+  const pageIds = useMemo(() => paged.map((a) => a.id), [paged])
+  const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id))
 
-  /** 全选 / 取消全选：对当前类目可见的这批卡整体翻转。 */
+  /** 全选 / 取消全选：只翻转当前页这批卡；其他页与其他类目已勾的保持不动。 */
   function toggleSelectAll() {
     setSelecting(true)
     setSelected((prev) => {
       const next = new Set(prev)
-      if (visibleIds.every((id) => next.has(id))) visibleIds.forEach((id) => next.delete(id))
-      else visibleIds.forEach((id) => next.add(id))
+      if (pageIds.every((id) => next.has(id))) pageIds.forEach((id) => next.delete(id))
+      else pageIds.forEach((id) => next.add(id))
       return next
     })
   }
@@ -220,6 +237,22 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
     setConfirmDelete(false)
     showToast(done > 0 ? `已删除 ${done} 项` : '没有可删除的资产')
     exitSelect()
+  }
+
+  /** 单份删除（PRD #2）：卡片 hover 出垃圾桶 → 二次确认 → 整份删除。 */
+  function runSingleDelete() {
+    const target = confirmSingle
+    if (!target) return
+    const r = runDeleteAsset(target.id)
+    setConfirmSingle(null)
+    // 删掉的那份如果还在选中集合里，一并清掉，免得"已选 N 项"里挂着一个不存在的 id。
+    setSelected((prev) => {
+      if (!prev.has(target.id)) return prev
+      const next = new Set(prev)
+      next.delete(target.id)
+      return next
+    })
+    showToast(r.ok ? `已删除「${target.name}」` : r.message)
   }
 
   /** 批量操作 · 批量生成：喂全量生产类资产 + 当前 Tab 作为初始作用域，弹窗内可一键扩到全部。 */
@@ -251,7 +284,15 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
   const audioLibMode = {
     kind: 'library' as const,
     onRename: (a: Asset, name: string) => renameAsset(a.id, name),
-    onDelete: (a: Asset) => runDeleteAsset(a.id),
+    // 删除不再直接执行：和卡片一样先弹二次确认（PRD #2）。
+    onDelete: (a: Asset) => setConfirmSingle(a),
+  }
+
+  /** 音频行的批量选择（PRD #2：批量删除要包含音频与「其他」）。 */
+  const audioSelection = {
+    selecting,
+    isSelected: (a: Asset) => selected.has(a.id),
+    onToggle: (a: Asset) => toggleSelect(a.id),
   }
 
   /** 卡片网格（支持批量勾选）——普通类目 &「其他」的图片/视频/文本子分区共用。 */
@@ -275,6 +316,7 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
             >
               {selected.has(a.id) ? '✓' : ''}
             </button>
+            {/* 最外层网格不再给单份删除入口（hover 垃圾桶）：删除一律点进详情里操作，避免误删。 */}
           </div>
         ))}
       </div>
@@ -293,10 +335,12 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
   }
 
   // 「其他」按媒介分区（复用画布资产面板的分区设计）：图片 → 视频 → 文本（音频不进「其他」）。
+  // 注意分区取的是【当前页】的资产：分页在前、分组在后，
+  // 否则"第 1–24 项"这句话和屏幕上实际摆了多少张就对不上了。
   const otherGroups = [
-    { key: 'image', label: '图片', items: visible.filter((a) => (a.fields.media ?? 'image') === 'image') },
-    { key: 'video', label: '视频', items: visible.filter((a) => a.fields.media === 'video') },
-    { key: 'text', label: '文本', items: visible.filter((a) => a.fields.media === 'text') },
+    { key: 'image', label: '图片', items: paged.filter((a) => (a.fields.media ?? 'image') === 'image') },
+    { key: 'video', label: '视频', items: paged.filter((a) => a.fields.media === 'video') },
+    { key: 'text', label: '文本', items: paged.filter((a) => a.fields.media === 'text') },
   ].filter((g) => g.items.length > 0)
 
   return (
@@ -351,11 +395,14 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
             </div>
           )}
 
-          <button className={styles.btn} onClick={() => setSortDesc((v) => !v)}>
-            <img className={styles.btnIcon} src={assetUrl('assets/icons/sort-two.svg')} alt="" aria-hidden />
-            {sortDesc ? '时间倒序' : '时间正序'}
-            <img className={styles.btnCaret} src={assetUrl('assets/icons/chevron-down.svg')} alt="" aria-hidden />
-          </button>
+          {/* 排序（PRD #2）：时间倒序 / 时间正序 / 名称 A→Z / 名称 Z→A，与团队库同一套。 */}
+          <SortMenu
+            value={sortKey}
+            onChange={setSortKey}
+            className={styles.btn}
+            icon={assetUrl('assets/icons/sort-two.svg')}
+            caret={assetUrl('assets/icons/chevron-down.svg')}
+          />
 
           <div className={styles.search}>
             <img className={styles.btnIcon} src={assetUrl('assets/icons/filter-search.svg')} alt="" aria-hidden />
@@ -376,14 +423,16 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
             type="button"
             className={styles.selectAll}
             onClick={toggleSelectAll}
-            aria-pressed={allVisibleSelected}
+            aria-pressed={allPageSelected}
           >
-            <span className={`${styles.selectAllBox} ${allVisibleSelected ? styles.selectAllBoxOn : ''}`}>
-              {allVisibleSelected ? '✓' : ''}
+            <span className={`${styles.selectAllBox} ${allPageSelected ? styles.selectAllBoxOn : ''}`}>
+              {allPageSelected ? '✓' : ''}
             </span>
-            {allVisibleSelected ? '取消全选' : '全选'}
+            {allPageSelected ? '取消全选（当前页）' : '全选（当前页）'}
           </button>
-          <span className={styles.selectCount}>已选 {selected.size} 项</span>
+          <span className={styles.selectCount} title="全选仅作用于当前页，已选中的其他页与其他类目会保留">
+            已选 {selected.size} 项（跨类目）
+          </span>
           <span className={styles.selectSpacer} />
           <button
             className={styles.btnDanger}
@@ -424,8 +473,9 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
           试试切换上方类目、清空搜索。
         </div>
       ) : category === 'audio' ? (
-        // 音频为一等展示类目（R3）：条状行列表，仅支持改名 / 删除，不进详情、不参与批量。
-        <AudioList items={visible} mode={audioLibMode} />
+        // 音频为一等展示类目（R3）：条状行列表，支持改名 / 删除；
+        // 0814 起也参与批量删除（PRD #2），选择态下行首出勾选框。
+        <AudioList items={paged} mode={audioLibMode} selection={audioSelection} />
       ) : category === 'other' ? (
         // 「其他」按媒介分区（复用画布资产面板设计）：图片 → 视频 → 文本，从上到下（不含音频）。
         <div className={styles.otherSections}>
@@ -437,17 +487,17 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
           ))}
         </div>
       ) : (
-        renderGrid(visible)
+        renderGrid(paged)
+      )}
+
+      {/* 分页条（PRD #2）：第 a–b 项，共 N 项 + 页码。 */}
+      {visible.length > 0 && (
+        <Pager page={safePage} total={visible.length} onChange={setPage} />
       )}
 
       {/* 资产详情弹窗（自带外壳；存入团队库等操作都在里面，本次不改） */}
       {detailAssetId && (
         <AssetDetail assetId={detailAssetId} onClose={() => setDetailAssetId(null)} />
-      )}
-
-      {/* 「其他」视频大屏播放器（直接播放，不走详情弹窗） */}
-      {videoAsset && (
-        <OtherVideoPlayer asset={videoAsset} onClose={() => setVideoAsset(null)} />
       )}
 
       {/* 新增资产弹窗（0808）：只填名称，建完直接开详情页写提示词 / 点生成。 */}
@@ -483,8 +533,8 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
           <div className={`${styles.createCard} ${styles.confirmDeleteCard}`} onKeyDown={(e) => { if (e.key === 'Escape') setConfirmDelete(false) }}>
             <h4 className={styles.createTitle}>删除选中的 {selected.size} 项？</h4>
             <p className={styles.createDesc}>
-              这些资产会被整份删除，连同它们的全部图片、候选池与提示词一起清掉，<b>不可恢复</b>。
-              已经复用 / 存出去的独立副本不受影响。
+              这些资产的全部图片、提示词与音色会一并删除，<b>删除后无法恢复</b>。
+              已复用到画布、团队库或素材广场的副本不受影响。
             </p>
             <div className={styles.createActs}>
               <button className={styles.btn} onClick={() => setConfirmDelete(false)}>取消</button>
@@ -492,6 +542,21 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 单份删除二次确认（PRD #2）：与团队库共用 ConfirmDialog，文案口径一致。 */}
+      {confirmSingle && (
+        <ConfirmDialog
+          title={`删除「${confirmSingle.name}」？`}
+          body={
+            <>
+              该资产的全部图片、提示词与音色会一并删除，<b>删除后无法恢复</b>。
+              已复用到画布、团队库或素材广场的副本不受影响。
+            </>
+          }
+          onCancel={() => setConfirmSingle(null)}
+          onConfirm={runSingleDelete}
+        />
       )}
 
       {/* 生成前确认弹窗（§6）：三个入口统一走它。生成后 toast 汇报。 */}

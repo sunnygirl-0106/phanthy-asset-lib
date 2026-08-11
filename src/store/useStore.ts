@@ -31,6 +31,7 @@ import {
   contributeToPlaza,
   materializePlaza,
   removeCandidate,
+  successorFinalIndex,
   setFinal,
   makeCandidate,
   makeId,
@@ -451,7 +452,7 @@ export const useStore = create<StoreState>()(
       },
 
       runSendImage: (input) => {
-        const { world, currentUserId } = get()
+        const { world, currentUserId, applications, plazaSubmissions } = get()
         const { target, payload, sourceAssetId } = input
         const user = findUser(world, currentUserId)
         if (!user) return fail('数据不存在')
@@ -462,13 +463,36 @@ export const useStore = create<StoreState>()(
         if (!name) return fail('请先给这张素材起个名字')
         const src = sourceAssetId ? findAsset(world, sourceAssetId) : undefined
 
-        // ④ 唯一的守门规则：重名校验（团队库全库查、广场按投稿人查）。
+        // ④ 重复提交拦截（0814 · PRD #18/#20）。
+        //    口径：同一张图【允许】重复提交——同一张定稿可以既进团队库、又投广场，
+        //    被驳回后也可以改名重投。只在两种"提交没有意义"的状态下拦：
+        //      · 这张图正在审批 / 审核中（再提一次只会多一条待办）
+        //      · 这张图已经躺在目标库里了（团队库 / 广场）
+        //    图片身份按裸地址认（候选池 url 带 ?g=N 去重后缀，必须先剥掉）。
+        const imgKey = payload.url.split('?')[0]
+        const sameImage = (u: string) => u.split('?')[0] === imgKey
         if (target === 'team') {
           if (!user.teamId) return fail('当前账号没有团队库')
+          const pendingDeposit = applications.some(
+            (a) => a.status === 'pending' && a.applicantId === user.id && sameImage(a.payload.url),
+          )
+          if (pendingDeposit) return fail('这张图片已提交，正在等待主账号审批')
+          const alreadyInTeam = world.assets.some(
+            (a) => a.scope === 'team' && a.scopeId === user.teamId && sameImage(a.cover ?? ''),
+          )
+          if (alreadyInTeam) return fail('这张图片已存入团队库，无需重复提交')
           if (libraryHasSameName(world.assets, 'team', user.teamId, name)) {
             return fail(`团队库已有同名「${name}」，请换个名字`)
           }
         } else {
+          const pendingPlaza = plazaSubmissions.some(
+            (x) => x.status === 'pending' && x.submitterId === user.id && sameImage(x.payload.url),
+          )
+          if (pendingPlaza) return fail('这张图片已提交，正在等待平台审核')
+          const alreadyInPlaza = world.assets.some(
+            (a) => a.scope === 'plaza' && sameImage(a.cover ?? ''),
+          )
+          if (alreadyInPlaza) return fail('这张图片已在素材广场')
           if (plazaHasSameNameBySubmitter(world.assets, user.id, name)) {
             return fail(`你已经投过同名的「${name}」，请换个名字`)
           }
@@ -792,6 +816,9 @@ export const useStore = create<StoreState>()(
         if (!user || !asset) return fail('数据不存在')
         if (!canDeleteLibraryAsset(user, asset)) return fail('你没有权限删除这张图片')
         try {
+          // 先算「谁来接棒当定稿」（PRD #15：删掉定稿由下一张顶上），再执行删除——
+          // 算完才好在 toast 里把新定稿是第几张说清楚。
+          const nextFinalNo = successorFinalIndex(asset, candidateId)
           const next = removeCandidate(asset, candidateId)
           set((s) => ({
             world: {
@@ -799,7 +826,8 @@ export const useStore = create<StoreState>()(
               assets: s.world.assets.map((a) => (a.id === assetId ? next : a)),
             },
           }))
-          return ok('已删除该图片')
+          if (next.status === 'empty') return ok('已删除该图片，该资产回到「待生成」')
+          return ok(nextFinalNo ? `已删除，已将「第 ${nextFinalNo} 张」设为新定稿` : '已删除该图片')
         } catch (e) {
           return fromError(e)
         }
@@ -1012,7 +1040,8 @@ export const useStore = create<StoreState>()(
         const user = findUser(world, currentUserId)
         if (!user) return fail('数据不存在')
         const idSet = new Set(assetIds)
-        // 只挡"正在生成中"，已出图的允许重新生成（非破坏性，只往候选池追加）。无权的算跳过。
+        // 只挡"正在生成中"，已出图的允许重新生成。注意 0814 起重新生成是【覆盖】：
+        // 新图整批替换原候选池与定稿，原图不保留（PRD #10）。无权的算跳过。
         const targets = world.assets.filter(
           (a) => idSet.has(a.id) && canRegenerate(user, a) && a.status !== 'generating',
         )
@@ -1072,13 +1101,14 @@ export const useStore = create<StoreState>()(
                   const cands = Array.from({ length: countPerAsset }, () =>
                     makeCandidate(`${src}?g=${++seq}`, a.prompt),
                   )
-                  // 空壳原本无定稿，本批第一张自动成为定稿（0810：有图必成品）。
-                  // 已有定稿的只追加候选——定稿是用户手挑的，批量路径不许动。
-                  // 空壳 / failed 的 cover 是 ''（非 nullish），用 || 让它落到右侧拿到新定稿。
+                  // 【0814 · 覆盖口径】批量的「重新生成」= 用新图整批替换原图：
+                  // 候选池与定稿都换成本批结果，原图不保留（PRD #10；弹窗已明写「新图覆盖原图」）。
+                  // 空壳资产本来就没图，行为与之前一致——本批第一张成为定稿。
+                  // 参考图（references）与提示词不在覆盖范围内，保持不变。
                   return {
                     ...a,
-                    candidates: [...(a.candidates ?? []), ...cands],
-                    cover: a.cover || cands[0].url,
+                    candidates: cands,
+                    cover: cands[0].url,
                     status: 'done' as AssetStatus,
                   }
                 }),
