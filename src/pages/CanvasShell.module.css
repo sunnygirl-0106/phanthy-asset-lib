@@ -122,7 +122,9 @@
 .panelFlyout {
   width: 600px;
   max-width: calc(100vw - 96px);
-  max-height: calc(100vh - 116px);
+  /* 固定一个适中高度：列表页与详情二级页共用同一高度，切进详情不再缩高；
+     内容超出就在面板内部滚动（不撑满整屏，避免过高显丑）。矮屏退回可用高度。 */
+  height: min(600px, calc(100vh - 116px));
   overflow: hidden;
 }
 

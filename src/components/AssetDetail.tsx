@@ -1269,7 +1269,7 @@ export function AssetDetail({
             </div>
           ) : (
             <div className={styles.cvGrid}>
-              {gridImages.map((g, i) => (
+              {gridImages.map((g) => (
                 <div key={g.key} className={styles.cvCard}>
                   <div className={styles.cvPic}>
                     <img src={g.url} alt={asset.name} loading="lazy" />
@@ -1279,8 +1279,8 @@ export function AssetDetail({
                     </div>
                     <div className={styles.cvOv}>
                       <button className={styles.lookUse} onClick={() => onUse({ cover: g.url })}>使用</button>
-                      {/* 提示词是资产级配方，只在第一张（定稿）卡上给入口，不逐张重复。 */}
-                      {i === 0 && canViewPrompt(asset) && (!isOther || !!asset.prompt?.trim()) && (
+                      {/* 提示词是资产级配方，每张卡都给入口（用户从任意一张都能查看提示词）。 */}
+                      {canViewPrompt(asset) && (!isOther || !!asset.prompt?.trim()) && (
                         <button className={styles.sumoPrompt} onClick={openPrompt}>提示词</button>
                       )}
                     </div>

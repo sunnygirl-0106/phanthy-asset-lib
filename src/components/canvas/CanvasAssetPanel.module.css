@@ -17,7 +17,16 @@
   min-height: 0;
   overflow-y: auto;
   padding: 16px 16px 18px;
+  /* 滚动条：默认整条透明，hover 面板才淡淡浮出；窄。 */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
 }
+.scrollBody:hover { scrollbar-color: rgba(255, 255, 255, 0.12) transparent; }
+.scrollBody::-webkit-scrollbar { width: 6px; }
+.scrollBody::-webkit-scrollbar-track { background: transparent; }
+.scrollBody::-webkit-scrollbar-thumb { background: transparent; border-radius: 6px; }
+.scrollBody:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.13); }
+.scrollBody::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.22); }
 
 /* 标题行：「资产」左、小字右上角对齐——行高由标题决定，小字显隐不撑动布局 */
 .titleRow {
