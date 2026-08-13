@@ -214,6 +214,23 @@ export function canDeleteLibraryAsset(user: User, asset: Asset): boolean {
 }
 
 /**
+ * 谁能"更换 / 清除"角色的音色（0812 · sunny）。
+ * 音色是角色资产上的一项可写属性，编辑权跟着它所在层走，和删除同一条线：
+ * - 广场：官方货架，只读，谁都不能改。
+ * - 团队库：筛选过的成品母版，音色是团队共同资产 —— 收口到主账号；
+ *   子账号只能看，不能更换、不能清除（与 canDeleteLibraryAsset 对齐）。
+ * - 项目库：生产层，主账号 / 子账号都能改。
+ * - admin：只治理、不碰创作物，不给改。
+ * 注意：调用方还得自己判 isCharacter（只有角色才有音色），这里只管"谁"和"哪一层"。
+ */
+export function canEditVoice(user: User, asset: Asset): boolean {
+  if (isAdmin(user)) return false
+  if (asset.scope === 'project') return isOwner(user) || isSub(user)
+  if (asset.scope === 'team') return isOwner(user)
+  return false // plaza 及其它：只读
+}
+
+/**
  * 向广场投稿 / 贡献（v6）：按"在哪一层发起"收口。
  * - admin：不投稿（只审核）。
  * - 主账号：团队库、项目库都能发起。

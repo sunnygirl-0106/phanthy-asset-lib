@@ -536,7 +536,7 @@
 .projTag { font-size: 11px; color: rgba(255, 255, 255, 0.42); }
 .projGo { color: rgba(255, 255, 255, 0.3); font-size: 18px; flex: none; }
 
-/* 音色设置面板 */
+/* 声音设置面板 */
 .vtabs { display: flex; gap: 8px; margin-bottom: 14px; }
 .vtab { flex: 1; padding: 10px; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 10px; background: #22272f; text-align: left; font-size: 12.5px; color: rgba(255, 255, 255, 0.55); cursor: pointer; font-family: inherit; }
 .vtab b { display: block; color: #e9ecf1; font-size: 13px; margin-bottom: 2px; }
@@ -623,6 +623,58 @@
 .nameField::placeholder { color: rgba(255, 255, 255, 0.3); font-weight: 400; }
 
 /* 内联音色下拉入口：一颗青绿描边小胶囊，名字长了自身省略、不撑破名称行。 */
+/* 名称行的声音区（变体 B）：点标签本体=试听，右侧「⋯」开更换/清除菜单 */
+.voiceSplit { position: relative; display: inline-flex; align-items: stretch; flex: none; max-width: 60%; }
+/* 左段：话筒 + 名字，点它直接试听 */
+.voicePlay {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0; height: 32px; padding: 0 10px;
+  font-size: 12.5px; line-height: 1; cursor: pointer; font-family: inherit;
+  color: var(--accent); border: 1px solid rgba(var(--accent-rgb), 0.35); background: rgba(var(--accent-rgb), 0.07);
+  border-radius: 9px 0 0 9px;
+}
+.voicePlay:hover { background: rgba(var(--accent-rgb), 0.14); }
+.voicePlay svg { width: 14px; height: 14px; flex: none; }
+/* 只读态：没有下拉键，左段自己是一颗完整药丸 */
+.voicePlaySolo { border-radius: 9px; cursor: pointer; }
+/* 正在试听：淡高亮态（半透明薄荷底 + 稍强描边，文字仍是薄荷绿，不翻实心） */
+.voicePlayOn { background: rgba(var(--accent-rgb), 0.18); border-color: rgba(var(--accent-rgb), 0.6); color: var(--accent); }
+.voicePlayOn:hover { background: rgba(var(--accent-rgb), 0.24); }
+/* 三根声波条跳动 */
+.soundWave rect { transform-box: fill-box; transform-origin: center; animation: swave 0.9s ease-in-out infinite; }
+.soundWave rect:nth-child(2) { animation-delay: 0.15s; }
+.soundWave rect:nth-child(3) { animation-delay: 0.3s; }
+@keyframes swave { 0%, 100% { transform: scaleY(0.5); } 50% { transform: scaleY(1); } }
+/* 右段：⌄ 更多 */
+.voiceMore {
+  display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 32px; flex: none;
+  line-height: 1; cursor: pointer; font-family: inherit; color: var(--accent);
+  border: 1px solid rgba(var(--accent-rgb), 0.35); border-left: 0; background: rgba(var(--accent-rgb), 0.07);
+  border-radius: 0 9px 9px 0;
+}
+.voiceMore svg { width: 15px; height: 15px; transition: transform 0.15s ease; }
+.voiceMore:hover { background: rgba(var(--accent-rgb), 0.14); }
+.voiceMoreOn { background: rgba(var(--accent-rgb), 0.14); }
+.voiceMoreOn svg { transform: rotate(180deg); }
+/* 内联重命名输入框 */
+.voiceRename {
+  flex: none; width: 150px; height: 32px; padding: 0 10px; font-size: 12.5px; font-family: inherit;
+  color: var(--accent); border: 1px solid var(--accent); border-radius: 9px; background: rgba(var(--accent-rgb), 0.1);
+}
+.voiceRename:focus { outline: none; }
+/* 下拉菜单：更换 / 清除 */
+.voiceMenu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 7; min-width: 136px;
+  background: #1b1f27; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 10px; padding: 5px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55); animation: pop 0.12s ease;
+}
+.vmi {
+  display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 9px; border: 0; border-radius: 7px;
+  background: none; color: #e9ecf1; font-size: 12.5px; cursor: pointer; font-family: inherit; text-align: left;
+}
+.vmi:hover { background: rgba(255, 255, 255, 0.06); }
+.vmi svg { width: 14px; height: 14px; flex: none; opacity: 0.75; }
+.vmiDanger:hover { background: rgba(255, 122, 122, 0.12); color: #ff9a9a; }
+
 .voicePill {
   display: inline-flex; align-items: center; gap: 6px; flex: none; max-width: 46%;
   height: 32px; padding: 0 10px; border-radius: 9px; cursor: pointer; font-family: inherit;

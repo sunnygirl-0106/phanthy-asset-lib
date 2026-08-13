@@ -17,7 +17,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Asset, AssetRef, AssetSnapshot, Category, Voice, Scope } from '../data/types'
 import { useStore, useCurrentUser, type ActionResult } from '../store/useStore'
-import { canDirectReuse, canFavorite, canReuseFromTeam, canRemovePlazaAsset, canDeleteLibraryAsset, canViewPrompt, canRegenerate, canContributeToPlaza, isAdmin } from '../services/permission'
+import { canDirectReuse, canFavorite, canReuseFromTeam, canRemovePlazaAsset, canDeleteLibraryAsset, canViewPrompt, canRegenerate, canContributeToPlaza, canEditVoice as canEditVoicePerm, isAdmin } from '../services/permission'
 import { coverOf, resolveRefs, pendingRefs as pendingRefsOf, usableRefUrls } from '../services/assetService'
 import { COST_PER_IMAGE } from '../data/pricing'
 import { PRESET_VOICES } from '../data/presetVoices'
@@ -215,6 +215,48 @@ function MicOffIcon() {
   )
 }
 
+/** 正在播放——三根跳动的声波条（配合 CSS 动画）。 */
+function SoundWaveIcon() {
+  return (
+    <svg className={styles.soundWave} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <rect x="4" y="9" width="3" height="6" rx="1.5" />
+      <rect x="10.5" y="5" width="3" height="14" rx="1.5" />
+      <rect x="17" y="9" width="3" height="6" rx="1.5" />
+    </svg>
+  )
+}
+
+/** 下拉小箭头——声音标签「更多」触发键用。 */
+function ChevronDownIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  )
+}
+
+/** 铅笔——声音标签「重命名」菜单项用。 */
+function EditIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+    </svg>
+  )
+}
+
+/** 更换（换一个）图标——声音标签「⋯ 更多」菜单用。 */
+function SwapIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M4 12a8 8 0 0 1 14-5l2 2" />
+      <path d="M20 4v5h-5" />
+      <path d="M20 12a8 8 0 0 1-14 5l-2-2" />
+      <path d="M4 20v-5h5" />
+    </svg>
+  )
+}
+
 /** 一个极简试听按钮：点一下就播这段音源。 */
 function PlayButton({ src, label = '试听' }: { src: string; label?: string }) {
   return (
@@ -289,8 +331,15 @@ export function AssetDetail({
   const [nameDraft, setNameDraft] = useState(asset?.name ?? '')
   // 左栏「资产名称」字段（对齐 Figma）：常驻可编辑，失焦 / 回车即提交，改名失败回滚到原名。
   const [nameField, setNameField] = useState(asset?.name ?? '')
-  // 音色设置面板的两条路：挑预置 / 复刻
+  // 设置声音面板的两条路：挑预置 / 复刻
   const [voiceTab, setVoiceTab] = useState<'preset' | 'clone'>('preset')
+  // 名称行声音标签的「⌄ 更多」下拉（更换 / 重命名 / 清除）
+  const [voiceMenu, setVoiceMenu] = useState(false)
+  // 声音标签：正在试听高亮 + 内联重命名
+  const [voicePlaying, setVoicePlaying] = useState(false)
+  const [voiceRenaming, setVoiceRenaming] = useState(false)
+  const [voiceNameDraft, setVoiceNameDraft] = useState('')
+  const voiceAudioRef = useRef<HTMLAudioElement | null>(null)
   const [includeVoice, setIncludeVoice] = useState(true)
   // 路 B 复刻：临时存用户上传的音源文件 + 命名草稿（本期占位，不接后端）
   const [cloneFile, setCloneFile] = useState<File | null>(null)
@@ -342,7 +391,9 @@ export function AssetDetail({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      if (shareOpen) setShareOpen(false)
+      if (voiceRenaming) setVoiceRenaming(false)
+      else if (voiceMenu) setVoiceMenu(false)
+      else if (shareOpen) setShareOpen(false)
       else if (sendImg) setSendImg(null)
       else if (confirmGen) setConfirmGen(false)
       else if (addPicker) setAddPicker(null)
@@ -356,7 +407,7 @@ export function AssetDetail({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [shareOpen, sendImg, confirmGen, addPicker, preview, promptExpand, refPicker, promptOpen, picker, renaming])
+  }, [voiceRenaming, voiceMenu, shareOpen, sendImg, confirmGen, addPicker, preview, promptExpand, refPicker, promptOpen, picker, renaming])
 
   // 「分享」下拉：点面板外任意处收起（对齐设计稿的 document click 关闭）。
   useEffect(() => {
@@ -366,6 +417,14 @@ export function AssetDetail({
     const t = window.setTimeout(() => document.addEventListener('click', onDown), 0)
     return () => { window.clearTimeout(t); document.removeEventListener('click', onDown) }
   }, [shareOpen])
+
+  // 声音标签「⋯ 更多」下拉：点外部收起（同分享下拉的做法）。
+  useEffect(() => {
+    if (!voiceMenu) return
+    const onDown = () => setVoiceMenu(false)
+    const t = window.setTimeout(() => document.addEventListener('click', onDown), 0)
+    return () => { window.clearTimeout(t); document.removeEventListener('click', onDown) }
+  }, [voiceMenu])
 
   // 切换到另一份资产时，清掉三栏面板的本地态（生成中 / 中栏选中 / 子面板）。
   // 注意：草稿（提示词 / 名称 / 自参考）+ 基线快照改由下方渲染中同步捕获，
@@ -418,7 +477,8 @@ export function AssetDetail({
   const isOther = asset.category === 'other'
   const otherMedia = isOther ? ((asset.fields.media as 'image' | 'video' | 'text' | undefined) ?? 'image') : null
   const isCharacter = asset.category === 'character'
-  const canEditVoice = isCharacter && asset.scope !== 'plaza' && !isAdmin(user)
+  // 音色可写：只有角色有音色，且要过权限（团队库对子账号只读，与删除同一条线）。
+  const canEditVoice = isCharacter && canEditVoicePerm(user, asset)
   const canRegen = canRegenerate(user, asset)
 
   const coverImg = coverOf(asset)
@@ -534,7 +594,7 @@ export function AssetDetail({
   // 定稿：空壳进来（基线 cover 为空）时，第一张定稿是本次生成顺带确立的，跟素材层绑在一起，不算「改了定稿」。
   if (baseline.cover && baseUrl(asset.cover ?? '') !== baseUrl(baseline.cover))
     changes.push({ key: 'cover', label: '定稿改动', revert: () => revertOnly({ cover: baseline.cover }) })
-  if (!voiceEqual(asset.voice, baseline.voice)) changes.push({ key: 'voice', label: '音色改动', revert: () => revertOnly({ voice: baseline.voice }) })
+  if (!voiceEqual(asset.voice, baseline.voice)) changes.push({ key: 'voice', label: '声音改动', revert: () => revertOnly({ voice: baseline.voice }) })
 
   const hasUnsaved = changes.length > 0
   // 本次会话新入库的图片张数（素材层）：只用来在气泡里安抚「这些图不会丢」。
@@ -898,20 +958,20 @@ export function AssetDetail({
             <PlayButton src={asset!.voice.previewUrl} label="" />
             {canEditVoice && (
               <>
-                <button className={styles.vset} onClick={() => { setVoiceTab('preset'); setPicker('voice') }}>更换</button>
+                <button className={styles.vset} onClick={openVoice}>更换</button>
                 <button className={styles.vset} onClick={() => { clearVoice(asset!.id); markDirty() }}>清除</button>
               </>
             )}
           </div>
         ) : (
           canEditVoice ? (
-            <button className={styles.voiceAddLite} onClick={() => { setVoiceTab('preset'); setPicker('voice') }}>
-              <MicOffIcon /> ＋ 设置音色
+            <button className={styles.voiceAddLite} onClick={openVoice}>
+              <MicOffIcon /> ＋ 设置角色声音
             </button>
           ) : null
         )}
         {asset!.voice?.type === 'cloned' && !asset!.voice.providerVoiceId && (
-          <p className={styles.note}>复刻音色将在接入语音模型后生效（当前为上传原音试听）。</p>
+          <p className={styles.note}>复刻声音将在接入语音模型后生效（当前为上传原音试听）。</p>
         )}
       </div>
     )
@@ -920,6 +980,42 @@ export function AssetDetail({
   function openPicker(mode: Exclude<PickerMode, null>) {
     setIncludeVoice(true)
     setPicker(mode)
+  }
+
+  /** 打开「设置角色声音」弹窗：每次回到「预置」页、清掉上传草稿。 */
+  function openVoice() {
+    setVoiceTab('preset')
+    setCloneFile(null)
+    setCloneName('')
+    setPicker('voice')
+  }
+
+  /** 点声音标签本体：正在播就停，没播就播（驱动「正在播放」高亮态）。 */
+  function toggleVoicePlay(src: string) {
+    const cur = voiceAudioRef.current
+    if (cur) { cur.pause(); voiceAudioRef.current = null; setVoicePlaying(false); return }
+    const a = new Audio(src)
+    voiceAudioRef.current = a
+    a.onended = () => { voiceAudioRef.current = null; setVoicePlaying(false) }
+    a.onpause = () => setVoicePlaying(false)
+    a.play().then(() => setVoicePlaying(true)).catch(() => { voiceAudioRef.current = null; setVoicePlaying(false) })
+  }
+
+  /** 内联重命名：把当前声音换个名字（同一段音源、只改 name）。 */
+  function startVoiceRename() {
+    if (!asset!.voice) return
+    setVoiceNameDraft(asset!.voice.name)
+    setVoiceRenaming(true)
+    setVoiceMenu(false)
+  }
+  function commitVoiceRename() {
+    if (!voiceRenaming) return
+    const next = voiceNameDraft.trim()
+    if (next && asset!.voice && next !== asset!.voice.name) {
+      setVoice(asset!.id, { ...asset!.voice, name: next })
+      markDirty()
+    }
+    setVoiceRenaming(false)
   }
 
   function openPrompt() {
@@ -1108,17 +1204,35 @@ export function AssetDetail({
         </>
       )
     } else if (picker === 'voice') {
+      const saveClone = () => {
+        if (!cloneFile) return
+        const url = URL.createObjectURL(cloneFile)
+        const voice: Voice = {
+          id: `cloned_${Date.now()}`,
+          type: 'cloned',
+          name: cloneName.trim() || '未命名声音',
+          previewUrl: url,
+          sampleUrl: url,
+          providerVoiceId: undefined,
+        }
+        setVoice(asset!.id, voice)
+        markDirty()
+        setCloneFile(null)
+        setCloneName('')
+        setPicker(null)
+        setResult({ ok: true, message: '已保存音源，复刻将在接入语音模型后生效' })
+      }
       const isPreset = voiceTab === 'preset'
       inner = (
         <>
-          <h4 className={styles.subH}>{asset!.voice ? '更换音色' : '设置音色'}</h4>
-          <p className={styles.subD}>一个角色只有一个音色</p>
+          <h4 className={styles.subH}>{asset!.voice ? '更换角色声音' : '设置角色声音'}</h4>
+          <p className={styles.subD}>为「{asset!.name}」保存一段声音样片，后续生成视频时作为声音参考</p>
           <div className={styles.vtabs}>
             <button className={`${styles.vtab} ${isPreset ? styles.vtabOn : ''}`} onClick={() => setVoiceTab('preset')}>
-              <b>挑一个预置音色</b>
+              <b>选择预置声音</b>
             </button>
             <button className={`${styles.vtab} ${!isPreset ? styles.vtabOn : ''}`} onClick={() => setVoiceTab('clone')}>
-              <b>上传音色</b>
+              <b>上传已有录音</b>
             </button>
           </div>
           {isPreset ? (
@@ -1136,43 +1250,18 @@ export function AssetDetail({
             <>
               <label className={styles.drop}>
                 <div className={styles.dropMic}><MicIcon /></div>
-                <div><b>上传 5–10 秒清晰人声</b>（安静环境）</div>
-                <div style={{ marginTop: 6, fontSize: 11.5 }}>对齐主流复刻模型的样本要求</div>
+                <div><b>点击或拖拽上传角色录音</b></div>
                 <input type="file" accept="audio/*" style={{ display: 'none' }} onChange={(e) => setCloneFile(e.target.files?.[0] ?? null)} />
               </label>
               {cloneFile && <p className={styles.note}>已选：{cloneFile.name}</p>}
               <div className={styles.field}>
-                <label>音色命名</label>
+                <label>声音名称</label>
                 <input placeholder="如：男主 · 磁性低音" value={cloneName} onChange={(e) => setCloneName(e.target.value)} />
               </div>
               <div className={styles.inlActions}>
-                <button
-                  className={`${styles.btn} ${styles.btnPri}`}
-                  disabled={!cloneFile}
-                  onClick={() => {
-                    if (!cloneFile) return
-                    const url = URL.createObjectURL(cloneFile)
-                    const voice: Voice = {
-                      id: `cloned_${Date.now()}`,
-                      type: 'cloned',
-                      name: cloneName.trim() || '未命名音色',
-                      previewUrl: url,
-                      sampleUrl: url,
-                      providerVoiceId: undefined,
-                    }
-                    setVoice(asset!.id, voice)
-                    markDirty()
-                    setCloneFile(null)
-                    setCloneName('')
-                    setPicker(null)
-                    setResult({ ok: true, message: '已保存音源，复刻将在接入语音模型后生效' })
-                  }}
-                >
-                  确认
-                </button>
+                <button className={`${styles.btn} ${styles.btnPri}`} disabled={!cloneFile} onClick={saveClone}>确认</button>
                 <button className={styles.btnGhost} onClick={() => setPicker(null)}>取消</button>
               </div>
-              <p className={styles.note}>本期占位：先存下样本、试听回放原音；接入语音模型后复刻自动生效，入口零改动。</p>
             </>
           )}
         </>
@@ -1217,7 +1306,7 @@ export function AssetDetail({
                   className={styles.voicePillBar}
                   draggable={!!onVoiceDragStart}
                   onDragStart={onVoiceDragStart}
-                  title={`音色：${asset.voice.name}`}
+                  title={`声音：${asset.voice.name}`}
                 >
                   <span className={styles.vpbIco}><MicIcon /></span>
                   <span className={styles.vpbName}>
@@ -1229,7 +1318,7 @@ export function AssetDetail({
                   <button
                     className={styles.vpbAdd}
                     title="放到画布"
-                    onClick={() => onUse?.({ voice: { url: asset.voice!.previewUrl, name: `${asset.name}·音色` } })}
+                    onClick={() => onUse?.({ voice: { url: asset.voice!.previewUrl, name: `${asset.name}·声音` } })}
                   >
                     ＋
                   </button>
@@ -1237,7 +1326,7 @@ export function AssetDetail({
               ) : (
                 <div className={`${styles.voicePillBar} ${styles.voicePillBarOff}`}>
                   <span className={`${styles.vpbIco} ${styles.vpbIcoOff}`}><MicOffIcon /></span>
-                  <span className={styles.vpbNameOff}>未设置音色</span>
+                  <span className={styles.vpbNameOff}>未设置声音</span>
                 </div>
               )
             )}
@@ -1419,20 +1508,79 @@ export function AssetDetail({
                     placeholder="给这份资产起个名字"
                   />
                   {isCharacter && (canEditVoice ? (
-                    <button
-                      className={`${styles.voicePill} ${asset.voice ? '' : styles.voicePillEmpty}`}
-                      onClick={() => { setVoiceTab('preset'); setPicker('voice') }}
-                      title={asset.voice ? `音色：${asset.voice.name}` : '设置音色'}
-                    >
-                      {asset.voice ? <MicIcon /> : <MicOffIcon />}
-                      <span className={styles.voicePillName}>{asset.voice ? asset.voice.name : '设置音色'}</span>
-                      <span className={styles.voicePillCaret}>⌄</span>
-                    </button>
+                    asset.voice ? (
+                      voiceRenaming ? (
+                        // 内联重命名：把标签变成输入框
+                        <input
+                          className={styles.voiceRename}
+                          autoFocus
+                          value={voiceNameDraft}
+                          onChange={(e) => setVoiceNameDraft(e.target.value)}
+                          onBlur={commitVoiceRename}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                            else if (e.key === 'Escape') setVoiceRenaming(false)
+                          }}
+                        />
+                      ) : (
+                        // 变体 B：点标签本体=试听（正在播放会高亮）；更换/重命名/清除收进 ⌄ 下拉
+                        <span className={styles.voiceSplit}>
+                          <button
+                            type="button"
+                            className={`${styles.voicePlay} ${voicePlaying ? styles.voicePlayOn : ''}`}
+                            title={voicePlaying ? '停止试听' : `试听 · ${asset.voice.name}`}
+                            onClick={(e) => { e.stopPropagation(); toggleVoicePlay(asset.voice!.previewUrl) }}
+                          >
+                            {voicePlaying ? <SoundWaveIcon /> : <MicIcon />}
+                            <span className={styles.voicePillName}>{asset.voice.name}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className={`${styles.voiceMore} ${voiceMenu ? styles.voiceMoreOn : ''}`}
+                            title="更多"
+                            aria-haspopup="menu"
+                            aria-expanded={voiceMenu}
+                            onClick={(e) => { e.stopPropagation(); setVoiceMenu((v) => !v) }}
+                          >
+                            <ChevronDownIcon />
+                          </button>
+                          {voiceMenu && (
+                            <div className={styles.voiceMenu} role="menu" onClick={(e) => e.stopPropagation()}>
+                              <button className={styles.vmi} role="menuitem" onClick={() => { setVoiceMenu(false); openVoice() }}>
+                                <SwapIcon /> 更换声音
+                              </button>
+                              <button className={styles.vmi} role="menuitem" onClick={startVoiceRename}>
+                                <EditIcon /> 重命名
+                              </button>
+                              <button className={`${styles.vmi} ${styles.vmiDanger}`} role="menuitem" onClick={() => { setVoiceMenu(false); clearVoice(asset!.id); markDirty() }}>
+                                <TrashIcon /> 清除声音
+                              </button>
+                            </div>
+                          )}
+                        </span>
+                      )
+                    ) : (
+                      <button
+                        className={`${styles.voicePill} ${styles.voicePillEmpty}`}
+                        onClick={openVoice}
+                        title="设置角色声音"
+                      >
+                        <MicOffIcon />
+                        <span className={styles.voicePillName}>设置声音</span>
+                        <span className={styles.voicePillCaret}>⌄</span>
+                      </button>
+                    )
                   ) : asset.voice ? (
-                    <span className={`${styles.voicePill} ${styles.voicePillRo}`} title={`音色：${asset.voice.name}`}>
-                      <MicIcon />
+                    // 只读态：能试听（含高亮），不能更换 / 重命名 / 清除
+                    <button
+                      type="button"
+                      className={`${styles.voicePlay} ${styles.voicePlaySolo} ${voicePlaying ? styles.voicePlayOn : ''}`}
+                      title={voicePlaying ? '停止试听' : `试听 · ${asset.voice.name}`}
+                      onClick={(e) => { e.stopPropagation(); toggleVoicePlay(asset.voice!.previewUrl) }}
+                    >
+                      {voicePlaying ? <SoundWaveIcon /> : <MicIcon />}
                       <span className={styles.voicePillName}>{asset.voice.name}</span>
-                    </span>
+                    </button>
                   ) : null)}
                 </div>
               </div>
