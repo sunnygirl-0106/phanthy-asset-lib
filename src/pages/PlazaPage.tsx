@@ -69,8 +69,16 @@ export function PlazaPage() {
   // 当前账号在广场能看到的官方素材（权限说了算；广场对所有人可见）。
   // 显式再收一道 isListed：canSee 给了投稿人本人一个口子（让他在通知跳转等处看到自己被下架的那份），
   // 但广场是对外货架，下架的东西不该混在货架里给作者一个人看——所以货架页再过滤一次。
+  // 广场只陈列图片素材（角色/服装/场景/道具），音频不进货架——连「全部」也不出现。
   const plazaAssets = useMemo(
-    () => world.assets.filter((a) => a.scope === 'plaza' && isListed(a) && canSee(world, user, a)),
+    () =>
+      world.assets.filter(
+        (a) =>
+          a.scope === 'plaza' &&
+          a.category !== 'audio' &&
+          isListed(a) &&
+          canSee(world, user, a),
+      ),
     [world, user],
   )
 
