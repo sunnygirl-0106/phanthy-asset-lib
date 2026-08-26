@@ -516,6 +516,7 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
           src={videoPreview.src}
           poster={videoPreview.poster}
           name={videoPreview.name}
+          prompt={videoPreview.asset.prompt ?? undefined}
           onClose={() => setVideoPreview(null)}
           onDelete={() => { const a = videoPreview.asset; setVideoPreview(null); setConfirmSingle(a) }}
           onDownload={() => {

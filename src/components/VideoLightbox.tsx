@@ -8,6 +8,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { TextLightbox } from './TextLightbox'
 import styles from './VideoLightbox.module.css'
 
 const SPEEDS = [0.5, 1, 1.5, 2] as const
@@ -61,6 +62,7 @@ export function VideoLightbox({
   onDownload,
   onUse,
   onDelete,
+  prompt,
 }: {
   /** 可播放视频源；demo 可空（只铺 poster）。 */
   src?: string
@@ -74,6 +76,8 @@ export function VideoLightbox({
   onUse?: () => void
   /** 删除：✕ 左侧的小垃圾桶（二次确认由调用方负责）。给了才出（资产库用；画布不传）。 */
   onDelete?: () => void
+  /** 生成提示词：有非空提示词才传，头部出「提示词」入口，点开覆盖在画面上看全文 / 复制。 */
+  prompt?: string
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
@@ -84,13 +88,14 @@ export function VideoLightbox({
   const [volume, setVolume] = useState(1)
   const [speed, setSpeed] = useState(1)
   const [speedOpen, setSpeedOpen] = useState(false)
+  const [promptOpen, setPromptOpen] = useState(false)
 
-  // Esc 关闭（与详情弹窗 / 图片灯箱一致）。
+  // Esc 关闭（与详情弹窗 / 图片灯箱一致）。提示词弹窗开着时不抢——交给它自己先关。
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !promptOpen) onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, promptOpen])
 
   // 进来即尝试自动播放（无源 / 浏览器拦截则静默停在首帧）。
   useEffect(() => {
@@ -145,11 +150,20 @@ export function VideoLightbox({
   const pct = dur > 0 ? (cur / dur) * 100 : 0
 
   return (
+    <>
     <div className={styles.root} onClick={onClose}>
       <div className={styles.card} ref={cardRef} onClick={(e) => e.stopPropagation()}>
       <div className={styles.head}>
         <span className={styles.title}>{name}</span>
         <div className={styles.headRight}>
+          {prompt?.trim() && (
+            <button
+              className={`${styles.promptBtn} ${promptOpen ? styles.promptBtnOn : ''}`}
+              onClick={() => setPromptOpen((v) => !v)}
+            >
+              提示词
+            </button>
+          )}
           {onUse && (
             <button className={styles.useBtn} onClick={onUse}>添加到画布</button>
           )}
@@ -237,5 +251,12 @@ export function VideoLightbox({
         </div>
       </div>
     </div>
+
+    {/* 提示词：居中弹窗（复用 TextLightbox，与项目库文本资产同款观感），看全文 + 复制。
+        放在 .root 外，避免点它的遮罩冒泡到视频弹窗把整个播放器关掉。 */}
+    {promptOpen && prompt?.trim() && (
+      <TextLightbox name="提示词" text={prompt} onClose={() => setPromptOpen(false)} />
+    )}
+    </>
   )
 }

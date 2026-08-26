@@ -491,6 +491,7 @@ export function CanvasAssetPanel({
           src={videoPreview.src}
           poster={videoPreview.poster}
           name={videoPreview.name}
+          prompt={canViewPrompt(videoPreview.asset) ? videoPreview.asset.prompt ?? undefined : undefined}
           onUse={() => { onUse(defaultPayload(videoPreview.asset)); setVideoPreview(null) }}
           onClose={() => setVideoPreview(null)}
           onDownload={() => {

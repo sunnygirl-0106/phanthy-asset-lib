@@ -104,12 +104,15 @@ function audioAsset(
 function otherAsset(
   id: string, name: string, scopeId: string,
   media: 'image' | 'video' | 'text', coverOrSrc: string, duration?: string,
+  prompt?: string,
 ): Asset {
   const noCover = media === 'text'
   const dur = duration ? { duration } : {}
   return asset({
     id, category: 'other', name, scope: 'project', scopeId,
     cover: noCover ? '' : coverOrSrc,
+    // 「其他」默认无提示词；带了提示词的留存物（如生成后回存的视频）才写，播放页据此出「提示词」入口。
+    ...(prompt ? { prompt } : {}),
     fields:
       media === 'text'
         ? { media, text: coverOrSrc }
@@ -226,7 +229,8 @@ export function createSeedWorld(): World {
     // 「其他」4：创作过程的留存物（图 / 图 / 视频 / 文本），仅存本项目、不向上流转
     otherAsset('a_other_grid', '第一场·九宫格分镜', IDS.projDaily, 'image', `${IMG}/proj-daily/other/storyboard_grid.png`),
     otherAsset('a_other_plot', '完整情节故事板', IDS.projDaily, 'image', `${IMG}/proj-daily/other/plot_board.png`),
-    otherAsset('a_other_clip', '客厅对话·分镜片段', IDS.projDaily, 'video', `${IMG}/proj-daily/other/clip_poster.png`, '0:12'),
+    otherAsset('a_other_clip', '客厅对话·分镜片段', IDS.projDaily, 'video', `${IMG}/proj-daily/other/clip_poster.png`, '0:12',
+      '雨夜霓虹的赛博朋克都市街头，主角独自走过湿漉的街道，镜头缓慢跟随推进；青紫色霓虹倒影、体积光、电影级景深，35mm 胶片质感，2.39:1 宽银幕。'),
     otherAsset('a_other_script', '第一幕剧本·客厅对峙', IDS.projDaily, 'text', SCRIPT_LIVING_ROOM),
 
     /* ══ 音频 ══ 三层各铺几段，让画布资产面板的「音频」类目有内容可展示 */
