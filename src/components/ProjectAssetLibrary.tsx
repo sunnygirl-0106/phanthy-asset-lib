@@ -13,9 +13,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Category, Asset } from '../data/types'
 import { useStore } from '../store/useStore'
-import { refsReady } from '../services/assetService'
+import { refsReady, coverOf } from '../services/assetService'
 import { AssetCard } from './AssetCard'
 import { AssetDetail } from './AssetDetail'
+import { VideoLightbox } from './VideoLightbox'
 import { AudioList } from './AudioList'
 import { BatchGenerateModal } from './BatchGenerateModal'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -105,6 +106,8 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
   const [confirmDelete, setConfirmDelete] = useState(false) // 批量删除二次确认弹窗
   const [confirmSingle, setConfirmSingle] = useState<Asset | null>(null) // 单份删除二次确认弹窗
   const [detailAssetId, setDetailAssetId] = useState<string | null>(null)
+  // 「其他」视频：在库里点卡片即全屏播放（不进详情，直接预览）。
+  const [videoPreview, setVideoPreview] = useState<{ asset: Asset; src?: string; poster?: string; name: string } | null>(null)
   const [demoOpen, setDemoOpen] = useState(false) // 演示控件收起/展开
   const [toast, setToast] = useState<string | null>(null)
   // 生成前确认弹窗（0812 · §6）：三个入口统一走它，各自喂不同的候选 id 列表。
@@ -119,7 +122,14 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
    * 「其他」里的视频不再单开大屏播放器——它和图片、文本走同一条路径，
    * 都是"点开 → 详情里看 / 用"，行为一致，用户不用记两套规矩。
    */
-  const openAsset = (a: Asset) => setDetailAssetId(a.id)
+  const openAsset = (a: Asset) => {
+    // 「其他」视频：库里点开即直接播放（不走详情弹窗）。
+    if (a.category === 'other' && a.fields.media === 'video') {
+      setVideoPreview({ asset: a, src: (a.fields.videoUrl as string | undefined) || undefined, poster: coverOf(a), name: a.name })
+      return
+    }
+    setDetailAssetId(a.id)
+  }
 
   // 本项目资产池（与画布共享同一批数据）。
   const projectAssets = useMemo(
@@ -498,6 +508,27 @@ export function ProjectAssetLibrary({ projectId }: { projectId: string }) {
       {/* 资产详情弹窗（自带外壳；存入团队库等操作都在里面，本次不改） */}
       {detailAssetId && (
         <AssetDetail assetId={detailAssetId} onClose={() => setDetailAssetId(null)} />
+      )}
+
+      {/* 「其他」视频播放器：点视频卡片直接预览（音量 / 倍速 / 下载 / 扩大显示） */}
+      {videoPreview && (
+        <VideoLightbox
+          src={videoPreview.src}
+          poster={videoPreview.poster}
+          name={videoPreview.name}
+          onClose={() => setVideoPreview(null)}
+          onDelete={() => { const a = videoPreview.asset; setVideoPreview(null); setConfirmSingle(a) }}
+          onDownload={() => {
+            const url = videoPreview.src || videoPreview.poster
+            if (!url) return
+            const el = document.createElement('a')
+            el.href = url
+            el.download = videoPreview.name || 'video'
+            document.body.appendChild(el)
+            el.click()
+            el.remove()
+          }}
+        />
       )}
 
       {/* 新增资产弹窗（0808）：只填名称，建完直接开详情页写提示词 / 点生成。 */}

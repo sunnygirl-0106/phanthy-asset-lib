@@ -23,6 +23,7 @@ import { COST_PER_IMAGE } from '../data/pricing'
 import { PRESET_VOICES } from '../data/presetVoices'
 import { CanvasAssetPanel, type PickedRef } from './canvas/CanvasAssetPanel'
 import { AssetSaveModal, type SaveIntent } from './AssetSaveModal'
+import { VideoLightbox } from './VideoLightbox'
 import { assetUrl } from '../utils/assets'
 import styles from './AssetDetail.module.css'
 
@@ -38,8 +39,6 @@ const EMPTY_HINT_BY_CATEGORY: Record<Category, string> = {
   audio: '',
   other: '',
 }
-/** 「其他」媒介文案（详情大图 cap / 徽章共用）。 */
-const OTHER_MEDIA_LABEL: Record<'image' | 'video' | 'text', string> = { image: '图片', video: '视频', text: '文本' }
 /** Demo 无生图后端：生成 / 恢复空壳时先落这张占位图，接模型后换真图。 */
 const IMG_PLACEHOLDER = assetUrl('assets/canvas/image-placeholder.svg')
 
@@ -108,6 +107,15 @@ function PromptIcon() {
 }
 
 /** 详情图片卡片 hover 删除入口。 */
+/** 复制图标（文本详情头部用）。 */
+function CopyIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M5 15V5a2 2 0 0 1 2-2h8" />
+    </svg>
+  )
+}
 function TrashIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -353,6 +361,8 @@ export function AssetDetail({
   const [promptSaved, setPromptSaved] = useState(false)
   const [copied, setCopied] = useState(false)
   const [preview, setPreview] = useState<{ src: string; name: string } | null>(null) // 放大查看灯箱
+  // 「其他」视频全屏播放器：点视频即预览（src 为可播源，demo 可空只铺 poster）。
+  const [videoPreview, setVideoPreview] = useState<{ src?: string; poster?: string; name: string } | null>(null)
 
   // ── 阶段二 · 三栏生成面板的本地态 ──────────────────────────────────
   // 生成中（demo 用定时器模拟出图耗时，让演示看得出"在调模型"）。null = 不在生成；值 = 本次生成张数。
@@ -397,6 +407,7 @@ export function AssetDetail({
       else if (sendImg) setSendImg(null)
       else if (confirmGen) setConfirmGen(false)
       else if (addPicker) setAddPicker(null)
+      else if (videoPreview) setVideoPreview(null)
       else if (preview) setPreview(null)
       else if (promptExpand) setPromptExpand(false)
       else if (refPicker) setRefPicker(null)
@@ -407,7 +418,7 @@ export function AssetDetail({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [voiceRenaming, voiceMenu, shareOpen, sendImg, confirmGen, addPicker, preview, promptExpand, refPicker, promptOpen, picker, renaming])
+  }, [voiceRenaming, voiceMenu, shareOpen, sendImg, confirmGen, addPicker, videoPreview, preview, promptExpand, refPicker, promptOpen, picker, renaming])
 
   // 「分享」下拉：点面板外任意处收起（对齐设计稿的 document click 关闭）。
   useEffect(() => {
@@ -1139,6 +1150,20 @@ export function AssetDetail({
     )
   }
 
+  /** 「其他」视频全屏播放器：点视频即预览，带 音量 / 倍速 / 下载 / 扩大显示。 */
+  function renderVideoLightbox() {
+    if (!videoPreview) return null
+    return (
+      <VideoLightbox
+        src={videoPreview.src}
+        poster={videoPreview.poster}
+        name={videoPreview.name}
+        onClose={() => setVideoPreview(null)}
+        onDownload={() => downloadImage(videoPreview.src || videoPreview.poster || '', asset!.name)}
+      />
+    )
+  }
+
   // ── 头部流转动作按钮（scope + 权限判断；0803 起不再有造型勾选面板，直接执行）──
   function headActions() {
     if (isAdmin(user)) return null
@@ -1385,6 +1410,7 @@ export function AssetDetail({
         {renderPicker()}
         {renderCanvasPromptPanel()}
         {renderLightbox()}
+        {renderVideoLightbox()}
       </div>
     )
   }
@@ -1483,6 +1509,22 @@ export function AssetDetail({
                   </div>
                 ) : null)}
                 {headActions()}
+                {/* 「其他」文本：✕ / 垃圾桶左侧给一枚复制 icon，点了复制全文（闪一下青绿高亮示意已复制）。 */}
+                {isOther && otherMedia === 'text' && (
+                  <button
+                    className={`${styles.close} ${copied ? styles.headCopyOn : ''}`}
+                    title={copied ? '已复制' : '复制全部'}
+                    onClick={() => { navigator.clipboard?.writeText((asset.fields.text as string) ?? ''); setCopied(true); setTimeout(() => setCopied(false), 1400) }}
+                  >
+                    <CopyIcon />
+                  </button>
+                )}
+                {/* 「其他」（文本 / 视频等留存物）：✕ 左侧给一枚删除小垃圾桶，点了走整份删除的二次确认。 */}
+                {isOther && canDeleteLib && (
+                  <button className={`${styles.close} ${styles.headTrash}`} title="删除资产" onClick={deleteCoverImage}>
+                    <TrashIcon />
+                  </button>
+                )}
                 <button className={styles.close} title="关闭" onClick={requestClose}>✕</button>
               </>
             )}
@@ -1680,14 +1722,8 @@ export function AssetDetail({
 
               {/* 图像模型已移到通栏底栏（对齐 mockup）；参数区到此结束。 */}
 
-              {/* 有 pending 槽时的警示行（0812 §8.2）：确定的事用确定的语气。 */}
-              {pendingList.length > 0 && (
-                <div className={styles.refWarn}>
-                  ◷ 参考对象 <b>{pendingList.map((r) => r.label).join('、')}</b> 尚未生成，本次将<b>暂不参考其形象</b>，仅依据提示词生成。参考关系已为你保留，待其出图后重新生成即可自动生效。
-                </div>
-              )}
-
-              {/* 计价 + 生成 + 模型下拉已下沉到通栏底栏（见 mbody 之后的 genFootBar）。 */}
+              {/* 计价 + 生成 + 模型下拉已下沉到通栏底栏（见 mbody 之后的 genFootBar）；
+                  pending 警示行也一并挪到底栏模型右侧，避免挤压上方参考图。 */}
             </div>
           )}
 
@@ -1699,11 +1735,11 @@ export function AssetDetail({
           <div className={`${styles.genCenter} ${hasGenPanel && !isEmpty && !isOther && generating === null && showFinalBadge && centerIsFinal ? styles.genCenterFinal : ''}`}>
             {/* 「预览」标题只在生成面板里有意义；团队库 / 广场只读态不写它（省地方）。
                 右端计数「第 N 张 / 共 M 张 · 未/已定稿」对齐设计稿，只在有候选、非生成中时出。 */}
-            {(hasGenPanel || isOther || isEmpty) && (
+            {(hasGenPanel || isEmpty) && (
               <div className={styles.stageHead}>
                 <div className={styles.stageHeadL}>
                   <span className={styles.stageTitle}>
-                    {isOther ? OTHER_MEDIA_LABEL[otherMedia!] : isEmpty ? '待生成' : '预览'}
+                    {isEmpty ? '待生成' : '预览'}
                   </span>
                   {/* 「当前定稿」标从图上移到这里（预览标题右边），不再遮挡大图。 */}
                   {hasGenPanel && !isEmpty && !isOther && generating === null && showFinalBadge && centerIsFinal && (
@@ -1717,29 +1753,56 @@ export function AssetDetail({
                 )}
               </div>
             )}
-            <div className={`${styles.bigframe} ${showFinalBadge && centerIsFinal ? styles.bigframeFinal : ''}`}>
+            <div className={`${styles.bigframe} ${!isOther && showFinalBadge && centerIsFinal ? styles.bigframeFinal : ''}`}>
               {isOther ? (
                 otherMedia === 'text' ? (
                   <div className={styles.otherTextBig}>{(asset.fields.text as string) || '（暂无正文）'}</div>
                 ) : (
                   <div className={styles.bigMediaWrap}>
-                    {/* 视频与图片走同一条路径（PRD #23/#24）：都在详情里看。
-                        有真实视频源就原地播放；demo 暂无源时退回"海报 + 播放三角"占位。 */}
-                    {otherMedia === 'video' && !!(asset.fields.videoUrl as string | undefined) ? (
-                      <video
-                        className={styles.bigVideo}
-                        src={asset.fields.videoUrl as string}
-                        poster={coverImg}
-                        controls
-                      />
-                    ) : (
-                      <>
-                        <img src={coverImg} alt={asset.name} />
-                        {otherMedia === 'video' && (
-                          <div className={styles.videoPlayBig} title="视频播放器占位 · 接入视频源后自动生效" aria-hidden>▶</div>
-                        )}
-                      </>
+                    {/* 视频与图片走同一条路径（PRD #23/#24）、样式对齐图片：都铺 poster 大图。
+                        视频多一枚中央播放钮，点海报 / 播放钮即进全屏播放器（demo 无源也照进，只铺 poster）。 */}
+                    <img
+                      src={coverImg}
+                      alt={asset.name}
+                      onClick={otherMedia === 'video' ? () => setVideoPreview({ src: (asset.fields.videoUrl as string | undefined) || undefined, poster: coverImg, name: asset.name }) : undefined}
+                      style={otherMedia === 'video' ? { cursor: 'pointer' } : undefined}
+                    />
+                    {otherMedia === 'video' && (
+                      <button
+                        className={styles.videoPlayBig}
+                        title="播放视频"
+                        aria-label="播放视频"
+                        onClick={() => setVideoPreview({ src: (asset.fields.videoUrl as string | undefined) || undefined, poster: coverImg, name: asset.name })}
+                      >
+                        ▶
+                      </button>
                     )}
+
+                    {/* 图片/视频自身操作 hover 浮在图上（对齐团队库预览）：放大/播放 · 下载 ·（有权限时）删除。
+                        「其他」没有候选池，删除走 deleteCoverImage（内部对 isOther 直接整份删）。 */}
+                    <div className={styles.thumbIcons}>
+                      <button
+                        className={styles.thumbBtn}
+                        title={otherMedia === 'video' ? '播放视频' : '放大查看'}
+                        onClick={() =>
+                          otherMedia === 'video'
+                            ? setVideoPreview({ src: (asset.fields.videoUrl as string | undefined) || undefined, poster: coverImg, name: asset.name })
+                            : setPreview({ src: coverImg, name: asset.name })
+                        }
+                      >
+                        <ZoomIcon />
+                      </button>
+                      <button
+                        className={styles.thumbBtn}
+                        title={otherMedia === 'video' ? '下载视频' : '下载原图'}
+                        onClick={() => downloadImage((otherMedia === 'video' && (asset.fields.videoUrl as string | undefined)) || coverImg, asset.name)}
+                      >
+                        <DownloadIcon />
+                      </button>
+                      {showCoverTrash && (
+                        <button className={styles.thumbBtn} title="删除该留存物" onClick={deleteCoverImage}><TrashIcon /></button>
+                      )}
+                    </div>
                   </div>
                 )
               ) : generating !== null ? (
@@ -1775,8 +1838,9 @@ export function AssetDetail({
                   </div>
                 </div>
               )}
-              {/* 只读态（无左栏生成面板）才在大图上给提示词入口。 */}
-              {!hasGenPanel && !isEmpty && !isOther && canViewPrompt(asset) && (
+              {/* 只读态（无左栏生成面板）才在大图上给提示词入口；「其他」图片/视频恒给角标——
+                  没提示词也出现，点开就是空的（对齐团队库右下角角标）。 */}
+              {!hasGenPanel && !isEmpty && (isOther ? otherMedia !== 'text' : canViewPrompt(asset)) && (
                 <button className={styles.promptBadge} title="查看提示词" onClick={openPrompt}>
                   <PromptIcon />
                 </button>
@@ -1839,24 +1903,12 @@ export function AssetDetail({
               </div>
             )}
 
-            {/* 「其他」留存物删除入口（预览台的成品删除都收在大图 hover 里，这里只剩「其他」）。 */}
-            {isOther && showCoverTrash && (
-              <div className={styles.centerActs}>
-                <button className={`${styles.btn} ${styles.btnDangerGhost}`} onClick={deleteCoverImage}>删除该留存物</button>
-              </div>
-            )}
+            {/* 「其他」留存物的删除已收进大图 hover 工具条（放大 / 下载 / 删除），
+                下方不再单列「删除该留存物」按钮，也不再赘述留存物说明——用户看得懂。 */}
 
             {/* 音色（角色专用）：有生成面板时收进左栏「角色名称」行的内联下拉（对齐 mockup）；
                 没有生成面板时（团队库 / 广场 / 只读）音色仍留在中栏这条 bar 里，别弄丢。 */}
             {isCharacter && !hasGenPanel && renderVoice()}
-
-            {/* 「其他」留存物说明 */}
-            {isOther && (
-              <p className={styles.secD}>
-                「其他」是创作过程的留存物（分镜 / 视频片段 / 台词）：仅存在于本项目、可随时拖回画布，
-                不存入团队库、不贡献到广场。
-              </p>
-            )}
 
             {/* 治理提示。结果提示已改成弹窗顶部的浮层 toast——
                 原来挂在这里（音色块下方），每出一次提示就把中栏顶一次，布局一直在跳。 */}
@@ -1920,11 +1972,19 @@ export function AssetDetail({
         {/* ── 通栏底栏（对齐 mockup）：左＝图像模型下拉，右＝预计消耗 + 生成 ── */}
         {hasGenPanel && (
           <div className={styles.genFootBar}>
-            <label className={styles.footModel} title={model}>
-              <select className={styles.footSel} value={model} onChange={(e) => { setModel(e.target.value); markDirty() }}>
-                {MODEL_OPTS.map((o) => <option key={o}>{o}</option>)}
-              </select>
-            </label>
+            <div className={styles.footLeft}>
+              <label className={styles.footModel} title={model}>
+                <select className={styles.footSel} value={model} onChange={(e) => { setModel(e.target.value); markDirty() }}>
+                  {MODEL_OPTS.map((o) => <option key={o}>{o}</option>)}
+                </select>
+              </label>
+              {/* 有 pending 槽时的警示行（0812 §8.2）：贴在模型右侧，确定的事用确定的语气。 */}
+              {pendingList.length > 0 && (
+                <div className={styles.refWarn}>
+                  <span className={styles.refWarnIcon}>ⓘ</span> <b>{pendingList.map((r) => r.label).join('、')}</b> 尚未出图，本次仅按提示词生成。出图后自动生效
+                </div>
+              )}
+            </div>
             <div className={styles.footRight}>
               {/* 生成即保存（0814 · PRD #15.1）：把这句写在按钮旁边，
                   用户就不必先「保存」再「生成」——点生成本身就是一次保存。 */}
@@ -1980,6 +2040,7 @@ export function AssetDetail({
         )}
       </div>
       {renderLightbox()}
+      {renderVideoLightbox()}
       {/* 图片级流转（0810）：把选中的这张图送出去。只出一层（团队库 / 广场），不出保存方式段。 */}
       {sendImg && (
         <AssetSaveModal

@@ -111,19 +111,14 @@ export function BatchGenerateModal({
   // 列表里是否存在 #3（有 pending 槽的空壳）——决定顶部提示条是否出现。
   const hasWaiting = noImage.some((a) => pendingRefs(world, a).length > 0)
 
-  // 分组排序（§6.2）：按类目分组，组内 #1/#2（就位）→ #3（未就位）。
-  const groups = CAT_ORDER
-    .map((cat) => {
-      const items = noImage
-        .filter((a) => a.category === cat)
-        .sort((a, b) => {
-          const aw = pendingRefs(world, a).length > 0 ? 1 : 0
-          const bw = pendingRefs(world, b).length > 0 ? 1 : 0
-          return aw - bw
-        })
-      return { cat, items }
-    })
-    .filter((g) => g.items.length > 0)
+  // 待生成排序（§6.2）：整段不再按类目拆分（避免和「生成中/已生成」的状态分法打架）。
+  // 组内排序 = #1/#2（参考就位）→ #3（未就位）；同状态内按类目次序稳定排列。
+  const noImageSorted = [...noImage].sort((a, b) => {
+    const aw = pendingRefs(world, a).length > 0 ? 1 : 0
+    const bw = pendingRefs(world, b).length > 0 ? 1 : 0
+    if (aw !== bw) return aw - bw
+    return CAT_ORDER.indexOf(a.category) - CAT_ORDER.indexOf(b.category)
+  })
 
   // 勾中的里，哪些是新生成（空壳）、哪些是重新生成（已有图）——底部说明和费用都要用。
   const pickedNew = noImage.filter((a) => selSet.has(a.id))
@@ -270,18 +265,18 @@ export function BatchGenerateModal({
           </div>
         )}
 
-        {/* 主体：待生成分组 + 生成中 + 已生成分区 */}
+        {/* 主体：统一按状态分区——待生成 / 生成中 / 已生成（不再按资产类型拆组）。 */}
         <div className={styles.body}>
-          {groups.map((g) => (
-            <section key={g.cat} className={styles.group}>
+          {noImageSorted.length > 0 && (
+            <section className={styles.group}>
               <div className={styles.groupHead}>
-                <span className={styles.groupLabel}>{CATEGORY_LABEL[g.cat]}</span>
-                <span className={styles.groupCount}>{g.items.length}</span>
+                <span className={styles.groupLabel}>待生成</span>
+                <span className={styles.groupCount}>{noImageSorted.length}</span>
                 <span className={styles.groupRule} aria-hidden />
               </div>
-              {g.items.map((a) => renderRow(a))}
+              {noImageSorted.map((a) => renderRow(a))}
             </section>
-          ))}
+          )}
 
           {generatingNow.length > 0 && (
             <section className={styles.group}>
@@ -314,7 +309,7 @@ export function BatchGenerateModal({
             </section>
           )}
 
-          {groups.length === 0 && generatingNow.length === 0 && hasImage.length === 0 && (
+          {noImageSorted.length === 0 && generatingNow.length === 0 && hasImage.length === 0 && (
             <div className={styles.empty}>没有可生成的资产。</div>
           )}
         </div>

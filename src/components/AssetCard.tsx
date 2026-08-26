@@ -132,12 +132,11 @@ export function AssetCard({
         </>
       )}
 
-      {/* 左上角徽章：媒介（其他）/ 失败状态。血缘（masterId）是内部数据，不再向用户提示「副本」。
+      {/* 左上角徽章：只留失败状态。媒介小标签（图片 / 视频 / 文本）去掉——用户从卡面形态自能看懂，无需再打标。
           「待生成」/「生成中」没图的卡片不打状态角标——封面中央已写状态，避免同一张卡重复两次。 */}
-      {(otherMedia || asset.status === 'failed') && (
+      {asset.status === 'failed' && (
         <div className={styles.badges}>
-          {otherMedia && <span className={`${styles.badge} ${styles.badgeMedia}`}>{MEDIA_LABEL[otherMedia]}</span>}
-          {asset.status === 'failed' && <span className={styles.badge}>{statusLabel(asset.status)}</span>}
+          <span className={styles.badge}>{statusLabel(asset.status)}</span>
         </div>
       )}
 

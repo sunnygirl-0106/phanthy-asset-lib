@@ -16,6 +16,8 @@ import { canSee, canViewPrompt } from '../../services/permission'
 import { coverOf } from '../../services/assetService'
 import { AssetCard } from '../AssetCard'
 import { AssetDetail } from '../AssetDetail'
+import { VideoLightbox } from '../VideoLightbox'
+import { TextLightbox } from '../TextLightbox'
 import { AudioList, audioSrcOf } from '../AudioList'
 import type { CategoryFilter } from '../CategoryTabs'
 import { assetUrl } from '../../utils/assets'
@@ -131,6 +133,10 @@ export function CanvasAssetPanel({
   const [query, setQuery] = useState('')
   const [detailAssetId, setDetailAssetId] = useState<string | null>(null)
   const [openPromptDirectly, setOpenPromptDirectly] = useState(false)
+  // 「其他」视频：点卡片即全屏播放（不走详情）——与资产库详情里的播放器同一套。
+  const [videoPreview, setVideoPreview] = useState<{ asset: Asset; src?: string; poster?: string; name: string } | null>(null)
+  // 「其他」文本：点卡片 / 点「查看」即弹窗看全文（不走详情二级页）。
+  const [textPreview, setTextPreview] = useState<{ asset: Asset; text: string; name: string } | null>(null)
   // 选图模式：已勾选的资产（按 assetId 存全量载荷，确定时一次性回调）。
   const [picked, setPicked] = useState<Record<string, PickedRef>>({})
   const picking = mode === 'pick'
@@ -209,6 +215,47 @@ export function CanvasAssetPanel({
     }
     // 候选池 ≤1 张且不属于"进详情选图"品类的，卡片上直接「使用」；否则进详情挑候选。
     const singleImage = (a.candidates?.length ?? 0) <= 1 && !STYLE_CATS.has(a.category)
+    // 「其他」视频：点卡片即全屏播放（不走详情，直接预览）。
+    const isOtherVideo = a.category === 'other' && a.fields.media === 'video'
+    const openVideo = () => setVideoPreview({ asset: a, src: (a.fields.videoUrl as string | undefined) || undefined, poster: coverOf(a), name: a.name })
+    // 「其他」文本：无「造型/候选」概念，不进详情二级页——点卡片 / 点「查看」即弹窗看全文，「使用」直接落文本节点。
+    const isOtherText = a.category === 'other' && a.fields.media === 'text'
+    const openText = () => setTextPreview({ asset: a, text: (a.fields.text as string) ?? '', name: a.name })
+    // 「其他」文本：hover 出「查看 / 使用」——查看=弹窗看全文，使用=直接落文本节点；点卡片默认查看。
+    if (isOtherText) {
+      return (
+        <AssetCard
+          key={a.id}
+          asset={a}
+          hideSub
+          compact
+          onClick={openText}
+          hoverActions={
+            <>
+              <button className={`${styles.actBtn} ${styles.actGhost}`} onClick={(e) => { e.stopPropagation(); openText() }}>
+                查看
+              </button>
+              <button className={`${styles.actBtn} ${styles.actAccent}`} onClick={(e) => { e.stopPropagation(); onUse(defaultPayload(a)) }}>
+                使用
+              </button>
+            </>
+          }
+        />
+      )
+    }
+    // 「其他」视频：不出 hover 按钮——点卡片默认就是「查看」（打开播放页，复用项目库同款），
+    // 看完在播放页里再引导「使用」（落视频节点到画布）。
+    if (isOtherVideo) {
+      return (
+        <AssetCard
+          key={a.id}
+          asset={a}
+          hideSub
+          compact
+          onClick={openVideo}
+        />
+      )
+    }
     return (
       <AssetCard
         key={a.id}
@@ -436,6 +483,37 @@ export function CanvasAssetPanel({
             </button>
           </div>
         </div>
+      )}
+
+      {/* 「其他」视频全屏播放器：点视频卡片即预览（音量 / 倍速 / 下载 / 扩大显示）。 */}
+      {videoPreview && (
+        <VideoLightbox
+          src={videoPreview.src}
+          poster={videoPreview.poster}
+          name={videoPreview.name}
+          onUse={() => { onUse(defaultPayload(videoPreview.asset)); setVideoPreview(null) }}
+          onClose={() => setVideoPreview(null)}
+          onDownload={() => {
+            const url = videoPreview.src || videoPreview.poster
+            if (!url) return
+            const el = document.createElement('a')
+            el.href = url
+            el.download = videoPreview.name || 'video'
+            document.body.appendChild(el)
+            el.click()
+            el.remove()
+          }}
+        />
+      )}
+
+      {/* 「其他」文本全文弹窗：点文本卡片 / 点「查看」即看全文，底部可「复制 / 使用」。 */}
+      {textPreview && (
+        <TextLightbox
+          name={textPreview.name}
+          text={textPreview.text}
+          onClose={() => setTextPreview(null)}
+          onUse={() => { onUse(defaultPayload(textPreview.asset)); setTextPreview(null) }}
+        />
       )}
     </div>
   )

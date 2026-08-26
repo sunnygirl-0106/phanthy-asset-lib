@@ -167,6 +167,9 @@
   color: rgba(255, 255, 255, 0.55); border: none; background: none; cursor: pointer; font-size: 17px;
 }
 .close:hover { background: #22272f; color: #fff; }
+/* 头部删除小垃圾桶（✕ 左侧）：默认灰、hover 转危险红。 */
+.headTrash svg { width: 18px; height: 18px; display: block; }
+.headTrash:hover { background: rgba(239, 68, 68, 0.14); color: #f87171; }
 
 /* ── 主体两栏 ── */
 .mbody { display: flex; flex: 1; min-height: 0; }
@@ -189,14 +192,16 @@
 
 /* 「其他」类目左栏大图容器（视频叠播放三角用） */
 .bigMediaWrap { position: relative; }
-/* 「其他」视频：中央「播放器占位」播放三角 */
+/* 「其他」视频：中央播放钮——点它（或点海报）即进全屏播放器。 */
 .videoPlayBig {
   position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
   width: 56px; height: 56px; display: flex; align-items: center; justify-content: center;
-  padding-left: 5px; font-size: 24px; color: #fff;
+  padding-left: 5px; font-size: 24px; color: #fff; cursor: pointer;
   background: rgba(0, 0, 0, 0.5); border: 1.5px solid rgba(255, 255, 255, 0.7);
-  border-radius: 50%; backdrop-filter: blur(2px); pointer-events: none;
+  border-radius: 50%; backdrop-filter: blur(2px);
+  transition: transform 0.14s ease, background 0.14s ease;
 }
+.videoPlayBig:hover { transform: translate(-50%, -50%) scale(1.08); background: rgba(0, 0, 0, 0.66); }
 /* 「其他」文本：左栏铺正文全文（可滚动），不放图 */
 .otherTextBig {
   width: 100%; aspect-ratio: 1 / 1; overflow-y: auto;
@@ -439,11 +444,12 @@
 
 /* 有 pending 槽时的警示行（0812 §8.2）：琥珀底、放在生成按钮上方。 */
 .refWarn {
-  margin: 0 0 10px; padding: 9px 12px; border-radius: 8px;
-  background: rgba(245, 194, 107, 0.12); border: 1px solid rgba(245, 194, 107, 0.3);
-  font-size: 12px; line-height: 1.6; color: #f5c26b;
+  margin: 0; padding: 0; border: none; background: none; min-width: 0;
+  display: flex; align-items: baseline; gap: 5px;
+  font-size: 12px; line-height: 1.4; color: #f5c26b;
 }
 .refWarn b { color: #ffd489; font-weight: 600; }
+.refWarnIcon { flex: none; font-size: 13px; opacity: 0.9; }
 .btnDanger {
   background: var(--danger); color: #2a0d0d; border-color: transparent; font-weight: 600;
 }
@@ -803,7 +809,8 @@
   flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px;
   padding: 16px 28px; border-top: 1px solid var(--gen-divider); background: var(--gen-surface);
 }
-.footRight { display: flex; align-items: center; gap: 18px; }
+.footLeft { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.footRight { display: flex; align-items: center; gap: 18px; flex: none; }
 /* 底栏模型下拉：胶囊形，宽度随内容（长模型名不再被四等分挤截断）。 */
 .footModel { display: inline-flex; }
 .footSel {
@@ -908,8 +915,26 @@
 .modal3 .bigImgWrap > img { border-radius: 8px; box-shadow: none; }
 .bigframe .bigMediaWrap { display: grid; place-items: center; max-width: 100%; max-height: 100%; }
 .bigframe .bigMediaWrap img { width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 12px; display: block; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45); }
-.bigframe .otherTextBig { width: min(80%, 340px); aspect-ratio: auto; max-height: 100%; }
+/* 「其他」文本：正文直接铺满外框（不再套一张渐变内卡，避免"框里掏框"）——
+   透明底、全宽、左对齐、字号放大、行距拉开，读感更接近一份文稿。 */
+.bigframe .otherTextBig {
+  width: 100%; height: 100%; max-height: 100%; aspect-ratio: auto;
+  background: none; border-radius: 0;
+  padding: 4px 22px 4px 4px;
+  text-align: left;
+  font-size: 14.5px; line-height: 1.95; color: rgba(255, 255, 255, 0.88);
+}
 .bigframe .emptyBig { width: min(72%, 300px); aspect-ratio: 1 / 1; }
+/* 文本正文滚动条：默认隐藏，hover 到正文框才浮出（避免常驻一根灰条）。 */
+.bigframe .otherTextBig { scrollbar-width: none; }
+.bigframe .otherTextBig::-webkit-scrollbar { width: 8px; }
+.bigframe .otherTextBig::-webkit-scrollbar-thumb { background: transparent; border-radius: 999px; }
+.bigframe .otherTextBig:hover { scrollbar-width: thin; }
+.bigframe .otherTextBig:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.22); }
+
+/* 文本复制 icon（头部，垃圾桶左侧）：复用 .close 的尺寸；点后闪一下青绿示意已复制。 */
+.close svg { width: 18px; height: 18px; display: block; }
+.headCopyOn { color: var(--accent) !important; background: rgba(var(--accent-rgb), 0.14) !important; }
 /* 生成中骨架态（0807）：中栏旋转圈 + 一行说明。 */
 .genLoading {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
@@ -1243,6 +1268,7 @@
 .lookPic:hover .thumbIcons,
 .cvPic:hover .thumbIcons,
 .look:hover .thumbIcons,
+.bigMediaWrap:hover .thumbIcons,
 .baseLg:hover .thumbIcons { opacity: 1; transform: none; }
 
 .thumbBtn {

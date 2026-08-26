@@ -109,10 +109,11 @@ export function AudioList({
             draggable={mode.kind === 'canvas' && !editing}
             onDragStart={mode.kind === 'canvas' ? (e) => mode.onDragStart(e, a) : undefined}
           >
-            {selection && (
+            {/* 勾选框只在选择态出现：音频行不再 hover 浮出圈圈（要批量删，先点右上「批量操作」）。 */}
+            {selection?.selecting && (
               <button
                 type="button"
-                className={`${styles.audioCheck} ${selection.isSelected(a) ? styles.audioCheckOn : ''} ${selection.selecting ? styles.audioCheckShown : ''}`}
+                className={`${styles.audioCheck} ${selection.isSelected(a) ? styles.audioCheckOn : ''} ${styles.audioCheckShown}`}
                 title={selection.isSelected(a) ? '取消选择' : '选择'}
                 aria-pressed={selection.isSelected(a)}
                 onClick={(e) => { e.stopPropagation(); selection.onToggle(a) }}

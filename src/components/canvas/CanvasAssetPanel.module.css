@@ -256,6 +256,16 @@
 
 .actPrimary:hover { filter: brightness(1.06); }
 
+/* 青绿描边、半透明底：文本类「使用」等场景用（不抢实心主按钮的注意力）。 */
+.actAccent {
+  background: rgba(var(--accent-rgb), 0.12);
+  border-color: rgba(var(--accent-rgb), 0.55);
+  color: var(--accent);
+  backdrop-filter: blur(4px);
+}
+
+.actAccent:hover { background: rgba(var(--accent-rgb), 0.2); }
+
 .actGhost {
   background: rgba(0, 0, 0, 0.42);
   color: var(--text-main);
