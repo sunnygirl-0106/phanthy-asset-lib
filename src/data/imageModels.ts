@@ -1,62 +1,78 @@
-import { COST_PER_IMAGE } from './pricing'
-
-export type ImageModelId = 'nano-3-pro' | 'nano-2-pro' | 'seedream-3'
+export type ImageModelId = 'nano-3-pro' | 'nano-3.1-flash' | 'seedream-4' | 'seedream-4.5' | 'seedream-5-lite' | 'phan-image2' | 'mj-t2i'
 export type Tier = 'free' | 'vip'
-export type Resolution = '1K' | '2K' | '4K'
-export type ParamKey = 'resolution' | 'ratio' | 'count'
-export interface ImageParams { resolution: Resolution; ratio: string; count: number }
+export type ParamKey = 'resolution' | 'ratio' | 'version' | 'speed' | 'count'
+export const PARAM_ORDER: ParamKey[] = ['resolution', 'ratio', 'version', 'speed', 'count']
+export interface ImageParams { resolution: string; ratio: string; version: string; speed: string; count: number }
 export interface ImageModelCap {
   label: string
-  vendor: 'phan' | 'seedream'
+  desc: string
+  vendor: 'phan' | 'seedream' | 'midjourney'
   tier: Tier
   isNew?: boolean
-  resolutions: Resolution[]
-  ratios: string[]
-  counts: number[]
   costPerImage: number
+  options: Partial<Record<ParamKey, (string | number)[]>>
 }
 
-/** 演示数据。真实能力和价格接后端后从接口获取；数字可以由产品随时调整。 */
+/** 生产平台模型列表及参数配置；本轮统一按 30 星钻/张估算。 */
 export const IMAGE_MODELS: Record<ImageModelId, ImageModelCap> = {
-  'nano-3-pro': { label: 'Phan nano Image 3 Pro', vendor: 'phan', tier: 'vip', isNew: true,
-    resolutions: ['1K', '2K', '4K'], ratios: ['3:4', '1:1', '9:16', '16:9'], counts: [1, 2, 4, 6], costPerImage: COST_PER_IMAGE },
-  'nano-2-pro': { label: 'Phan nano Image 2 Pro', vendor: 'phan', tier: 'free',
-    resolutions: ['1K', '2K'], ratios: ['3:4', '1:1', '9:16', '16:9'], counts: [1, 2, 4], costPerImage: 20 },
-  'seedream-3': { label: 'Seedream 3.0', vendor: 'seedream', tier: 'free',
-    resolutions: ['1K', '2K'], ratios: ['1:1'], counts: [1, 2, 4], costPerImage: 12 },
+  'nano-3-pro': { label: 'Phan nano Image 3 Pro', desc: '图像生成预览版，支持对话式图像编辑', vendor: 'phan', tier: 'vip', costPerImage: 30,
+    options: { resolution: ['1K', '2K', '4K'], ratio: ['1:1', '3:4', '4:3', '9:16', '16:9'], count: [1, 2, 3, 4] } },
+  'nano-3.1-flash': { label: 'phan nano Image 3.1 Flash', desc: '图像生成，支持提示词创作', vendor: 'phan', tier: 'free', costPerImage: 30,
+    options: { resolution: ['1K', '2K'], count: [1, 2, 3, 4] } },
+  'seedream-4': { label: 'seedream 4.0', desc: '图像生成，细节丰富，适合高质感画面创作', vendor: 'seedream', tier: 'free', costPerImage: 30,
+    options: { resolution: ['1K', '2K', '4K'], count: [1, 2, 3, 4] } },
+  'seedream-4.5': { label: 'Doubao-seedream-4.5', desc: '图像生成，文字排版强，适合海报电商创作', vendor: 'seedream', tier: 'free', costPerImage: 30,
+    options: { resolution: ['1K', '2K', '4K'], count: [1, 2, 3, 4] } },
+  'seedream-5-lite': { label: 'Doubao-seedream-5.0-lite', desc: '轻量化图像生成，指令遵循好，主体稳定', vendor: 'seedream', tier: 'free', costPerImage: 30,
+    options: { resolution: ['1K', '2K'], count: [1, 2, 3, 4] } },
+  'phan-image2': { label: 'Phan image2', desc: '图生图局部编辑，文字渲染好，保留原图特征', vendor: 'phan', tier: 'free', costPerImage: 30,
+    options: { resolution: ['1K', '2K'], ratio: ['1:1', '3:4', '4:3', '9:16', '16:9'], count: [1, 2, 3, 4] } },
+  'mj-t2i': { label: 'Midjourney-t2i', desc: '文生图，艺术风格强，构图富有想象力', vendor: 'midjourney', tier: 'free', costPerImage: 30,
+    options: { ratio: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'], version: ['v7', 'v6.1', 'niji 6'], speed: ['Fast', 'Relax', 'Turbo'], count: [1, 2, 3, 4] } },
 }
 export const IMAGE_MODEL_IDS = Object.keys(IMAGE_MODELS) as ImageModelId[]
 export const DEFAULT_IMAGE_MODEL: ImageModelId = 'nano-3-pro'
-export const DEFAULT_IMAGE_PARAMS: ImageParams = { resolution: '2K', ratio: '3:4', count: 4 }
+export const DEFAULT_IMAGE_PARAMS: ImageParams = { resolution: '1K', ratio: '1:1', version: 'v7', speed: 'Fast', count: 1 }
 export interface ParamChange { key: ParamKey; from: string | number; to: string | number }
 
-/** 保留合法值，否则向下取最近一档；比例优先回退到 1:1。能力表各档位按升序排列。 */
-export function fitParams(model: ImageModelId, p: ImageParams): { params: ImageParams; changed: ParamChange[] } {
-  const cap = IMAGE_MODELS[model]
-  const resolutions = cap.resolutions.filter((r) => parseInt(r) <= parseInt(p.resolution))
-  const counts = cap.counts.filter((n) => n <= p.count)
-  const params: ImageParams = {
-    resolution: cap.resolutions.includes(p.resolution) ? p.resolution : resolutions[resolutions.length - 1] ?? cap.resolutions[0],
-    ratio: cap.ratios.includes(p.ratio) ? p.ratio : cap.ratios.includes('1:1') ? '1:1' : cap.ratios[0],
-    count: cap.counts.includes(p.count) ? p.count : counts[counts.length - 1] ?? cap.counts[0],
+/** 只收敛目标模型支持的参数，隐藏参数保留；仅提示前后模型共有参数的变化。 */
+export function fitParams(from: ImageModelId, to: ImageModelId, p: ImageParams): { params: ImageParams; changed: ParamChange[] } {
+  const params = { ...p }
+  const changed: ParamChange[] = []
+  for (const key of PARAM_ORDER) {
+    const options = IMAGE_MODELS[to].options[key]
+    if (!options?.length || options.includes(p[key])) continue
+    let value = options[0]
+    if (key === 'resolution' || key === 'count') {
+      const rank = (v: string | number) => parseFloat(String(v))
+      const lower = options.filter((v) => rank(v) <= rank(p[key]))
+      value = lower.length
+        ? lower.reduce((a, b) => rank(a) > rank(b) ? a : b)
+        : options.reduce((a, b) => rank(a) < rank(b) ? a : b)
+    } else if (key === 'ratio' && options.includes('1:1')) {
+      value = '1:1'
+    }
+    if (key === 'count') params[key] = Number(value)
+    else params[key] = String(value)
+    if (IMAGE_MODELS[from].options[key] && p[key] !== params[key]) changed.push({ key, from: p[key], to: params[key] })
   }
-  const keys: ParamKey[] = ['resolution', 'ratio', 'count']
-  return { params, changed: keys.filter((key) => p[key] !== params[key]).map((key) => ({ key, from: p[key], to: params[key] })) }
-}
-
-export function specLine(cap: ImageModelCap): string {
-  return `${cap.resolutions.join('/')} · ${cap.ratios.length === 1 ? `固定 ${cap.ratios[0]}` : `${cap.ratios.length} 种比例`} · 单次最多 ${Math.max(...cap.counts)} 张 · ${cap.costPerImage} 星钻/张`
+  return { params, changed }
 }
 
 export function lockedReason(model: ImageModelId, key: ParamKey): string {
-  const c = IMAGE_MODELS[model]
-  if (key === 'resolution' && c.resolutions.length === 1) return `${c.label} 仅支持 ${c.resolutions[0]}`
-  if (key === 'ratio' && c.ratios.length === 1) return `${c.label} 固定输出 ${c.ratios[0]}`
-  if (key === 'count' && c.counts.length === 1) return `${c.label} 每次生成 ${c.counts[0]} 张`
-  return ''
+  const c = IMAGE_MODELS[model], options = c.options[key]
+  if (options?.length !== 1) return ''
+  const value = options[0]
+  switch (key) {
+    case 'resolution': return `${c.label} 仅支持 ${value}`
+    case 'ratio': return `${c.label} 固定输出 ${value}`
+    case 'version': return `${c.label} 仅支持版本 ${value}`
+    case 'speed': return `${c.label} 仅支持速度档 ${value}`
+    case 'count': return `${c.label} 每次生成 ${value} 张`
+  }
 }
 
 export function switchMessage(model: ImageModelId, changed: ParamChange[]): string {
-  const names: Record<ParamKey, string> = { resolution: '清晰度', ratio: '比例', count: '数量' }
+  const names: Record<ParamKey, string> = { resolution: '清晰度', ratio: '比例', version: '版本', speed: '速度档', count: '数量' }
   return changed.length ? `已切换至 ${IMAGE_MODELS[model].label}：${changed.map((c) => `${names[c.key]}调整为 ${c.to}${c.key === 'count' ? ' 张' : ''}`).join('，')}` : ''
 }

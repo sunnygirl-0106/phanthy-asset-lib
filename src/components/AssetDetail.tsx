@@ -367,14 +367,14 @@ export function AssetDetail({
   const [centerKeptId, setCenterKeptId] = useState<string | null>(null)
   // 生成参数只在本地 UI 保存，不进 store，也不计入未保存改动。
   const [genModel, setGenModel] = useState<ImageModelId>(DEFAULT_IMAGE_MODEL)
-  const [genParams, setGenParams] = useState<ImageParams>(() => fitParams(DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_PARAMS).params)
+  const [genParams, setGenParams] = useState<ImageParams>(() => fitParams(DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_PARAMS).params)
   const [flash, setFlash] = useState<ParamKey[]>([])
   const flashTimer = useRef<ReturnType<typeof window.setTimeout>>()
   useEffect(() => () => window.clearTimeout(flashTimer.current), [])
   const cost = genParams.count * IMAGE_MODELS[genModel].costPerImage
   const changeModel = (m: ImageModelId) => {
     if (m === genModel) return
-    const { params, changed } = fitParams(m, genParams)
+    const { params, changed } = fitParams(genModel, m, genParams)
     setGenModel(m); setGenParams(params)
     window.clearTimeout(flashTimer.current)
     setFlash(changed.map((c) => c.key))

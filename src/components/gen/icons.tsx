@@ -67,3 +67,10 @@ export const IcSeedanceS = (p: P) => <SvgF {...p}>
 </SvgF>
 
 export const IcPhanS = (p: P) => <SvgF {...p}><path d="M12 2l2.9 7.1L22 12l-7.1 2.9L12 22l-2.9-7.1L2 12l7.1-2.9z" /></SvgF>
+
+/** 版本 */
+export const IcLayers = (p: P) => <Svg {...p}><path d="M12 4l8 4-8 4-8-4 8-4z" /><path d="M4 12l8 4 8-4" /><path d="M4 16l8 4 8-4" /></Svg>
+/** 速度档 */
+export const IcBolt = (p: P) => <Svg {...p}><path d="M13 3L5 13h6l-1 8 8-10h-6l1-8z" /></Svg>
+/** Midjourney 徽记 */
+export const IcMjS = (p: P) => <SvgF {...p}><path d="M11 3v13H4z" /><path d="M13 6l7 10h-7z" /><path d="M3 18h18v2H3z" /></SvgF>

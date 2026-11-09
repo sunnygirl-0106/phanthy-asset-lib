@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { IMAGE_MODELS, IMAGE_MODEL_IDS, lockedReason, specLine, type ImageModelId, type ImageParams, type ParamKey, type Tier } from '../../data/imageModels'
+import { IMAGE_MODELS, IMAGE_MODEL_IDS, lockedReason, PARAM_ORDER, type ImageModelId, type ImageParams, type ParamKey, type Tier } from '../../data/imageModels'
 import Overlay from './Overlay'
 import { useTip } from './useTip'
-import { IcCheck, IcChev, IcImage, IcPhanS, IcQuality, IcSeedanceS } from './icons'
+import { IcBolt, IcCheck, IcChev, IcImage, IcLayers, IcMjS, IcPhanS, IcQuality, IcSeedanceS } from './icons'
 import styles from './GenSettingsBar.module.css'
 
 interface Props {
@@ -18,7 +18,8 @@ interface Props {
 const TierPill = ({ tier }: { tier: Tier }) => tier === 'vip' ? <em className={styles.mdlTier}>VIP</em> : null
 /** 型号徽章：深色圆心 + 一圈银边，中间一枚白徽记。会员身份由名字后的金胶囊说，环只说厂牌。 */
 const ModelRing = ({ model, d }: { model: ImageModelId; d: number }) => {
-  const G = IMAGE_MODELS[model].vendor === 'seedream' ? IcSeedanceS : IcPhanS
+  const vendor = IMAGE_MODELS[model].vendor
+  const G = vendor === 'seedream' ? IcSeedanceS : vendor === 'midjourney' ? IcMjS : IcPhanS
   return <i className={styles.mdlRing} style={{ '--d': `${d}px` } as CSSProperties}>
     <i className={styles.mdlRingIn}><G size={Math.round(d * 0.56)} /></i>
   </i>
@@ -30,6 +31,20 @@ const RatioBox = ({ ratio }: { ratio: string }) => {
   const [bw, bh] = w >= h ? [long, short] : [short, long]
   return <i className={styles.ratioBox} style={{ width: bw, height: bh }} />
 }
+interface ParamDisplay {
+  name: string
+  icon: (value: string | number) => ReactNode
+  format: (value: string | number) => string
+  optionIcon?: (value: string | number) => ReactNode
+}
+const PARAM_DISPLAY: Record<ParamKey, ParamDisplay> = {
+  resolution: { name: '清晰度', icon: (v) => <IcQuality size={15} sw={1.9} lv={v === '1K' ? 1 : v === '2K' ? 2 : 3} />, format: String },
+  ratio: { name: '比例', icon: (v) => <RatioBox ratio={String(v)} />, format: String, optionIcon: (v) => <RatioBox ratio={String(v)} /> },
+  version: { name: '版本', icon: () => <IcLayers size={15} sw={1.9} />, format: String },
+  speed: { name: '速度档', icon: () => <IcBolt size={15} sw={1.9} />, format: String },
+  count: { name: '数量', icon: () => <IcImage size={15} sw={1.9} />, format: (v) => `${v} 张` },
+}
+
 interface Opt { k: string; label: string; on: boolean; glyph?: ReactNode; pick: () => void }
 /** 一格参数 = 一枚图标 + 此刻的取值，点开在它正上方落一张小抽屉。锁定格保留并说明原因。 */
 function Field({ id, open, setOpen, name, icon, value, opts, reason, say, flash, disabled }: {
@@ -72,26 +87,26 @@ export default function GenSettingsBar({ model, params, onModelChange, onParamsC
       <ModelRing model={model} d={20} /><span className={styles.mdlName}>{cap.label}</span><TierPill tier={cap.tier} />
       <IcChev size={12} className={styles.mdlChev} />
     </button>
-    <Field {...field} key={`${model}-resolution`} id="resolution" name="清晰度" value={params.resolution}
-      icon={<IcQuality size={15} sw={1.9} lv={params.resolution === '1K' ? 1 : params.resolution === '2K' ? 2 : 3} />}
-      reason={lockedReason(model, 'resolution')} flash={flash.includes('resolution')}
-      opts={cap.resolutions.map((r) => ({ k: r, label: r, on: r === params.resolution, pick: () => onParamsChange({ ...params, resolution: r }) }))} />
-    <Field {...field} key={`${model}-ratio`} id="ratio" name="比例" value={params.ratio} icon={<RatioBox ratio={params.ratio} />}
-      reason={lockedReason(model, 'ratio')} flash={flash.includes('ratio')}
-      opts={cap.ratios.map((r) => ({ k: r, label: r, on: r === params.ratio, glyph: <RatioBox ratio={r} />, pick: () => onParamsChange({ ...params, ratio: r }) }))} />
-    <Field {...field} key={`${model}-count`} id="count" name="数量" value={`${params.count} 张`} icon={<IcImage size={15} sw={1.9} />}
-      reason={lockedReason(model, 'count')} flash={flash.includes('count')}
-      opts={cap.counts.map((n) => ({ k: `${n}`, label: `${n} 张`, on: n === params.count, pick: () => onParamsChange({ ...params, count: n }) }))} />
+    {PARAM_ORDER.filter((k) => cap.options[k]).map((k) => {
+      const display = PARAM_DISPLAY[k]
+      return <Field {...field} key={`${model}-${k}`} id={k} name={display.name}
+        value={display.format(params[k])} icon={display.icon(params[k])}
+        reason={lockedReason(model, k)} flash={flash.includes(k)}
+        opts={cap.options[k]!.map((v) => ({
+          k: String(v), label: display.format(v), on: v === params[k], glyph: display.optionIcon?.(v),
+          pick: () => onParamsChange({ ...params, [k]: k === 'count' ? Number(v) : String(v) }),
+        }))} />
+    })}
     {open === 'model' && !disabled && <Overlay anchor={modelButton} label="选择模型" className={styles.mdlDrop} onClose={() => setOpen(null)}>
       {IMAGE_MODEL_IDS.map((m) => {
         const c = IMAGE_MODELS[m], on = m === model
         return <button type="button" key={m} className={`${styles.mdlRow}${on ? ` ${styles.on}` : ''}`}
-          aria-label={`${c.label}，${specLine(c)}`} aria-pressed={on}
+          aria-label={`${c.label}，${c.desc}`} aria-pressed={on}
           onClick={() => { onModelChange(m); setOpen(null) }}>
           <ModelRing model={m} d={22} />
           <span className={styles.mdlRowMain}>
             <span className={styles.mdlRowName}>{c.label}<TierPill tier={c.tier} />{c.isNew && <em className={styles.mdlNew}>NEW</em>}</span>
-            <small>{specLine(c)}</small>
+            <small>{c.desc}</small>
           </span>
           {on && <IcCheck size={15} sw={2.6} className={styles.mdlTick} />}
         </button>
