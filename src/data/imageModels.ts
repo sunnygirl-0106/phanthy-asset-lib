@@ -1,5 +1,4 @@
 export type ImageModelId = 'nano-3-pro' | 'nano-3.1-flash' | 'seedream-4' | 'seedream-4.5' | 'seedream-5-lite' | 'phan-image2' | 'mj-t2i'
-export type Tier = 'free' | 'vip'
 export type ParamKey = 'resolution' | 'ratio' | 'version' | 'speed' | 'count'
 export const PARAM_ORDER: ParamKey[] = ['resolution', 'ratio', 'version', 'speed', 'count']
 export interface ImageParams { resolution: string; ratio: string; version: string; speed: string; count: number }
@@ -7,7 +6,7 @@ export interface ImageModelCap {
   label: string
   desc: string
   vendor: 'phan' | 'seedream' | 'midjourney'
-  tier: Tier
+  recommended?: boolean
   isNew?: boolean
   costPerImage: number
   options: Partial<Record<ParamKey, (string | number)[]>>
@@ -15,19 +14,19 @@ export interface ImageModelCap {
 
 /** 生产平台模型列表及参数配置；本轮统一按 30 星钻/张估算。 */
 export const IMAGE_MODELS: Record<ImageModelId, ImageModelCap> = {
-  'nano-3-pro': { label: 'Phan nano Image 3 Pro', desc: '图像生成预览版，支持对话式图像编辑', vendor: 'phan', tier: 'vip', costPerImage: 30,
+  'nano-3-pro': { label: 'Phan nano Image 3 Pro', desc: '图像生成预览版，支持对话式图像编辑', vendor: 'phan', recommended: true, costPerImage: 30,
     options: { resolution: ['1K', '2K', '4K'], ratio: ['1:1', '3:4', '4:3', '9:16', '16:9'], count: [1, 2, 3, 4] } },
-  'nano-3.1-flash': { label: 'phan nano Image 3.1 Flash', desc: '图像生成，支持提示词创作', vendor: 'phan', tier: 'free', costPerImage: 30,
+  'nano-3.1-flash': { label: 'phan nano Image 3.1 Flash', desc: '图像生成，支持提示词创作', vendor: 'phan', costPerImage: 30,
     options: { resolution: ['1K', '2K'], count: [1, 2, 3, 4] } },
-  'seedream-4': { label: 'seedream 4.0', desc: '图像生成，细节丰富，适合高质感画面创作', vendor: 'seedream', tier: 'free', costPerImage: 30,
+  'seedream-4': { label: 'seedream 4.0', desc: '图像生成，细节丰富，适合高质感画面创作', vendor: 'seedream', costPerImage: 30,
     options: { resolution: ['1K', '2K', '4K'], count: [1, 2, 3, 4] } },
-  'seedream-4.5': { label: 'Doubao-seedream-4.5', desc: '图像生成，文字排版强，适合海报电商创作', vendor: 'seedream', tier: 'free', costPerImage: 30,
+  'seedream-4.5': { label: 'Doubao-seedream-4.5', desc: '图像生成，文字排版强，适合海报电商创作', vendor: 'seedream', costPerImage: 30,
     options: { resolution: ['1K', '2K', '4K'], count: [1, 2, 3, 4] } },
-  'seedream-5-lite': { label: 'Doubao-seedream-5.0-lite', desc: '轻量化图像生成，指令遵循好，主体稳定', vendor: 'seedream', tier: 'free', costPerImage: 30,
+  'seedream-5-lite': { label: 'Doubao-seedream-5.0-lite', desc: '轻量化图像生成，指令遵循好，主体稳定', vendor: 'seedream', costPerImage: 30,
     options: { resolution: ['1K', '2K'], count: [1, 2, 3, 4] } },
-  'phan-image2': { label: 'Phan image2', desc: '图生图局部编辑，文字渲染好，保留原图特征', vendor: 'phan', tier: 'free', costPerImage: 30,
+  'phan-image2': { label: 'Phan image2', desc: '图生图局部编辑，文字渲染好，保留原图特征', vendor: 'phan', costPerImage: 30,
     options: { resolution: ['1K', '2K'], ratio: ['1:1', '3:4', '4:3', '9:16', '16:9'], count: [1, 2, 3, 4] } },
-  'mj-t2i': { label: 'Midjourney-t2i', desc: '文生图，艺术风格强，构图富有想象力', vendor: 'midjourney', tier: 'free', costPerImage: 30,
+  'mj-t2i': { label: 'Midjourney-t2i', desc: '文生图，艺术风格表现力强，仅支持文字出图', vendor: 'midjourney', costPerImage: 30,
     options: { ratio: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'], version: ['v7', 'v6.1', 'niji 6'], speed: ['Fast', 'Relax', 'Turbo'], count: [1, 2, 3, 4] } },
 }
 export const IMAGE_MODEL_IDS = Object.keys(IMAGE_MODELS) as ImageModelId[]

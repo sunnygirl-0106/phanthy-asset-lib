@@ -6,7 +6,7 @@
 .overlay button{background:transparent;color:inherit}
 .set{display:flex;align-items:center;gap:2px;min-width:0;flex:none}
 /*
- * 模型：等级徽章 + 型号名 + 身份胶囊。它是这一排里唯一带颜色的东西，
+ * 模型：厂牌徽章 + 型号名 + 推荐胶囊。它是这一排里唯一带颜色的东西，
  * 所以形状也收成整圆（参数那三格是方角）—— 看不清字的距离上就已经认得出「最左边那枚是模型」。
  * 和参数之间空出 10px：它们不是同一类东西，靠间距断句，不靠一根竖线。
  */
@@ -43,7 +43,7 @@
   transition:width .2s var(--ease-soft),height .2s var(--ease-soft)}
 /*
  * 型号徽章：一圈银边围着一块暗底，中间一枚白色的徽记。
- * 不着等级色 —— 会员由名字后那枚金胶囊一个人说（见 tokens.css 那一段）；
+ * 不着等级色 —— 推荐状态由名字后那枚金胶囊一个人说；
  * 环要说的只是「这是哪家的型号」，那是一件和贵不贵无关的事。
  * 圆心用比面板更暗的那一格（--sunk）：亮边围暗底读起来才是「镶了一道边」，
  * 整枚都着色的话，抽屉里十一行就是十一颗亮圆点，谁也不比谁要紧。
@@ -53,7 +53,7 @@
 .mdlRingIn{display:grid;place-items:center;width:100%;height:100%;border-radius:50%;
   background:var(--sunk);color:var(--text-main)}
 /*
- * 身份胶囊：会员。免费档不挂 —— 一列里人人一枚牌子，等于一枚也没有。
+ * 推荐胶囊：只给推荐型号挂 —— 一列里人人一枚牌子，等于一枚也没有。
  * 顶上补一道白：这一小块是有厚度的一枚牌，不是印在纸上的一块色。
  */
 .mdlTier{flex:none;display:flex;align-items:center;height:16px;padding:0 6px;border-radius:8px;
@@ -78,7 +78,7 @@
 /* 行末那枚勾是这一列里唯一着青的东西：它说的是「现在用的就是这一个」 */
 .drop button>svg{flex:none;color:var(--accent)}
 /*
- * 模型抽屉。一列十一行，一行一个型号：等级徽章、型号名 + 身份胶囊，行末一枚勾。
+ * 模型抽屉。一列十一行，一行一个型号：厂牌徽章、型号名 + 推荐胶囊，行末一枚勾。
  * 不按厂牌切段 —— 十一行里插一根线，读出来是「线上面那几个是一类」，
  * 可挑型号时真正要比的是「谁收得下我这段素材、出多长」，不是它出自谁家；
  * 徽记已经把出身说完了，那根线只是把一列均匀的名字截成两截。
@@ -113,7 +113,7 @@
 .mdlTick{flex:none;color:var(--accent)}
 /*
  * 新一代的那枚小牌：一层清透的青玻璃（配色与来由见 tokens.css 的 --pill-new）。
- * 外形和 VIP 那枚对齐 —— 同高、同圆角：挨在一起的两枚牌子高矮不齐、圆角不一，
+ * 外形和推荐那枚对齐 —— 同高、同圆角：挨在一起的两枚牌子高矮不齐、圆角不一，
  * 读出来是两件凑在一块儿的东西，而它们本来是名字后头的同一串注脚。
  */
 .mdlNew{flex:none;display:flex;align-items:center;height:16px;padding:0 6px;border-radius:8px;

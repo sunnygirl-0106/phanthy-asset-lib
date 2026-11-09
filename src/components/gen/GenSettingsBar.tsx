@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { IMAGE_MODELS, IMAGE_MODEL_IDS, lockedReason, PARAM_ORDER, type ImageModelId, type ImageParams, type ParamKey, type Tier } from '../../data/imageModels'
+import { IMAGE_MODELS, IMAGE_MODEL_IDS, lockedReason, PARAM_ORDER, type ImageModelId, type ImageParams, type ParamKey } from '../../data/imageModels'
 import Overlay from './Overlay'
 import { useTip } from './useTip'
 import { IcBolt, IcCheck, IcChev, IcImage, IcLayers, IcMjS, IcPhanS, IcQuality, IcSeedanceS } from './icons'
@@ -14,9 +14,9 @@ interface Props {
   disabled?: boolean
 }
 
-/** 名字后头那枚身份胶囊。免费档不挂 —— 「不是会员专属」这件事不值得占一枚牌子。 */
-const TierPill = ({ tier }: { tier: Tier }) => tier === 'vip' ? <em className={styles.mdlTier}>VIP</em> : null
-/** 型号徽章：深色圆心 + 一圈银边，中间一枚白徽记。会员身份由名字后的金胶囊说，环只说厂牌。 */
+/** 名字后头的推荐胶囊只表示推荐，不代表会员资格或使用权限。 */
+const RecommendationPill = ({ recommended }: { recommended?: boolean }) => recommended ? <em className={styles.mdlTier}>推荐</em> : null
+/** 型号徽章：深色圆心 + 一圈银边，中间一枚白徽记。推荐状态由名字后的金胶囊说，环只说厂牌。 */
 const ModelRing = ({ model, d }: { model: ImageModelId; d: number }) => {
   const vendor = IMAGE_MODELS[model].vendor
   const G = vendor === 'seedream' ? IcSeedanceS : vendor === 'midjourney' ? IcMjS : IcPhanS
@@ -84,7 +84,7 @@ export default function GenSettingsBar({ model, params, onModelChange, onParamsC
     <button type="button" ref={modelButton} className={`${styles.mdl}${open === 'model' && !disabled ? ` ${styles.on}` : ''}`}
       aria-disabled={disabled || undefined} aria-label={`模型：${cap.label}`} aria-expanded={open === 'model' && !disabled}
       onClick={() => { if (!disabled) setOpen(open === 'model' ? null : 'model') }}>
-      <ModelRing model={model} d={20} /><span className={styles.mdlName}>{cap.label}</span><TierPill tier={cap.tier} />
+      <ModelRing model={model} d={20} /><span className={styles.mdlName}>{cap.label}</span><RecommendationPill recommended={cap.recommended} />
       <IcChev size={12} className={styles.mdlChev} />
     </button>
     {PARAM_ORDER.filter((k) => cap.options[k]).map((k) => {
@@ -105,7 +105,7 @@ export default function GenSettingsBar({ model, params, onModelChange, onParamsC
           onClick={() => { onModelChange(m); setOpen(null) }}>
           <ModelRing model={m} d={22} />
           <span className={styles.mdlRowMain}>
-            <span className={styles.mdlRowName}>{c.label}<TierPill tier={c.tier} />{c.isNew && <em className={styles.mdlNew}>NEW</em>}</span>
+            <span className={styles.mdlRowName}>{c.label}<RecommendationPill recommended={c.recommended} />{c.isNew && <em className={styles.mdlNew}>NEW</em>}</span>
             <small>{c.desc}</small>
           </span>
           {on && <IcCheck size={15} sw={2.6} className={styles.mdlTick} />}
