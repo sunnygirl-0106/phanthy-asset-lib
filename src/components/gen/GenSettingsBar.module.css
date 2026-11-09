@@ -1,0 +1,138 @@
+.overlay{z-index:2100;background:var(--surface-pop);border:1px solid var(--line-strong);border-radius:18px;
+  box-shadow:var(--shadow-pop);padding:12px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);
+  overflow:auto;font-size:13px;color:var(--text-main);outline:none;animation:pop .22s var(--ease-soft) both}
+/* 参考项目的全局按钮 reset 在这里收窄到本组件，portal 内的按钮也保持同样样式。 */
+.set button,.overlay button{border:0;font-family:inherit}
+.overlay button{background:transparent;color:inherit}
+.set{display:flex;align-items:center;gap:2px;min-width:0;flex:none}
+/*
+ * 模型：等级徽章 + 型号名 + 身份胶囊。它是这一排里唯一带颜色的东西，
+ * 所以形状也收成整圆（参数那三格是方角）—— 看不清字的距离上就已经认得出「最左边那枚是模型」。
+ * 和参数之间空出 10px：它们不是同一类东西，靠间距断句，不靠一根竖线。
+ */
+.mdl{display:flex;align-items:center;gap:7px;height:34px;padding:0 10px 0 7px;margin-right:10px;
+  border-radius:var(--radius-pill);background:transparent;color:var(--text-main);white-space:nowrap;
+  cursor:pointer;transition:background .2s}
+.mdlName{font-size:14px;font-weight:500}
+.mdl:hover{background:var(--fill)}
+.mdl.on{background:var(--fill-2)}
+/* 专注态锁死型号：点不开，也就不该在鼠标底下亮起来 —— 一个点不动的东西亮起来，是在撒谎 */
+.mdl[aria-disabled=true]{cursor:not-allowed}
+.mdl[aria-disabled=true]:hover{background:transparent}
+/*
+ * 一格参数：一枚图标 + 此刻的取值。图标说的是「这是哪一格」，数字说的是「这会儿是多少」——
+ * 两样凑起来就不必再写「清晰度」三个字，一行里也就摆得下三格。
+ */
+.field{display:flex;align-items:center;gap:6px;height:34px;padding:0 9px 0 7px;
+  border-radius:10px;background:transparent;font-size:13px;color:var(--text-body);
+  white-space:nowrap;cursor:pointer;transition:background .2s,color .2s}
+.fieldIc{display:grid;place-items:center;width:16px;height:16px;flex:none;
+  color:var(--text-faint);transition:color .2s}
+.field:hover{background:var(--fill);color:var(--text-main)}
+.field:hover .fieldIc,.field.on .fieldIc{color:var(--text-main)}
+.field.on{background:var(--fill-2);color:var(--text-main)}
+/* 锁死的那一格（跟随原片）：读得了改不了，所以不给指针也不给 hover，为什么改不了挂在悬浮说明上 */
+.field[aria-disabled=true],.field[aria-disabled=true]:hover{cursor:default;
+  background:transparent;color:var(--text-faint)}
+.field[aria-disabled=true]:hover .fieldIc{color:var(--text-faint)}
+/*
+ * 画幅那一枚：框本身就是那个比例，换比例时框跟着变形 ——
+ * 「16:9 → 9:16」这四个字换个次序看不出发生了什么，一块横框立起来就看得出。
+ */
+.ratioBox{display:block;box-sizing:border-box;border:1.4px solid currentColor;border-radius:2.5px;
+  transition:width .2s var(--ease-soft),height .2s var(--ease-soft)}
+/*
+ * 型号徽章：一圈银边围着一块暗底，中间一枚白色的徽记。
+ * 不着等级色 —— 会员由名字后那枚金胶囊一个人说（见 tokens.css 那一段）；
+ * 环要说的只是「这是哪家的型号」，那是一件和贵不贵无关的事。
+ * 圆心用比面板更暗的那一格（--sunk）：亮边围暗底读起来才是「镶了一道边」，
+ * 整枚都着色的话，抽屉里十一行就是十一颗亮圆点，谁也不比谁要紧。
+ */
+.mdlRing{flex:none;display:block;box-sizing:border-box;width:var(--d);height:var(--d);
+  border-radius:50%;padding:calc(var(--d) / 18);background:var(--ring-metal)}
+.mdlRingIn{display:grid;place-items:center;width:100%;height:100%;border-radius:50%;
+  background:var(--sunk);color:var(--text-main)}
+/*
+ * 身份胶囊：会员。免费档不挂 —— 一列里人人一枚牌子，等于一枚也没有。
+ * 顶上补一道白：这一小块是有厚度的一枚牌，不是印在纸上的一块色。
+ */
+.mdlTier{flex:none;display:flex;align-items:center;height:16px;padding:0 6px;border-radius:8px;
+  font:700 9px/1 var(--font-sans);letter-spacing:.06em;font-style:normal;
+  background:var(--pill-vip);color:var(--pill-vip-ink);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.34)}
+/* ── 模型与参数浮层 ── */
+/*
+ * 参数抽屉：贴着那一格从底下长出来的一小片，整片只有一列取值。
+ * 不给标题也不给关闭键 —— 标题要说的那句话（「清晰度」）已经画在它正下方那枚图标上了，
+ * 再摆一行「清晰度」就是把同一件事说两遍，还得为它多留一整行的高。
+ */
+.drop{padding:5px;border-radius:12px;min-width:104px}
+.drop button{display:flex;align-items:center;justify-content:space-between;gap:14px;
+  width:100%;height:32px;padding:0 9px;border-radius:7px;font-size:13px;color:var(--text-body);
+  cursor:pointer;transition:background .16s,color .16s}
+.drop button>span{display:flex;align-items:center;gap:8px;min-width:0}
+.optIc{display:grid;place-items:center;width:16px;height:16px;flex:none;color:var(--text-faint)}
+.drop button:hover{background:var(--fill-2);color:var(--text-main)}
+.drop button:hover .optIc,.drop .on .optIc{color:var(--text-main)}
+.drop .on{color:var(--text-main);font-weight:500}
+/* 行末那枚勾是这一列里唯一着青的东西：它说的是「现在用的就是这一个」 */
+.drop button>svg{flex:none;color:var(--accent)}
+/*
+ * 模型抽屉。一列十一行，一行一个型号：等级徽章、型号名 + 身份胶囊，行末一枚勾。
+ * 不按厂牌切段 —— 十一行里插一根线，读出来是「线上面那几个是一类」，
+ * 可挑型号时真正要比的是「谁收得下我这段素材、出多长」，不是它出自谁家；
+ * 徽记已经把出身说完了，那根线只是把一列均匀的名字截成两截。
+ *
+ * 取值域（出多长 / 多清楚 / 收几段）不常驻，悬浮到哪一行才浮出哪一行：
+ * 十一行小字一起摊开，每行都在说话，等于每行都没在说话，名字反倒被压住了；
+ * 一列干净的名字先让人找到「是哪一个」，停在谁身上再回答「它是什么样」。
+ * 行高是定死的，小字占的那一格一直空在那儿：浮出来时只有字在动，底下十行一动不动 ——
+ * 一行一撑高，整张抽屉（它是从底栏往上长的）会跟着往上蹿，鼠标底下的行就换了一个。
+ */
+.mdlDrop{width:340px;padding:7px;border-radius:16px}
+.mdlRow{display:flex;align-items:center;gap:10px;width:100%;min-height:46px;text-align:left;
+  padding:0 10px;border-radius:12px;cursor:pointer;transition:background .18s,box-shadow .18s}
+/* 名字这一块整体往上让 9px，把下半格空出来给小字；它自己是不是在动，看的是行的状态 */
+.mdlRowMain{position:relative;min-width:0;flex:1;transition:transform .22s var(--ease-soft)}
+.mdlRowName{display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:550;color:var(--text-main)}
+/* 脱离文档流挂在名字底下：它出现与否不该改变任何一行的高度 */
+.mdlRow small{position:absolute;top:100%;left:0;right:0;margin-top:3px;
+  font-size:11.5px;line-height:1.4;color:var(--text-muted);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;pointer-events:none;opacity:0;transform:translateY(-3px);
+  transition:opacity .16s,transform .22s var(--ease-soft)}
+.mdlRow:hover,.mdlRow:focus-visible{background:var(--fill-2)}
+.mdlRow:hover .mdlRowMain,.mdlRow:focus-visible .mdlRowMain,
+.mdlRow.on .mdlRowMain{transform:translateY(-8px)}
+.mdlRow:hover small,.mdlRow:focus-visible small,.mdlRow.on small{opacity:1;transform:none}
+/*
+ * 选中不着青底：这一列里着青的只有行末那枚勾。一行青底再加一枚青勾是把同一件事说两遍，
+ * 整块色还会压过名字本身 —— 中性的一块底 + 一圈细边，说的就是「停在这一行」。
+ * 它的小字也一直摊着：这一行是此刻的基准，别的行浮出来都是拿它作比。
+ */
+.mdlRow.on{background:var(--fill-2);box-shadow:inset 0 0 0 1px var(--line-strong)}
+.mdlTick{flex:none;color:var(--accent)}
+/*
+ * 新一代的那枚小牌：一层清透的青玻璃（配色与来由见 tokens.css 的 --pill-new）。
+ * 外形和 VIP 那枚对齐 —— 同高、同圆角：挨在一起的两枚牌子高矮不齐、圆角不一，
+ * 读出来是两件凑在一块儿的东西，而它们本来是名字后头的同一串注脚。
+ */
+.mdlNew{flex:none;display:flex;align-items:center;height:16px;padding:0 6px;border-radius:8px;
+  font:700 9.5px/1 var(--font-sans);letter-spacing:.06em;font-style:normal;
+  background:var(--pill-new);color:var(--pill-new-ink);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.2),inset 0 0 0 1px var(--pill-new-line)}
+/* 灰掉的 Tab 悬浮说明 */
+.tip{max-width:250px;padding:9px 12px;font-size:12.5px;line-height:1.55;
+  color:var(--text-body);border-radius:11px;overflow:visible}
+.overlayTail{position:absolute;width:13px;height:13px;background:var(--surface-pop);
+  border-right:1px solid var(--line-strong);border-bottom:1px solid var(--line-strong)}
+.overlayTail[data-side=down]{bottom:-7px;margin-left:-7px;transform:rotate(45deg)}
+.overlayTail[data-side=up]{top:-7px;margin-left:-7px;transform:rotate(225deg)}
+
+.mdlChev{color:var(--text-muted);flex:none}
+.set button:focus-visible,.overlay button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@keyframes pop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+/* 自动调整过的值只亮一次；固定参数也要看得出刚发生的变化。 */
+.field.flash{animation:flash 1.2s ease-out}
+.field.flash>span{animation:flashText 1.2s ease-out}
+@keyframes flash{from{background:rgba(var(--accent-rgb),.22)}to{background:transparent}}
+@keyframes flashText{from,to{color:var(--accent)}}

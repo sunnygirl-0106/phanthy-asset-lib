@@ -19,7 +19,9 @@ import type { Asset, AssetRef, AssetSnapshot, Category, Voice, Scope } from '../
 import { useStore, useCurrentUser, type ActionResult } from '../store/useStore'
 import { canDirectReuse, canFavorite, canReuseFromTeam, canRemovePlazaAsset, canDeleteLibraryAsset, canViewPrompt, canRegenerate, canContributeToPlaza, canEditVoice as canEditVoicePerm, isAdmin } from '../services/permission'
 import { coverOf, resolveRefs, pendingRefs as pendingRefsOf, usableRefUrls } from '../services/assetService'
-import { COST_PER_IMAGE } from '../data/pricing'
+import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_PARAMS, IMAGE_MODELS, fitParams, switchMessage, type ImageModelId, type ImageParams, type ParamKey } from '../data/imageModels'
+import GenSettingsBar from './gen/GenSettingsBar'
+import { IcGem } from './gen/icons'
 import { PRESET_VOICES } from '../data/presetVoices'
 import { CanvasAssetPanel, type PickedRef } from './canvas/CanvasAssetPanel'
 import { AssetSaveModal, type SaveIntent } from './AssetSaveModal'
@@ -58,19 +60,13 @@ function genSourceOf(a: { cover: string; fields?: { lookUrl?: unknown } }, usabl
   return baseUrl(a.cover || usableRef || look || IMG_PLACEHOLDER)
 }
 
-/** 生成参数选项（纯展示，对齐现有产品「一键生成」弹窗；仅数量驱动张数）。 */
-const RATIO_OPTS = ['3 : 4', '1 : 1', '9 : 16', '16 : 9']
-const COUNT_OPTS = [4, 1, 2, 6]
-const QUALITY_OPTS = ['2K', '1K', '4K']
-const MODEL_OPTS = ['phan nano Image 3', 'phan nano Image 2 Pro', 'Seedream 3.0']
-
 /* ═══ 未保存改动追踪（定义层 vs 素材层）══════════════════════════════════
  * 详情页把一份资产上的字段分成两层，语义完全不同：
  *   · 素材层 —— candidates（本次生成 / 上传 / 从库添加的图）。花星钻换来的产出物，
  *     进来即落库、永远保留，不受「保存」管辖，退出也不提示。
  *   · 定义层 —— 下面 snapshotOf 收窄的这几个字段（名称 / 提示词 / 定稿 / 参考图 / 音色），
  *     回答「这份资产对外是什么」，会被画布节点引用、被同项目的人看到，需用户显式保存。
- * 生成参数（比例 / 数量 / 质量 / 模型）是纯本地 UI 态、压根没进 store，不计入未保存改动。
+ * 生成参数（genModel / genParams / flash）是纯本地 UI 态、压根没进 store，不计入未保存改动。
  *
  * 【0814 · 生成即保存】点「生成」= 对定义层做一次完整保存，等价于点了「保存」：
  * 名称 / 提示词 / 定稿 / 参考图 / 音色全部接受为新基线，退出不再回滚。
@@ -369,10 +365,24 @@ export function AssetDetail({
   const [generating, setGenerating] = useState<number | null>(null)
   // 中栏预览的是候选池里哪一张。null = 定稿（没有定稿时 = 池里第一张）。
   const [centerKeptId, setCenterKeptId] = useState<string | null>(null)
-  // 生成参数（纯展示，仅「生成数量」驱动本次生成的张数）。
-  const [genCount, setGenCount] = useState(4)
-  // 图像模型（受控）：title 能带全名兜底，也给未来「不同模型不同价」留钩子。
-  const [model, setModel] = useState(MODEL_OPTS[0])
+  // 生成参数只在本地 UI 保存，不进 store，也不计入未保存改动。
+  const [genModel, setGenModel] = useState<ImageModelId>(DEFAULT_IMAGE_MODEL)
+  const [genParams, setGenParams] = useState<ImageParams>(() => fitParams(DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_PARAMS).params)
+  const [flash, setFlash] = useState<ParamKey[]>([])
+  const flashTimer = useRef<ReturnType<typeof window.setTimeout>>()
+  useEffect(() => () => window.clearTimeout(flashTimer.current), [])
+  const cost = genParams.count * IMAGE_MODELS[genModel].costPerImage
+  const changeModel = (m: ImageModelId) => {
+    if (m === genModel) return
+    const { params, changed } = fitParams(m, genParams)
+    setGenModel(m); setGenParams(params)
+    window.clearTimeout(flashTimer.current)
+    setFlash(changed.map((c) => c.key))
+    if (changed.length) {
+      setResult({ ok: true, message: switchMessage(m, changed) })
+      flashTimer.current = window.setTimeout(() => setFlash([]), 1200)
+    }
+  }
   // 参考图选择器（0804）：null=关；'menu'=二选一；'library'=从素材库多选。
   const [refPicker, setRefPicker] = useState<'menu' | 'library' | null>(null)
   // 图片级流转（0810）：选中一张图送出 → 打开统一上传弹窗（只出一层）。
@@ -656,7 +666,7 @@ export function AssetDetail({
     doGenerate()
   }
 
-  /** 生成：先进「生成中」骨架态，1.2s 后把 genCount 张直接并入候选池，并自动预览第一张。 */
+  /** 生成：先进「生成中」骨架态，1.2s 后把 genParams.count 张直接并入候选池，并自动预览第一张。 */
   function doGenerate() {
     if (!canRegen || generating !== null) return
     if (!promptDraft.trim()) {
@@ -669,13 +679,13 @@ export function AssetDetail({
     // 所以这里把基线整份重置成"当前状态"，等于把它们一并接受下来。
     if (promptDraft !== (asset!.prompt ?? '')) setPrompt(asset!.id, promptDraft)
     commitBaseline()
-    setGenerating(genCount)
+    setGenerating(genParams.count)
     const src = genSourceOf(asset!, usableRefUrls(world, asset!)[0])
-    const urls = Array.from({ length: genCount }, (_, i) => `${src}?g=${Date.now()}${i}`)
+    const urls = Array.from({ length: genParams.count }, (_, i) => `${src}?g=${Date.now()}${i}`)
     window.setTimeout(() => {
       const r = appendCandidates(asset!.id, urls)
       setGenerating(null)
-      setResult(r.ok ? { ok: true, message: `${r.message} · 消耗 ${genCount * COST_PER_IMAGE} 星钻` } : r)
+      setResult(r.ok ? { ok: true, message: `${r.message} · 消耗 ${cost} 星钻` } : r)
       // 生成完自动预览本批第一张——否则用户点了生成，中栏还停在旧定稿上，像什么都没发生。
       // 已有定稿的资产同样要跳过去看新图（用户刚花了星钻，第一诉求就是看结果）。
       if (r.ok) {
@@ -1700,30 +1710,14 @@ export function AssetDetail({
                     <span>添加参考图</span>
                   </button>
                 </div>
+                {/* 有 pending 槽时的警示行（0812 §8.2）：贴在参考图缩略图下方，确定的事用确定的语气。 */}
+                {pendingList.length > 0 && (
+                  <div className={styles.refWarn}>
+                    <span className={styles.refWarnIcon}>ⓘ</span> <b>{pendingList.map((r) => r.label).join('、')}</b> 尚未出图，本次仅按提示词生成。出图后自动生效
+                  </div>
+                )}
               </div>
 
-              {/* 生成参数：4 个下拉压成紧凑一行，给上方提示词让出空间。 */}
-              <div className={styles.paramGrid}>
-                <label className={styles.selWrap}>
-                  <span className={styles.subLabel}>生成比例</span>
-                  <select className={styles.sel} defaultValue={RATIO_OPTS[0]} onChange={markDirty}>{RATIO_OPTS.map((o) => <option key={o}>{o}</option>)}</select>
-                </label>
-                <label className={styles.selWrap}>
-                  <span className={styles.subLabel}>生成数量</span>
-                  <select className={styles.sel} value={genCount} onChange={(e) => { setGenCount(Number(e.target.value)); markDirty() }}>
-                    {COUNT_OPTS.map((o) => <option key={o} value={o}>{o} 张</option>)}
-                  </select>
-                </label>
-                <label className={styles.selWrap}>
-                  <span className={styles.subLabel}>图片清晰度</span>
-                  <select className={styles.sel} defaultValue={QUALITY_OPTS[0]} onChange={markDirty}>{QUALITY_OPTS.map((o) => <option key={o}>{o}</option>)}</select>
-                </label>
-              </div>
-
-              {/* 图像模型已移到通栏底栏（对齐 mockup）；参数区到此结束。 */}
-
-              {/* 计价 + 生成 + 模型下拉已下沉到通栏底栏（见 mbody 之后的 genFootBar）；
-                  pending 警示行也一并挪到底栏模型右侧，避免挤压上方参考图。 */}
             </div>
           )}
 
@@ -1925,7 +1919,7 @@ export function AssetDetail({
               <div className={styles.rsecHead}>
                 <div className={styles.rsecT}>全部图片 <b>（{candidates.length}）</b></div>
               </div>
-              {/* 生成中：右栏铺 genCount 个流光骨架格，与中栏骨架同步。 */}
+              {/* 生成中：右栏铺 genParams.count 个流光骨架格，与中栏骨架同步。 */}
               {generating !== null ? (
                 <div className={styles.thumbsGrid}>
                   {Array.from({ length: generating }, (_, i) => (
@@ -1969,29 +1963,20 @@ export function AssetDetail({
           </div>{/* /genStage */}
         </div>
 
-        {/* ── 通栏底栏（对齐 mockup）：左＝图像模型下拉，右＝预计消耗 + 生成 ── */}
+        {/* ── 通栏底栏（对齐 mockup）：左＝模型 + 参数，右＝改动提示 + 价格 + 生成 ── */}
         {hasGenPanel && (
           <div className={styles.genFootBar}>
             <div className={styles.footLeft}>
-              <label className={styles.footModel} title={model}>
-                <select className={styles.footSel} value={model} onChange={(e) => { setModel(e.target.value); markDirty() }}>
-                  {MODEL_OPTS.map((o) => <option key={o}>{o}</option>)}
-                </select>
-              </label>
-              {/* 有 pending 槽时的警示行（0812 §8.2）：贴在模型右侧，确定的事用确定的语气。 */}
-              {pendingList.length > 0 && (
-                <div className={styles.refWarn}>
-                  <span className={styles.refWarnIcon}>ⓘ</span> <b>{pendingList.map((r) => r.label).join('、')}</b> 尚未出图，本次仅按提示词生成。出图后自动生效
-                </div>
-              )}
+              <GenSettingsBar model={genModel} params={genParams} onModelChange={changeModel}
+                onParamsChange={setGenParams} flash={flash} disabled={generating !== null} />
             </div>
             <div className={styles.footRight}>
               {/* 生成即保存（0814 · PRD #15.1）：把这句写在按钮旁边，
                   用户就不必先「保存」再「生成」——点生成本身就是一次保存。 */}
               {hasUnsaved && (
-                <span className={styles.genTip}>点「生成」将一并保存当前的 {changes.length} 处改动</span>
+                <span className={styles.genTip} title={`点「生成」将一并保存当前的 ${changes.length} 处改动`}>点「生成」将一并保存当前的 {changes.length} 处改动</span>
               )}
-              <span className={styles.costHint}>预计消耗 <b>{genCount * COST_PER_IMAGE}</b> 星钻</span>
+              <span className={styles.cost} title="预计消耗"><IcGem size={17} /><b>{cost}</b><span>星钻</span></span>
               <button
                 className={`${styles.genBtn} ${!asset.cover ? styles.genBtnPulse : ''}`}
                 disabled={generating !== null}

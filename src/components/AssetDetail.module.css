@@ -442,9 +442,9 @@
 .confirmActions { display: flex; gap: 10px; }
 .confirmActions > * { flex: 1; }
 
-/* 有 pending 槽时的警示行（0812 §8.2）：琥珀底、放在生成按钮上方。 */
+/* 有 pending 槽时的警示行（0812 §8.2）：放在参考图缩略图下方。 */
 .refWarn {
-  margin: 0; padding: 0; border: none; background: none; min-width: 0;
+  margin: 8px 0 0; padding: 0; border: none; background: none; min-width: 0;
   display: flex; align-items: baseline; gap: 5px;
   font-size: 12px; line-height: 1.4; color: #f5c26b;
 }
@@ -789,43 +789,17 @@
 
 /* 参数选择 */
 .threeSel { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
-/* 4 个参数（比例 / 数量 / 清晰度 / 模型）统一挤在一行，占一小条、不抢提示词的地方。 */
-.paramGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; flex: none; }
-.selWrap { display: flex; flex-direction: column; gap: 8px; }
-.subLabel { font-size: 13px; color: rgba(255, 255, 255, 0.8); font-weight: 500; }
-/* 出图规格下拉（对齐设计稿：42 高 · radius 12 · 13.5px） */
-.sel {
-  appearance: none; -webkit-appearance: none; width: 100%; box-sizing: border-box;
-  background: var(--gen-well); border: 1px solid var(--gen-line); border-radius: 12px;
-  color: #e4e4e8; font: inherit; font-size: 13.5px; height: 42px; padding: 0 34px 0 14px; cursor: pointer;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237c7c85' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 14px center;
-}
-.sel:hover { border-color: rgba(255, 255, 255, 0.24); }
-.sel:focus { outline: none; border-color: var(--accent); }
-
-/* 通栏底栏（对齐 mockup）：左＝图像模型下拉，右＝预计消耗 + 生成。整条横跨弹窗、带上边线。 */
+/* 通栏底栏（对齐 mockup）：左＝模型 + 参数，右＝改动提示 + 价格 + 生成。整条横跨弹窗、带上边线。 */
 .genFootBar {
   flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  padding: 16px 28px; border-top: 1px solid var(--gen-divider); background: var(--gen-surface);
+  padding: 12px 28px; border-top: 1px solid var(--gen-divider); background: var(--gen-surface);
 }
-.footLeft { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.footLeft { flex: 1 1 auto; display: flex; align-items: center; gap: 14px; min-width: 0; }
 .footRight { display: flex; align-items: center; gap: 18px; flex: none; }
-/* 底栏模型下拉：胶囊形，宽度随内容（长模型名不再被四等分挤截断）。 */
-.footModel { display: inline-flex; }
-.footSel {
-  appearance: none; -webkit-appearance: none; box-sizing: border-box;
-  height: 42px; padding: 0 34px 0 16px; border-radius: 999px; cursor: pointer;
-  background: var(--field); border: 1px solid var(--line-soft); color: #e9ecf1;
-  font: inherit; font-size: 13.5px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7078' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 14px center;
-}
-.footSel:hover { border-color: rgba(255, 255, 255, 0.24); }
-.footSel:focus { outline: none; border-color: var(--accent); }
-
-.costHint { font-size: 13px; color: rgba(255, 255, 255, 0.55); }
-.costHint b { color: #f2f2f4; font-weight: 600; font-size: 13px; }
+/* 价钱：一颗水晶 + 一个数 + 量词。数字最亮，单位退后，避免抢在数字前面被读到。 */
+.cost { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); letter-spacing: .02em; white-space: nowrap; flex: none; }
+.cost b { font-size: 14px; color: var(--text-main); font-weight: 500; font-variant-numeric: tabular-nums; }
+.cost > svg { flex: none; }
 .genBtn {
   border: none; border-radius: 999px; background: var(--accent); color: var(--accent-ink);
   font-size: 15px; font-weight: 700; padding: 12px 46px; cursor: pointer; font-family: inherit;
@@ -1354,4 +1328,4 @@
   color: #fff; font-size: 14px; pointer-events: none;
 }
 /* 生成按钮旁的提示词保存口径说明 */
-.genTip { font-size: 12px; color: var(--text-muted); max-width: 320px; line-height: 1.5; }
+.genTip { font-size: 12px; color: var(--text-muted); max-width: 260px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
